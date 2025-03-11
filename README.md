@@ -2,9 +2,9 @@
 
 추후 개발 진행 사항 정리하기<br>
 
-1. 두 코드를 하나로 합치기 or 외부 코드 불러오기 방식으로 수정<br>
-   (second_certification, vertification)
-2. 생성날짜, 수정날짜 인식해서 읽어온 파일 검증
+1.~~두 코드를 하나로 합치기 or 외부 코드 불러오기 방식으로 수정 <br>
+(second_certification, vertification)
+<br> 2. 생성날짜, 수정날짜 인식해서 읽어온 파일 검증~~
 
 ---
 
