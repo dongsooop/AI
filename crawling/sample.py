@@ -2,83 +2,82 @@ import requests
 from bs4 import BeautifulSoup
 import csv
 
+# URL 설정
 BASE_URL = "https://www.dongyang.ac.kr"
-LIST_URL = f"{BASE_URL}/bbs/dmu/677/artclList.do"
+PAGE_URL = "https://www.dongyang.ac.kr/dmu/4904/subview.do?page="
 
-all_data = []
+# 페이지 크롤링
+def crawl_page(page):
+    url = PAGE_URL + str(page)
+    response = requests.get(url)
+    response.encoding = "utf-8"
+    soup = BeautifulSoup(response.text, "html.parser")
+    return soup
 
-def fetch_page(page_index):
-    data = {
-        "pageIndex": page_index,
-        "menuSeq": "677",
-        "boardSeq": "677"
-    }
-    response = requests.post(LIST_URL, data=data)
-    response.encoding = 'utf-8'
-    return BeautifulSoup(response.text, "html.parser")
-
-def parse_notices(soup):
+# 페이지 내용 파싱
+def parse_page(soup):
     rows = soup.select("table.board-table tbody tr")
+    data = []
     for row in rows:
         cols = row.find_all("td")
         if len(cols) < 7:
             continue
 
-        num = cols[0].get_text(strip=True)
+        num = cols[0].text.strip()
         title_tag = cols[1].find("a")
         title = title_tag.get_text(strip=True) if title_tag else ""
         link = BASE_URL + title_tag['href'] if title_tag else ""
 
-        department = cols[2].get_text(strip=True)
-        writer = cols[3].get_text(strip=True)
-        date = cols[4].get_text(strip=True)
-        views = cols[5].get_text(strip=True)
-        files = cols[6].get_text(strip=True)
+        department = cols[2].text.strip()
+        writer = cols[3].text.strip()
+        date = cols[4].text.strip()
+        views = cols[5].text.strip()
+        files = cols[6].text.strip()
 
-        print(f"📌 [{num}] {title}")
-        print(f"   🏢 부서: {department} | ✍ 작성자: {writer} | 📅 작성일: {date}")
-        print(f"   👁 조회수: {views} | 📎 첨부파일: {files}")
-        print(f"   🔗 링크: {link}\n")
+        data.append([num, title, department, writer, date, views, files, link])
+    return data
 
-        all_data.append([num, title, department, writer, date, views, files, link])
-
-def save_to_csv(filename="data/dongyang_notices.csv"):
-    with open(filename, mode='w', encoding='utf-8-sig', newline='') as f:
+# CSV 파일로 저장
+def save_to_csv(data, filename="data/dongyang_notices.csv"):
+    with open(filename, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["번호", "제목", "부서", "작성자", "작성일", "조회수", "첨부파일 수", "링크"])
-        writer.writerows(all_data)
-    print(f"\n✅ CSV 파일 저장 완료: {filename}")
-    remove_duplicates_from_csv()
+        writer.writerows(data)
+    print(f"✅ 저장 완료: {filename}")
+    remove_notice_rows("data/dongyang_notices.csv")
 
-def crawl_all_pages(start=1, end=3):
-    for page in range(start, end + 1):
-        print(f"\n===== ✅ {page} 페이지 =====")
-        soup = fetch_page(page)
-        parse_notices(soup)
+# '공지' 항목 제거
+def remove_notice_rows(input_file, output_file=None):
+    if output_file is None:
+        output_file = input_file  # 덮어쓰기
 
-    save_to_csv()
-
-def remove_duplicates_from_csv(input_file="data/dongyang_notices.csv", output_file="data/dongyang_notices.csv"):
-    seen = set()
-    unique_rows = []
+    filtered_rows = []
 
     with open(input_file, mode="r", encoding="utf-8-sig") as f:
         reader = csv.reader(f)
-        header = next(reader)  # 헤더는 따로 저장
+        header = next(reader)
         for row in reader:
-            # 번호 + 제목 기준으로 중복 판단
-            key = (row[0], row[1])
-            if key not in seen:
-                seen.add(key)
-                unique_rows.append(row)
+            if row and row[0].isdigit():  # 번호가 숫자인 경우만 저장
+                filtered_rows.append(row)
 
     with open(output_file, mode="w", encoding="utf-8-sig", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(header)
-        writer.writerows(unique_rows)
+        writer.writerows(filtered_rows)
 
-    print(f"\n✅ 중복 제거 완료! → {output_file} 에 저장됨.")
+    print(f"✅ '공지' 항목 제거 완료 → {output_file}")
+
+# 메인
+def main():
+    all_data = []
+    for page in range(1, 487):  # 1~5페이지
+        print(f"📄 {page} 페이지 크롤링 중...")
+        soup = crawl_page(page)
+        page_data = parse_page(soup)
+        all_data.extend(page_data)
+
+    save_to_csv(all_data)
 
 # 실행
 if __name__ == "__main__":
-    crawl_all_pages(start=1, end=3)  # 페이지 범위는 필요에 따라 조절 가능
+    main()
