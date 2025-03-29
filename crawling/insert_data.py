@@ -43,19 +43,16 @@ def insert_data_to_db(data):
     cursor = connection.cursor()
 
     insert_query = """
-    INSERT INTO main_school_notice (id, title, department, writer, date, views, files, link)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+    INSERT INTO main_school_notice (id, title, department, writer, date, link)
+    VALUES (%s, %s, %s, %s, %s, %s);
     """
 
     try:
         for row in data:
-            # 예를 들어, 조회수와 첨부파일을 정리해서 삽입
-            views = int(row[5].split()[1])  # 조회수 정리
-            files = int(row[6])  # 첨부파일 수 정리
 
             # INSERT 쿼리 실행
             cursor.execute(insert_query, (
-                row[0], row[1], row[2], row[3], row[4], views, files, row[7]
+                row[0], row[1], row[2], row[3], row[4], row[5]
             ))
 
         connection.commit()  # 커밋하여 변경사항 저장
