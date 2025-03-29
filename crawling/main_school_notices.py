@@ -31,17 +31,15 @@ def parse_page(soup):
         department = cols[2].text.strip()
         writer = cols[3].text.strip()
         date = cols[4].text.strip()
-        views = cols[5].text.strip()
-        files = cols[6].text.strip()
 
-        data.append([num, title, department, writer, date, views, files, link])
+        data.append([num, title, department, writer, date, link])
     return data
 
 # CSV 파일로 저장
 def save_to_csv(data, filename="data/dongyang_notices.csv"):
     with open(filename, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["번호", "제목", "부서", "작성자", "작성일", "조회수", "첨부파일 수", "링크"])
+        writer.writerow(["번호", "제목", "부서", "작성자", "작성일", "링크"])
         writer.writerows(data)
     print(f"✅ 저장 완료: {filename}")
     remove_notice_rows("data/dongyang_notices.csv")
