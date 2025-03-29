@@ -1,3 +1,5 @@
+# pdf인지 확인하고 만약 pdf라면 pdf2image로 변환해 주는 코드
+
 import os
 import csv
 import cv2
