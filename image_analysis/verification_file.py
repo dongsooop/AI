@@ -1,4 +1,5 @@
-# verification_file.py
+# 파일 생성일과 수정일이 같은지 확인하는 코드
+
 import os
 import platform
 from datetime import datetime
