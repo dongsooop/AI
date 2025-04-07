@@ -124,8 +124,8 @@ def main():
     # test_file_path = "data/seungwon.pdf"
     # test_file_path = "data/jeseung_test.pdf"
     # test_file_path = "data/sungjun.png"
-    # test_file_path = "data/jeseung.png"
-    test_file_path = "data/jeseung_edit_test.png"
+    test_file_path = "data/jeseung.png"
+    # test_file_path = "data/jeseung_edit_test.png"
 
     # 2) 학과 예외 목록 CSV
     dept_csv_path = "data/Exception_department.csv"
