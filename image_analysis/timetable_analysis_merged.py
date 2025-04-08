@@ -9,12 +9,15 @@ from pdf2image import convert_from_path
 pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 tesseract_config = r"--psm 6 --oem 1 -l kor+eng"
 
+TARGET_WIDTH = 1170
+TARGET_HEIGHT = 2532
+SCALE = 2  # OCR 정확도 향상을 위한 확대 배율
+
 def load_image_auto(path):
     ext = os.path.splitext(path)[-1].lower()
     if ext == ".pdf":
-        # PDF를 PIL 이미지로 변환
         pages = convert_from_path(path, dpi=300)
-        pil_image = pages[0]  # 첫 페이지만 사용
+        pil_image = pages[0]
         img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
     else:
         img = cv2.imread(path)
@@ -22,21 +25,24 @@ def load_image_auto(path):
             raise FileNotFoundError(f"[ERROR] 이미지 로딩 실패: {path}")
     return img
 
-def extract_night_schedule_optimized(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+def extract_schedule_fixed_scaled(img):
+    # 1. 고정 크기로 먼저 리사이즈 (모든 이미지 정규화)
+    resized_fixed = cv2.resize(img, (TARGET_WIDTH, TARGET_HEIGHT), interpolation=cv2.INTER_AREA)
 
-    # 확대 및 선명화
-    scale = 2
-    resized = cv2.resize(gray, (gray.shape[1]*scale, gray.shape[0]*scale), interpolation=cv2.INTER_CUBIC)
+    # 2. 확대 (scale 적용)
+    resized = cv2.resize(resized_fixed, (TARGET_WIDTH * SCALE, TARGET_HEIGHT * SCALE), interpolation=cv2.INTER_CUBIC)
+
+    # 3. 그레이스케일 + 선명화
+    gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
     sharpen_kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-    sharpened = cv2.filter2D(resized, -1, sharpen_kernel)
+    sharpened = cv2.filter2D(gray, -1, sharpen_kernel)
     debug_color = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
 
-    # 시간표 셀 위치
-    top_left_x = 318 * scale
-    top_left_y = 670 * scale
-    cell_w = 160 * scale
-    cell_h = 66 * scale
+    # 4. 셀 좌표 (고정된 이미지 기준)
+    top_left_x = 318 * SCALE
+    top_left_y = 670 * SCALE
+    cell_w = 160 * SCALE
+    cell_h = 66 * SCALE
 
     weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일"]
     time_slots = [
@@ -47,8 +53,9 @@ def extract_night_schedule_optimized(img):
         "17:30~18:15", "18:20~19:05", "19:15~20:00",
         "20:05~20:50", "20:55~21:40", "21:45~22:30"
     ]
-    rows, cols = len(time_slots), len(weekdays)
+
     results = []
+    rows, cols = len(time_slots), len(weekdays)
 
     for r in range(rows):
         for c in range(cols):
@@ -57,13 +64,10 @@ def extract_night_schedule_optimized(img):
             x2 = x1 + cell_w
             y2 = y1 + cell_h
 
-            # 디버깅 표시
-            cv2.rectangle(debug_color, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 2)
-
             roi = sharpened[int(y1):int(y2), int(x1):int(x2)]
             pil_image = Image.fromarray(roi)
             text = pytesseract.image_to_string(pil_image, config=tesseract_config).strip()
-            lines = [line.strip() for line in text.split('\n') if line.strip()]
+            lines = [line.strip() for line in text.split("\n") if line.strip()]
             if not lines:
                 continue
 
@@ -74,22 +78,24 @@ def extract_night_schedule_optimized(img):
             if course and professor:
                 results.append(f"{weekdays[c]} {r+1} {course} {professor} {time_slots[r]} {room}")
 
+            # 디버그 사각형
+            cv2.rectangle(debug_color, (x1, y1), (x2, y2), (0, 0, 255), 2)
+
     # 디버그 시각화
-    debug_resized = cv2.resize(debug_color, dsize=(1280, 980), interpolation=cv2.INTER_AREA)
-    cv2.imshow("Debug Grid", debug_resized)
+    preview = cv2.resize(debug_color, (800, 1200))
+    cv2.imshow("Debug Grid (Fixed + Scaled)", preview)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
     return results
 
 def main():
-    # input_path = "data/jeseung_4.png"  # 또는 .pdf 파일도 가능
-    input_path = "data/capture_jeseung.png"
-    # input_path = "data/heetae_timetable.pdf"  # 테스트용 이미지 파일
+    # input_path = "data/capture_jeseung.png"  # PNG or PDF
+    input_path = "data/capture_heetae.png"  # PNG or PDF
     img = load_image_auto(input_path)
-    schedule = extract_night_schedule_optimized(img)
+    schedule = extract_schedule_fixed_scaled(img)
 
-    print("\n[📋 추출된 야간 강의 시간표]")
+    print("\n[📋 추출된 강의 시간표]")
     print("=" * 60)
     for item in schedule:
         print(item)
