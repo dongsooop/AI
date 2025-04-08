@@ -13,6 +13,7 @@
 
 ---
 
+- 4/8 : 이제 명확한 개발 진행 사항은 노션에 정리할 것.
 - 3/27 : 학교 공지 전체 내용 크롤링 성공, local db insert and env파일에 민감 정보 작성
 - 3/25 : 라벨링한 데이터 기준으로 모델 학습
 - 3/21 : 기존 만들어진 ElectraForSequenceClassification 모델 사용
