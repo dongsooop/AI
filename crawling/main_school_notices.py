@@ -24,22 +24,27 @@ def load_departments(file_path="data/department.txt"):
     departments = []
     with open(file_path, "r", encoding="utf-8") as f:
         for line in f:
-            print(f"📄 처리 중: {line.strip()}")  # ← 로그 추가
+            print(f"📄 처리 중: {line.strip()}")
             parts = line.strip().split(",")
             if len(parts) == 3:
                 name, subview_url, page_count = parts
-                subview_full_url = BASE_URL + subview_url
-                
-                if "학교공지" in name:  # ✅ 학교공지 예외 처리
+
+                if "학교공지" in name:
+                    # ✅ 공지용 URL 그대로 사용 (이미 ?page= 포함됨)
                     print(f"📌 {name}: 학교 공지이므로 fnctNo 추출 생략")
-                    departments.append((name, subview_url + "?page=", int(page_count), None))
+                    departments.append((name, subview_url, int(page_count), None))
                     continue
 
+                # 그 외 학과 처리
+                subview_url_clean = subview_url.split("?")[0].strip()
+                subview_full_url = BASE_URL + subview_url_clean
                 fnct_no = extract_fnctno_from_subview(subview_full_url)
-                print(f"🔍 {name}: 추출된 fnctNo = {fnct_no}")  # ← 로그 추가
+                print(f"🔍 {name}: 추출된 fnctNo = {fnct_no}")
                 if fnct_no:
                     combbbs_url = f"/combBbs/dmu/{fnct_no}/list.do?page="
                     departments.append((name, combbbs_url, int(page_count), fnct_no))
+                else:
+                    print(f"⚠️ {name}: fnctNo 추출 실패 → 건너뜀")
     return departments
 
 # 페이지 크롤링
