@@ -24,22 +24,27 @@ def load_departments(file_path="data/department.txt"):
     departments = []
     with open(file_path, "r", encoding="utf-8") as f:
         for line in f:
-            print(f"📄 처리 중: {line.strip()}")  # ← 로그 추가
+            print(f"📄 처리 중: {line.strip()}")
             parts = line.strip().split(",")
             if len(parts) == 3:
                 name, subview_url, page_count = parts
-                subview_full_url = BASE_URL + subview_url
-                
-                if "학교공지" in name:  # ✅ 학교공지 예외 처리
+
+                if "학교공지" in name:
+                    # ✅ 공지용 URL 그대로 사용 (이미 ?page= 포함됨)
                     print(f"📌 {name}: 학교 공지이므로 fnctNo 추출 생략")
-                    departments.append((name, subview_url + "?page=", int(page_count), None))
+                    departments.append((name, subview_url, int(page_count), None))
                     continue
 
+                # 그 외 학과 처리
+                subview_url_clean = subview_url.split("?")[0].strip()
+                subview_full_url = BASE_URL + subview_url_clean
                 fnct_no = extract_fnctno_from_subview(subview_full_url)
-                print(f"🔍 {name}: 추출된 fnctNo = {fnct_no}")  # ← 로그 추가
+                print(f"🔍 {name}: 추출된 fnctNo = {fnct_no}")
                 if fnct_no:
                     combbbs_url = f"/combBbs/dmu/{fnct_no}/list.do?page="
                     departments.append((name, combbbs_url, int(page_count), fnct_no))
+                else:
+                    print(f"⚠️ {name}: fnctNo 추출 실패 → 건너뜀")
     return departments
 
 # 페이지 크롤링
@@ -51,6 +56,7 @@ def crawl_page(url):
 
 # 학교 공지 페이지 내용 파싱
 def parse_page(soup):
+    import re
     rows = soup.select("table.board-table tbody tr")
     data = []
     for row in rows:
@@ -60,11 +66,21 @@ def parse_page(soup):
         num = cols[0].text.strip()
         title_tag = cols[1].find("a")
         title = title_tag.get_text(strip=True) if title_tag else ""
-        link = BASE_URL + title_tag['href'] if title_tag else ""
+        href = title_tag['href'] if title_tag else ""
+        link = BASE_URL + href
+
+        # 게시글 ID 추출
+        post_id = href.split("/")[-2] if href else ""
+
+        # ✅ 제목 정리
+        title = re.sub(r'\d*새글$', '', title)
+        title = re.sub(r'\d+$', '', title)
+        title = title.strip()
+
         department = cols[2].text.strip()
         writer = cols[3].text.strip()
         date = cols[4].text.strip()
-        data.append([num, title, department, writer, date, link])
+        data.append([num, post_id, title, department, writer, date, link])
     return data
 
 # 학과공지 페이지 내용 파싱 (fnctNo 포함)
@@ -92,7 +108,7 @@ def parse_department_page(soup, fnct_no):
         writer = cols[2].text.strip()
         date = cols[3].text.strip()
         department = "학과공지"
-        data.append([num, title, department, writer, date, link])
+        data.append([num, nttId, title, department, writer, date, link])
     return data
 
 # CSV 파일로 저장
@@ -100,7 +116,7 @@ def save_to_csv(data, department_name):
     filename = f"data/dept/{department_name}_notices.csv"
     with open(filename, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["번호", "제목", "부서", "작성자", "작성일", "링크"])
+        writer.writerow(["번호", "게시글ID", "제목", "부서", "작성자", "작성일", "링크"])
         writer.writerows(data)
     print(f"✅ 저장 완료: {filename}")
     remove_notice_rows(filename)
