@@ -17,4 +17,4 @@ COPY ./data ./data
 COPY ./text_filtering ./text_filtering
 
 # FastAPI 실행
-CMD ["uvicorn", "text_filltering.text_filltering:app", "--host", "0.0.0.0", "--port", "8888"]
+CMD ["uvicorn", "text_filtering.text_filtering:app", "--host", "0.0.0.0", "--port", "8888"]
