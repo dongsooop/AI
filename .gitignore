@@ -4,3 +4,4 @@ model/
 .env
 *.env
 .ipynb_checkpoints/
+requirements.txt
