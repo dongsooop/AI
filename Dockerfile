@@ -7,14 +7,15 @@ RUN apt-get update && apt-get install -y git
 # 작업 디렉토리 설정
 WORKDIR /app
 
-# 로컬 파일 복사
+# requirements.txt 복사 및 설치
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 모델 및 코드 복사
-COPY ./model ./model
-COPY ./data ./data
-COPY ./text_filtering ./text_filtering
+COPY model/my_electra_finetuned ./model/my_electra_finetuned
+
+COPY data/bad_text_sample.txt ./data/bad_text_sample.txt
+
+COPY text_filtering/text_filtering_rule.py ./text_filtering/text_filtering_rule.py
 
 # FastAPI 실행
 CMD ["uvicorn", "text_filtering.text_filtering_rule:app", "--host", "0.0.0.0", "--port", "8888"]
