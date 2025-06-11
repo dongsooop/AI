@@ -67,39 +67,43 @@ def analyze_field(field_name: str, text: str, log_file=None) -> Dict:
     }
 
 # API 엔드포인트
-@app.post("/predict")
+@app.post("/text_filter_rule")
 async def classify_text(request: Request):
-    data = await request.json()
-    full_text = data.get("text", "")
-    
     try:
-        title, tags, content = [x.strip() for x in full_text.split('|', 2)]
-    except ValueError:
+        data = await request.json()
+        full_text = data.get("text", "")
+
+        try:
+            title, tags, content = [x.strip() for x in full_text.split('|', 2)]
+        except ValueError:
+            return JSONResponse(
+                content={"error": "text 형식은 '제목 | 태그 | 본문' 이어야 합니다."},
+                status_code=422
+            )
+
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            title_result = analyze_field("제목", title, f)
+            content_result = analyze_field("본문", content, f)
+
+        tags_result = analyze_field("태그", tags)  # 태그는 로그 미포함
+
+        response = {
+            "제목": title_result,
+            "태그": tags_result,
+            "본문": content_result
+        }
+
+        if title_result["has_profanity"]:
+            return JSONResponse(content=response, status_code=400)
+        elif tags_result["has_profanity"]:
+            return JSONResponse(content=response, status_code=401)
+        elif content_result["has_profanity"]:
+            return JSONResponse(content=response, status_code=402)
+        else:
+            return JSONResponse(content=response, status_code=200)
+
+    except Exception as e:
         return JSONResponse(
-            content={"error": "text 형식은 '제목 | 태그 | 본문' 이어야 합니다."},
-            status_code=422
+            status_code=500,
+            content={"error": "서버 내부 오류가 발생했습니다.", "detail": str(e)}
         )
-
-    # 로그 저장
-    with open(LOG_PATH, "a", encoding="utf-8") as f:
-        title_result = analyze_field("제목", title, f)
-        content_result = analyze_field("본문", content, f)
-
-    tags_result = analyze_field("태그", tags)  # 태그는 로그 미포함
-
-    # 전체 응답 데이터
-    response = {
-        "제목": title_result,
-        "태그": tags_result,
-        "본문": content_result
-    }
-
-    # 우선순위에 따라 HTTP 상태 코드 반환
-    if title_result["has_profanity"]:
-        return JSONResponse(content=response, status_code=400)
-    elif tags_result["has_profanity"]:
-        return JSONResponse(content=response, status_code=401)
-    elif content_result["has_profanity"]:
-        return JSONResponse(content=response, status_code=402)
-    else:
-        return JSONResponse(content=response, status_code=200)
