@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from transformers import ElectraTokenizer, ElectraForSequenceClassification
 import torch
@@ -49,13 +50,20 @@ def predict(text: str) -> Tuple[int, str]:
     return pred_label, "비속어" if pred_label == 1 else "정상"
 
 # API 엔드포인트
-@app.post("/predict")
+@app.post("/text_filter")
 async def classify_text(request: TextRequest):
-    text = request.text.strip()
-    label_num, label_text = predict(text)
+    try:
+        text = request.text.strip()
+        label_num, label_text = predict(text)
 
-    # 🔥 저장: 텍스트|0 또는 텍스트|1
-    with open(LOG_PATH, "a", encoding="utf-8") as f:
-        f.write(f"{text}|{label_num}\n")
+        # 🔥 저장: 텍스트|0 또는 텍스트|1
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"{text}|{label_num}\n")
 
-    return {"label": label_text}
+        if label_num == 1:
+            return JSONResponse(status_code=400, content={"label": label_text})
+        else:
+            return JSONResponse(status_code=200, content={"label": label_text})
+        
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
