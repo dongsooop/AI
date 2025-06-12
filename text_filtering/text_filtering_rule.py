@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Request
+# text_filter_rule.py
+from fastapi import APIRouter
 from pydantic import BaseModel
 from transformers import ElectraTokenizer, ElectraForSequenceClassification
 import torch
@@ -7,7 +8,12 @@ from typing import Tuple, List, Dict
 import re
 from fastapi.responses import JSONResponse
 
-app = FastAPI()
+# 라우터 객체 생성
+router = APIRouter()
+
+# Pydantic 모델 정의
+class TextRequest(BaseModel):
+    text: str
 
 # 경로 설정
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -53,7 +59,6 @@ def analyze_field(field_name: str, text: str, log_file=None) -> Dict:
         label_num, label_text = predict(sent)
         results.append({"sentence": sent, "label": label_text})
         
-        # 제목/본문 로그 저장
         if field_name in ['제목', '본문'] and log_file:
             log_file.write(f"{sent}|{label_num}\n")
         
@@ -66,12 +71,11 @@ def analyze_field(field_name: str, text: str, log_file=None) -> Dict:
         "results": results
     }
 
-# API 엔드포인트
-@app.post("/text_filter_rule")
-async def classify_text(request: Request):
+# ✅ API 엔드포인트 (BaseModel 사용)
+@router.post("/text_filter_rule")
+async def rule_filter_api(request: TextRequest):
     try:
-        data = await request.json()
-        full_text = data.get("text", "")
+        full_text = request.text.strip()
 
         try:
             title, tags, content = [x.strip() for x in full_text.split('|', 2)]

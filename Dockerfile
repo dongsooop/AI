@@ -15,7 +15,11 @@ COPY model/my_electra_finetuned ./model/my_electra_finetuned
 
 COPY data/bad_text_sample.txt ./data/bad_text_sample.txt
 
+# Tile, Tag, Content
 COPY text_filtering/text_filtering_rule.py ./text_filtering/text_filtering_rule.py
+
+# Content
+COPY text_filtering/text_filtering.py ./text_filtering/text_filtering.py
 
 # FastAPI 실행
 CMD ["uvicorn", "text_filtering.text_filtering_rule:app", "--host", "0.0.0.0", "--port", "8888"]
