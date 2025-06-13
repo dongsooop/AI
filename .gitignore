@@ -6,3 +6,4 @@ model/
 .ipynb_checkpoints/
 requirements.txt
 setting.txt
+__pycache__

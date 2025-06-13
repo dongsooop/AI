@@ -1,13 +1,11 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import APIRouter, UploadFile, File
 from fastapi.responses import JSONResponse
 import cv2
 import numpy as np
 import pytesseract
 from PIL import Image
-import io
-import os
 
-app = FastAPI()
+router = APIRouter()
 
 pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 tesseract_config = r"--psm 6 --oem 1 -l kor+eng"
@@ -73,7 +71,7 @@ def extract_schedule_fixed_scaled(img):
     return results
 
 # 📥 이미지 업로드 엔드포인트
-@app.post("/timetable")
+@router.post("/timetable")
 async def upload_timetable(file: UploadFile = File(...)):
     try:
         file_bytes = await file.read()
