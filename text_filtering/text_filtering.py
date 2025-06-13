@@ -1,12 +1,11 @@
-from fastapi import FastAPI
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from transformers import ElectraTokenizer, ElectraForSequenceClassification
 import torch
 import os
 import re
-from typing import Tuple, List
-from fastapi import APIRouter
+from typing import Tuple, List, Dict
 
 router = APIRouter()
 
@@ -54,29 +53,57 @@ def predict(text: str) -> Tuple[int, str]:
 
     return pred_label, "비속어" if pred_label == 1 else "정상"
 
-# API 엔드포인트
+# 분석 함수
+def analyze_field(field_name: str, text: str, log_file) -> Dict:
+    sentences = split_sentences(text)
+    results = []
+    has_profanity = False
+
+    for sent in sentences:
+        label_num, label_text = predict(sent)
+        results.append({
+            "sentence": sent,
+            "label": label_text
+        })
+        log_file.write(f"{sent}|{label_num}\n")
+        if label_text == "비속어":
+            has_profanity = True
+
+    return {
+        "field": field_name,
+        "has_profanity": has_profanity,
+        "results": results
+    }
+
+# ✅ API 엔드포인트
 @router.post("/text_filter")
 async def text_filter_api(request: TextRequest):
     try:
-        raw_text = request.text.strip()
-        sentences = split_sentences(raw_text)
-        results = []
-        has_profanity = False
+        full_text = request.text.strip()
+        try:
+            intro, motive = [x.strip() for x in full_text.split('|', 1)]
+        except ValueError:
+            return JSONResponse(
+                content={"error": "입력 형식은 '자기소개 | 지원동기' 이어야 합니다."},
+                status_code=422
+            )
 
         with open(LOG_PATH, "a", encoding="utf-8") as f:
-            for sent in sentences:
-                label_num, label_text = predict(sent)
-                results.append({
-                    "sentence": sent,
-                    "label": label_text
-                })
-                f.write(f"{sent}|{label_num}\n")
-                if label_text == "비속어":
-                    has_profanity = True
+            intro_result = analyze_field("자기소개", intro, f)
+            motive_result = analyze_field("지원동기", motive, f)
 
-        response = {"results": results}
-        status = 400 if has_profanity else 200
-        return JSONResponse(status_code=status, content=response)
+        response = {
+            "자기소개": intro_result,
+            "지원동기": motive_result
+        }
+
+        # 상태코드 조건 분기
+        if intro_result["has_profanity"]:
+            return JSONResponse(status_code=400, content=response)
+        elif motive_result["has_profanity"]:
+            return JSONResponse(status_code=401, content=response)
+        else:
+            return JSONResponse(status_code=200, content=response)
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
