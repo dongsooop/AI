@@ -7,7 +7,7 @@ from PIL import Image
 
 router = APIRouter()
 
-pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
+# pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 tesseract_config = r"--psm 6 --oem 1 -l kor+eng"
 
 TARGET_WIDTH = 1170
