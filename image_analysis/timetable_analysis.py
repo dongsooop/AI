@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import pytesseract
 from PIL import Image
+import re
 
 router = APIRouter()
 
@@ -50,13 +51,17 @@ def extract_schedule_fixed_scaled(img):
             roi = sharpened[int(y1):int(y2), int(x1):int(x2)]
             pil_image = Image.fromarray(roi)
             text = pytesseract.image_to_string(pil_image, config=tesseract_config).strip()
-            lines = [line.strip() for line in text.split("\n") if line.strip()]
-            if not lines:
+            lines = [re.sub(r"[|]", "", line.strip().replace(" ", "")) for line in text.split("\n") if line.strip()]
+
+            if not lines or len(lines[0]) < 2:
                 continue
 
             course = lines[0]
             professor = lines[1] if len(lines) > 1 else ""
             room = lines[2] if len(lines) > 2 else ""
+
+            if len(course) < 2 or course in ["|", "-", "_"]:
+                continue
 
             if course and professor:
                 results.append({
