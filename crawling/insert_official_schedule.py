@@ -20,19 +20,25 @@ DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 
-CSV_FILE = "data/학사일정.csv"
+# CSV 파일 경로
+CSV_FILE = "data/schedule/office_schedule.csv"
 
 # 날짜 파싱 함수
 def parse_date_range(year, raw_date):
-    matches = re.findall(r"(\d{2})\.(\d{2})", raw_date)
-    if not matches:
+    try:
+        matches = re.findall(r"(\d{2})\.(\d{2})", raw_date)
+        if not matches:
+            return None, None
+        start_date = datetime(year, int(matches[0][0]), int(matches[0][1])).date()
+        end_date = start_date
+        if len(matches) == 2:
+            end_date = datetime(year, int(matches[1][0]), int(matches[1][1])).date()
+        return start_date, end_date
+    except ValueError as ve:
+        print(f"⚠️ 날짜 변환 오류 → '{raw_date}' : {ve}")
         return None, None
-    start_date = datetime(year, int(matches[0][0]), int(matches[0][1])).date()
-    end_date = start_date
-    if len(matches) == 2:
-        end_date = datetime(year, int(matches[1][0]), int(matches[1][1])).date()
-    return start_date, end_date
 
+# 데이터 삽입 함수
 def insert_schedule():
     with SSHTunnelForwarder(
         (SSH_HOST, SSH_PORT),
@@ -60,7 +66,7 @@ def insert_schedule():
 
         with open(CSV_FILE, mode="r", encoding="utf-8-sig") as f:
             reader = csv.reader(f)
-            next(reader)  # 헤더 건너뛰기
+            next(reader)  # 헤더 스킵
 
             for row in reader:
                 try:
@@ -71,7 +77,7 @@ def insert_schedule():
 
                     start_at, end_at = parse_date_range(year, raw_date)
                     if start_at is None:
-                        print(f"⚠️ 잘못된 날짜 형식: {raw_date} → 건너뜀")
+                        print(f"⚠️ 잘못된 날짜 형식: '{raw_date}' → 건너뜀")
                         continue
 
                     cursor.execute(insert_query, (
@@ -85,7 +91,7 @@ def insert_schedule():
 
                 except Exception as e:
                     conn.rollback()
-                    print(f"❌ 삽입 오류: {e}")
+                    print(f"❌ 삽입 오류 (제목: {title}): {e}")
                 else:
                     conn.commit()
 
