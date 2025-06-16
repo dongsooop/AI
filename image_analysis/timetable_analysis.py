@@ -28,15 +28,15 @@ def extract_schedule_fixed_scaled(img):
     cell_w = 160 * SCALE
     cell_h = 66 * SCALE
 
-    weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일"]
-    time_slots = [
-        "09:00~09:50", "10:00~10:50", "11:00~11:50", "12:00~12:50",
-        "13:00~13:50", "14:00~14:50", "15:00~15:50", "16:00~16:50",
-        "17:00~17:50", "18:00~18:50", "19:00~19:50", "20:00~20:50",
-        "21:00~21:50", "22:00~22:50",
-        "17:30~18:15", "18:20~19:05", "19:15~20:00",
-        "20:05~20:50", "20:55~21:40", "21:45~22:30"
-    ]
+    def load_list_from_txt(path: str) -> list:
+        with open(path, "r", encoding="utf-8") as f:
+            return [line.strip() for line in f if line.strip()]
+
+    WEEKDAYS_FILE = "data/weekdays.txt"
+    TIME_SLOTS_FILE = "data/time_slots.txt"
+
+    weekdays = load_list_from_txt(WEEKDAYS_FILE)
+    time_slots = load_list_from_txt(TIME_SLOTS_FILE)
 
     results = []
     rows, cols = len(time_slots), len(weekdays)
