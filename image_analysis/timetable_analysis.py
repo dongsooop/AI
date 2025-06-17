@@ -15,7 +15,6 @@ TARGET_WIDTH = 1170
 TARGET_HEIGHT = 2532
 SCALE = 2
 
-# 기존 이미지 분석 함수 (cv2 이미지 입력 받도록 유지)
 def extract_schedule_fixed_scaled(img):
     resized_fixed = cv2.resize(img, (TARGET_WIDTH, TARGET_HEIGHT), interpolation=cv2.INTER_AREA)
     resized = cv2.resize(resized_fixed, (TARGET_WIDTH * SCALE, TARGET_HEIGHT * SCALE), interpolation=cv2.INTER_CUBIC)
@@ -75,7 +74,6 @@ def extract_schedule_fixed_scaled(img):
 
     return results
 
-# 📥 이미지 업로드 엔드포인트
 @router.post("/timetable")
 async def upload_timetable(file: UploadFile = File(...)):
     try:
