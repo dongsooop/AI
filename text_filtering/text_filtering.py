@@ -75,9 +75,8 @@ def analyze_field(field_name: str, text: str, log_file) -> Dict:
         "results": results
     }
 
-# ✅ API 엔드포인트
-@router.post("/text_filter")
-async def text_filter_api(request: TextRequest):
+@router.post("/text_filter_board")
+async def text_filter_board_api(request: TextRequest):
     try:
         full_text = request.text.strip()
         try:
@@ -101,6 +100,39 @@ async def text_filter_api(request: TextRequest):
         if intro_result["has_profanity"]:
             return JSONResponse(status_code=400, content=response)
         elif motive_result["has_profanity"]:
+            return JSONResponse(status_code=401, content=response)
+        else:
+            return JSONResponse(status_code=200, content=response)
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@router.post("/text_filter_market")
+async def text_filter_market_api(request: TextRequest):
+    try:
+        full_text = request.text.strip()
+        try:
+            title, content = [x.strip() for x in full_text.split('|', 1)]
+        except ValueError:
+            return JSONResponse(
+                content={"error": "입력 형식은 '제목 | 내용' 이어야 합니다."},
+                status_code=422
+            )
+
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            title_result = analyze_field("제목", title, f)
+            content_result = analyze_field("내용", content, f)
+
+        response = {
+            "제목": title_result,
+            "내용": content_result
+        }
+
+        # 상태코드 조건 분기
+        if title_result["has_profanity"]:
+            return JSONResponse(status_code=400, content=response)
+        elif content_result["has_profanity"]:
             return JSONResponse(status_code=401, content=response)
         else:
             return JSONResponse(status_code=200, content=response)
