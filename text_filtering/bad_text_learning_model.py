@@ -159,7 +159,7 @@ if __name__ == "__main__":
     )
     
     # GPU/CPU
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("mps" if torch.cuda.is_available() else "cpu")
     model.to(device)
     
     # 옵티마이저, 에폭 설정
@@ -180,7 +180,7 @@ if __name__ == "__main__":
     tokenizer.save_pretrained("model/my_electra_finetuned")
     
     # ----- 4.7) 예시로 추론 테스트
-    test_text = "애새끼가 초딩도 아니고 ㅋㅋㅋㅋ"
+    test_text = "시바"
     model.eval()
     
     proc_text = preprocess_text(test_text)
