@@ -100,7 +100,7 @@ async def text_filter_board_api(request: TextRequest):
         if intro_result["has_profanity"]:
             return JSONResponse(status_code=400, content=response)
         elif motive_result["has_profanity"]:
-            return JSONResponse(status_code=401, content=response)
+            return JSONResponse(status_code=400, content=response)
         else:
             return JSONResponse(status_code=200, content=response)
 
@@ -133,7 +133,7 @@ async def text_filter_market_api(request: TextRequest):
         if title_result["has_profanity"]:
             return JSONResponse(status_code=400, content=response)
         elif content_result["has_profanity"]:
-            return JSONResponse(status_code=401, content=response)
+            return JSONResponse(status_code=400, content=response)
         else:
             return JSONResponse(status_code=200, content=response)
 
