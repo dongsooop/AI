@@ -100,9 +100,9 @@ async def rule_filter_api(request: TextRequest):
         if title_result["has_profanity"]:
             return JSONResponse(content=response, status_code=400)
         elif tags_result["has_profanity"]:
-            return JSONResponse(content=response, status_code=401)
+            return JSONResponse(content=response, status_code=400)
         elif content_result["has_profanity"]:
-            return JSONResponse(content=response, status_code=402)
+            return JSONResponse(content=response, status_code=400)
         else:
             return JSONResponse(content=response, status_code=200)
 
