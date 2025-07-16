@@ -1,31 +1,57 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from transformers import ElectraTokenizer, ElectraForSequenceClassification
+from jose import JWTError, jwt
+from dotenv import load_dotenv
 import torch
 import os
 import re
 from typing import Tuple, List, Dict
+import base64
 
+load_dotenv()
 router = APIRouter()
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
+
+
+def verify_jwt_token(request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization header missing or malformed")
+
+    token = auth_header.split(" ")[1]
+    try:
+        padded_key = SECRET_KEY + '=' * (-len(SECRET_KEY) % 4)
+        sc = base64.urlsafe_b64decode(padded_key)
+        payload = jwt.decode(token, sc, algorithms=[ALGORITHM])
+
+        username = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token: no subject")
+        return username
+    except JWTError as e:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
 
 class TextRequest(BaseModel):
     text: str
 
-# 경로 설정
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "..", "model", "my_electra_finetuned")
 LOG_PATH = os.path.join(BASE_DIR, "..", "data", "bad_text_sample.txt")
 
-# 모델 및 토크나이저 로드
+
 tokenizer = ElectraTokenizer.from_pretrained(MODEL_PATH, local_files_only=True)
 model = ElectraForSequenceClassification.from_pretrained(MODEL_PATH, local_files_only=True)
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("mps" if torch.cuda.is_available() else "cpu")
 model.to(device)
 model.eval()
 
-# 문장 분리 함수
+
 def split_sentences(text: str) -> List[str]:
     text = re.sub(r'([.!?])', r'\1\n', text)
     endings = ['다', '요', '죠', '네', '습니다', '습니까', '해요', '했어요', '하였습니다', '하네요', '해봐요']
@@ -33,7 +59,7 @@ def split_sentences(text: str) -> List[str]:
         text = re.sub(rf'({end})(?=\s)', r'\1\n', text)
     return [s.strip() for s in text.split('\n') if s.strip()]
 
-# 예측 함수
+
 def predict(text: str) -> Tuple[int, str]:
     encoded = tokenizer.encode_plus(
         text,
@@ -53,7 +79,7 @@ def predict(text: str) -> Tuple[int, str]:
 
     return pred_label, "비속어" if pred_label == 1 else "정상"
 
-# 분석 함수
+
 def analyze_field(field_name: str, text: str, log_file) -> Dict:
     sentences = split_sentences(text)
     results = []
@@ -75,10 +101,11 @@ def analyze_field(field_name: str, text: str, log_file) -> Dict:
         "results": results
     }
 
+
 @router.post("/text_filter_board")
-async def text_filter_board_api(request: TextRequest):
+async def text_filter_board_api(request: Request, payload: TextRequest, username: str = Depends(verify_jwt_token)):
     try:
-        full_text = request.text.strip()
+        full_text = payload.text.strip()
         try:
             intro, motive = [x.strip() for x in full_text.split('|', 1)]
         except ValueError:
@@ -92,14 +119,12 @@ async def text_filter_board_api(request: TextRequest):
             motive_result = analyze_field("지원동기", motive, f)
 
         response = {
+            "username": username,
             "자기소개": intro_result,
             "지원동기": motive_result
         }
 
-        # 상태코드 조건 분기
-        if intro_result["has_profanity"]:
-            return JSONResponse(status_code=400, content=response)
-        elif motive_result["has_profanity"]:
+        if intro_result["has_profanity"] or motive_result["has_profanity"]:
             return JSONResponse(status_code=400, content=response)
         else:
             return JSONResponse(status_code=200, content=response)
@@ -109,9 +134,9 @@ async def text_filter_board_api(request: TextRequest):
 
 
 @router.post("/text_filter_market")
-async def text_filter_market_api(request: TextRequest):
+async def text_filter_market_api(request: Request, payload: TextRequest, username: str = Depends(verify_jwt_token)):
     try:
-        full_text = request.text.strip()
+        full_text = payload.text.strip()
         try:
             title, content = [x.strip() for x in full_text.split('|', 1)]
         except ValueError:
@@ -125,14 +150,12 @@ async def text_filter_market_api(request: TextRequest):
             content_result = analyze_field("내용", content, f)
 
         response = {
+            "username": username,
             "제목": title_result,
             "내용": content_result
         }
 
-        # 상태코드 조건 분기
-        if title_result["has_profanity"]:
-            return JSONResponse(status_code=400, content=response)
-        elif content_result["has_profanity"]:
+        if title_result["has_profanity"] or content_result["has_profanity"]:
             return JSONResponse(status_code=400, content=response)
         else:
             return JSONResponse(status_code=200, content=response)

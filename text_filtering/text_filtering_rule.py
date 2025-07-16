@@ -1,33 +1,58 @@
-# text_filter_rule.py
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from transformers import ElectraTokenizer, ElectraForSequenceClassification
+from jose import JWTError, jwt
 import torch
 import os
 from typing import Tuple, List, Dict
 import re
-from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
+import base64
 
-# 라우터 객체 생성
+
+load_dotenv()
 router = APIRouter()
 
-# Pydantic 모델 정의
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
+
+
+def verify_jwt_token(request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization header missing or malformed")
+
+    token = auth_header.split(" ")[1]
+    try:
+        padded_key = SECRET_KEY + '=' * (-len(SECRET_KEY) % 4)
+        sc = base64.urlsafe_b64decode(padded_key)
+        payload = jwt.decode(token, sc, algorithms=[ALGORITHM])
+
+        username = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token: no subject")
+        return username
+    except JWTError as e:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
 class TextRequest(BaseModel):
     text: str
 
-# 경로 설정
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "..", "model", "my_electra_finetuned")
 LOG_PATH = os.path.join(BASE_DIR, "..", "data", "bad_text_sample.txt")
 
-# 모델 및 토크나이저 로드
+
 tokenizer = ElectraTokenizer.from_pretrained(MODEL_PATH, local_files_only=True)
 model = ElectraForSequenceClassification.from_pretrained(MODEL_PATH, local_files_only=True)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("mps" if torch.cuda.is_available() else "cpu")
 model.to(device)
 model.eval()
 
-# 문장 분리 함수
+
 def split_sentences(text: str) -> List[str]:
     text = re.sub(r'([\.!?])', r'\1\n', text)
     endings = ['다', '요', '죠', '네', '습니다', '습니까', '해요', '했어요', '하였습니다', '하네요', '해봐요']
@@ -35,7 +60,7 @@ def split_sentences(text: str) -> List[str]:
         text = re.sub(rf'({end})(?=\s)', r'\1\n', text)
     return [s.strip() for s in text.split('\n') if s.strip()]
 
-# 예측 함수
+
 def predict(text: str) -> Tuple[int, str]:
     encoded = tokenizer.encode_plus(
         text, add_special_tokens=True, max_length=64,
@@ -49,7 +74,7 @@ def predict(text: str) -> Tuple[int, str]:
         pred_label = torch.argmax(logits, dim=-1).item()
     return pred_label, "비속어" if pred_label == 1 else "정상"
 
-# 분석 함수
+
 def analyze_field(field_name: str, text: str, log_file=None) -> Dict:
     sentences = split_sentences(text)
     results = []
@@ -71,11 +96,15 @@ def analyze_field(field_name: str, text: str, log_file=None) -> Dict:
         "results": results
     }
 
-# ✅ API 엔드포인트 (BaseModel 사용)
+
 @router.post("/text_filter_rule")
-async def rule_filter_api(request: TextRequest):
+async def rule_filter_api(
+    request: Request,
+    payload: TextRequest,
+    username: str = Depends(verify_jwt_token)
+):
     try:
-        full_text = request.text.strip()
+        full_text = payload.text.strip()
 
         try:
             title, tags, content = [x.strip() for x in full_text.split('|', 2)]
@@ -92,6 +121,7 @@ async def rule_filter_api(request: TextRequest):
         tags_result = analyze_field("태그", tags)  # 태그는 로그 미포함
 
         response = {
+            "username": username,
             "제목": title_result,
             "태그": tags_result,
             "본문": content_result
