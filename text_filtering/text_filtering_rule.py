@@ -9,6 +9,7 @@ from typing import Tuple, List, Dict
 import re
 from dotenv import load_dotenv
 import base64
+from jose.exceptions import ExpiredSignatureError
 
 
 load_dotenv()
@@ -33,7 +34,11 @@ def verify_jwt_token(request: Request):
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid token: no subject")
         return username
-    except JWTError as e:
+
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+
+    except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
