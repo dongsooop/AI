@@ -1,14 +1,45 @@
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from fastapi.responses import JSONResponse
 import cv2
 import numpy as np
 import pytesseract
 from PIL import Image
 import re
+import os
+from jose import JWTError, jwt
+from dotenv import load_dotenv
+import base64
+from jose.exceptions import ExpiredSignatureError
 
 router = APIRouter()
+load_dotenv()
 
-# pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
+
+def verify_jwt_token(request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization header missing or malformed")
+
+    token = auth_header.split(" ")[1]
+    try:
+        padded_key = SECRET_KEY + '=' * (-len(SECRET_KEY) % 4)
+        sc = base64.urlsafe_b64decode(padded_key)
+        payload = jwt.decode(token, sc, algorithms=[ALGORITHM])
+
+        username = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token: no subject")
+        return username
+
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
 tesseract_config = r"--psm 6 --oem 1 -l kor+eng"
 
 TARGET_WIDTH = 1170
@@ -75,7 +106,9 @@ def extract_schedule_fixed_scaled(img):
     return results
 
 @router.post("/timetable")
-async def upload_timetable(file: UploadFile = File(...)):
+async def upload_timetable(request: Request, file: UploadFile = File(...)):
+    username = verify_jwt_token(request)
+
     try:
         file_bytes = await file.read()
         npimg = np.frombuffer(file_bytes, np.uint8)
