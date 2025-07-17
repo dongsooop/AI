@@ -24,5 +24,6 @@ COPY text_filtering/text_filtering_rule.py ./text_filtering/text_filtering_rule.
 COPY text_filtering/text_filtering.py ./text_filtering/text_filtering.py
 COPY image_analysis/timetable_analysis.py ./image_analysis/timetable_analysis.py
 COPY main.py ./main.py
+COPY .env ./.env
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8888"]
