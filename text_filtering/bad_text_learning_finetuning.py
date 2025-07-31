@@ -60,7 +60,7 @@ loader = DataLoader(dataset, batch_size=16, shuffle=True)
 optimizer = AdamW(model.parameters(), lr=5e-6)
 
 model.train()
-for epoch in range(3):
+for epoch in range(5):
     total_loss = 0.0
     for batch in loader:
         optimizer.zero_grad()
