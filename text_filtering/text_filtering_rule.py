@@ -11,12 +11,30 @@ from dotenv import load_dotenv
 import base64
 from jose.exceptions import ExpiredSignatureError
 
-
 load_dotenv()
 router = APIRouter()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
+
+MODEL_PATH = "model/my_electra_finetuned"
+LOG_PATH = "data/bad_text_sample.txt"
+ENGLISH_BAD_WORDS_PATH = "data/eng_bad_text.txt"
+
+
+def load_english_bad_words(file_path: str) -> set:
+    bad_words = set()
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                word = line.strip().lower()
+                if word:
+                    bad_words.add(word)
+    except FileNotFoundError:
+        print(f"[ERROR] 영어 비속어 사전 파일을 찾을 수 없습니다: {file_path}")
+    return bad_words
+
+ENGLISH_BAD_WORDS = load_english_bad_words(ENGLISH_BAD_WORDS_PATH)
 
 
 def verify_jwt_token(request: Request):
@@ -45,12 +63,6 @@ def verify_jwt_token(request: Request):
 class TextRequest(BaseModel):
     text: str
 
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "..", "model", "my_electra_finetuned")
-LOG_PATH = os.path.join(BASE_DIR, "..", "data", "bad_text_sample.txt")
-
-
 tokenizer = ElectraTokenizer.from_pretrained(MODEL_PATH, local_files_only=True)
 model = ElectraForSequenceClassification.from_pretrained(MODEL_PATH, local_files_only=True)
 device = torch.device("mps" if torch.cuda.is_available() else "cpu")
@@ -59,24 +71,35 @@ model.eval()
 
 
 def split_sentences(text: str) -> List[str]:
-    text = re.sub(r'([\.!?])', r'\1\n', text)
+    text = re.sub(r'([.!?])', r'\1\n', text)
     endings = ['다', '요', '죠', '네', '습니다', '습니까', '해요', '했어요', '하였습니다', '하네요', '해봐요']
     for end in endings:
         text = re.sub(rf'({end})(?=\s)', r'\1\n', text)
     return [s.strip() for s in text.split('\n') if s.strip()]
 
 
+def contains_english_profanity(text: str) -> bool:
+    lower_text = text.lower()
+    return any(bad_word in lower_text for bad_word in ENGLISH_BAD_WORDS)
+
+
 def predict(text: str) -> Tuple[int, str]:
     encoded = tokenizer.encode_plus(
-        text, add_special_tokens=True, max_length=64,
-        padding="max_length", truncation=True, return_tensors="pt"
+        text,
+        add_special_tokens=True,
+        max_length=64,
+        padding="max_length",
+        truncation=True,
+        return_tensors="pt"
     )
     input_ids = encoded["input_ids"].to(device)
     attention_mask = encoded["attention_mask"].to(device)
+
     with torch.no_grad():
         outputs = model(input_ids=input_ids, attention_mask=attention_mask)
         logits = outputs.logits
         pred_label = torch.argmax(logits, dim=-1).item()
+
     return pred_label, "비속어" if pred_label == 1 else "정상"
 
 
@@ -87,11 +110,16 @@ def analyze_field(field_name: str, text: str, log_file=None) -> Dict:
 
     for sent in sentences:
         label_num, label_text = predict(sent)
+
+        if label_text == "정상" and contains_english_profanity(sent):
+            label_text = "비속어"
+            label_num = 1
+
         results.append({"sentence": sent, "label": label_text})
-        
+
         if field_name in ['제목', '본문'] and log_file:
             log_file.write(f"{sent}|{label_num}\n")
-        
+
         if label_text == "비속어":
             has_bad = True
 
@@ -123,7 +151,7 @@ async def rule_filter_api(
             title_result = analyze_field("제목", title, f)
             content_result = analyze_field("본문", content, f)
 
-        tags_result = analyze_field("태그", tags)  # 태그는 로그 미포함
+        tags_result = analyze_field("태그", tags)
 
         response = {
             "username": username,
@@ -132,11 +160,7 @@ async def rule_filter_api(
             "본문": content_result
         }
 
-        if title_result["has_profanity"]:
-            return JSONResponse(content=response, status_code=400)
-        elif tags_result["has_profanity"]:
-            return JSONResponse(content=response, status_code=400)
-        elif content_result["has_profanity"]:
+        if title_result["has_profanity"] or tags_result["has_profanity"] or content_result["has_profanity"]:
             return JSONResponse(content=response, status_code=400)
         else:
             return JSONResponse(content=response, status_code=200)

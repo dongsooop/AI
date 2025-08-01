@@ -18,6 +18,23 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 
 
+ENGLISH_BAD_WORDS_PATH = "data/eng_bad_text.txt"
+
+def load_english_bad_words(file_path: str) -> set:
+    bad_words = set()
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                word = line.strip().lower()
+                if word:
+                    bad_words.add(word)
+    except FileNotFoundError:
+        print(f"[ERROR] 영어 비속어 사전 파일을 찾을 수 없습니다: {file_path}")
+    return bad_words
+
+ENGLISH_BAD_WORDS = load_english_bad_words(ENGLISH_BAD_WORDS_PATH)
+
+
 def verify_jwt_token(request: Request):
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -36,7 +53,6 @@ def verify_jwt_token(request: Request):
 
     except ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
-
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -44,11 +60,8 @@ def verify_jwt_token(request: Request):
 class TextRequest(BaseModel):
     text: str
 
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "..", "model", "my_electra_finetuned")
-LOG_PATH = os.path.join(BASE_DIR, "..", "data", "bad_text_sample.txt")
-
+MODEL_PATH = "model/my_electra_finetuned"
+LOG_PATH = "data/bad_text_sample.txt"
 
 tokenizer = ElectraTokenizer.from_pretrained(MODEL_PATH, local_files_only=True)
 model = ElectraForSequenceClassification.from_pretrained(MODEL_PATH, local_files_only=True)
@@ -64,6 +77,9 @@ def split_sentences(text: str) -> List[str]:
         text = re.sub(rf'({end})(?=\s)', r'\1\n', text)
     return [s.strip() for s in text.split('\n') if s.strip()]
 
+def contains_english_profanity(text: str) -> bool:
+    lower_text = text.lower()
+    return any(bad_word in lower_text for bad_word in ENGLISH_BAD_WORDS)
 
 def predict(text: str) -> Tuple[int, str]:
     encoded = tokenizer.encode_plus(
@@ -92,11 +108,13 @@ def analyze_field(field_name: str, text: str, log_file) -> Dict:
 
     for sent in sentences:
         label_num, label_text = predict(sent)
-        results.append({
-            "sentence": sent,
-            "label": label_text
-        })
+        if label_text == "정상" and contains_english_profanity(sent):
+            label_text = "비속어"
+            label_num = 1
+
+        results.append({"sentence": sent, "label": label_text})
         log_file.write(f"{sent}|{label_num}\n")
+
         if label_text == "비속어":
             has_profanity = True
 
