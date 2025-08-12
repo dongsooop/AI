@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY model/my_electra_finetuned ./model/my_electra_finetuned
 COPY data/bad_text_sample.txt ./data/bad_text_sample.txt
+COPY data/eng_bad_text.txt ./data/eng_bad_text.txt
 
 COPY text_filtering/text_filtering_rule.py ./text_filtering/text_filtering_rule.py
 COPY text_filtering/text_filtering.py ./text_filtering/text_filtering.py
