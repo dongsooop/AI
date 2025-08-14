@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import os, re, json, pickle, numpy as np, pandas as pd
 from pathlib import Path
 from functools import lru_cache
@@ -7,21 +6,18 @@ from rank_bm25 import BM25Okapi
 from index_utils import get_tokenizer
 from dotenv import load_dotenv
 
-# ---------- 경로 해석 ----------
+
 load_dotenv()
 
 THIS_DIR = Path(__file__).resolve().parent
 ROOT_DIR = THIS_DIR.parent
-
 ART_DIR = Path(os.environ.get("ART_DIR"))
 
-print(f"[PATH] ART_DIR = {ART_DIR}")
 
-# ---------- 로드 ----------
-search_df = pd.read_parquet(ART_DIR / "search_df.parquet")
-embeddings = np.load(ART_DIR / "embeddings.npy", mmap_mode="r").astype(np.float32)
-
+search_df = pd.read_parquet(ART_DIR)
+embeddings = np.load(ART_DIR, mmap_mode="r").astype(np.float32)
 tokenize_kor = get_tokenizer()
+
 if (ART_DIR / "bm25.pkl").exists():
     with open(ART_DIR / "bm25.pkl", "rb") as f:
         bm25 = pickle.load(f)
@@ -30,26 +26,32 @@ else:
     toks = load_json_gz(ART_DIR / "tokenized.json.gz")
     bm25 = BM25Okapi(toks)
 
+
 model_name = "intfloat/multilingual-e5-base"
 model = SentenceTransformer(model_name)
+
 
 @lru_cache(maxsize=512)
 def embed_query(q: str):
     return model.encode([f"query: {q}"], normalize_embeddings=True)[0].astype(np.float32)
+
 
 def _minmax(x):
     x = np.asarray(x, float)
     lo, hi = x.min(), x.max()
     return np.zeros_like(x) if hi - lo < 1e-9 else (x - lo) / (hi - lo + 1e-9)
 
+
 NOTICE_KWS = ["공지","안내","모집","변경","연장","일정","신청","발표","채용","장학","기간","마감","등록","수강","정정"]
 CONTACT_KWS = ["연락처","전화","전화번호","이메일","메일","담당자","문의","상담","교직원","직원","contact","email","phone"]
+
 
 def recency_score(ts, half_life_days=30):
     if pd.isna(ts) or ts is None: return 0.0
     ts = pd.to_datetime(ts)
     days = max((pd.Timestamp.now(tz="Asia/Seoul") - ts).days, 0)
     return float(np.exp(-np.log(2) * days / half_life_days))
+
 
 def hybrid_search(query, top_k=8, alpha=0.6, recency_weight=0.45, notice_boost=0.20, contact_boost=0.18):
     qv = embed_query(query)
@@ -77,6 +79,7 @@ def hybrid_search(query, top_k=8, alpha=0.6, recency_weight=0.45, notice_boost=0
     out = out.sort_values(["score","updated_at"], ascending=[False, False], na_position="last").head(top_k)
     return out.reset_index(drop=True)
 
+
 def _snippet(text, q, max_chars=220):
     if not isinstance(text, str): return ""
     t = " ".join(text.split())
@@ -85,6 +88,7 @@ def _snippet(text, q, max_chars=220):
     pos = min([t.lower().find(x.lower()) for x in toks if t.lower().find(x.lower()) >= 0] or [0])
     start = max(pos - 60, 0); end = min(start + max_chars, len(t))
     return (("…" if start>0 else "") + t[start:end] + ("…" if end<len(t) else ""))
+
 
 def build_answer(query, top_k=6):
     hits = hybrid_search(query, top_k=top_k)
@@ -107,6 +111,7 @@ def build_answer(query, top_k=6):
         lines = [f"- {r['title']}: {_snippet(r['text'], query)}" for _, r in hits.head(3).iterrows()]
         srcs = [{"title": r["title"], "url": r["url"]} for _, r in hits.head(3).iterrows()]
         return {"answer": "\n".join(lines), "sources": srcs}
+
 
 if __name__ == "__main__":
     q1 = "학생성공지원팀 담당자 전화번호 알려줘"
