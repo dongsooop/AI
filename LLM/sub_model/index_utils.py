@@ -1,14 +1,13 @@
-# -*- coding: utf-8 -*-
 import re, json, gzip
 from datetime import datetime, timezone, timedelta
 
 KST = timezone(timedelta(hours=9))
 
-# ---------- 텍스트 정규화 ----------
+
 def normalize_text(s: str) -> str:
     return re.sub(r"\s+", " ", str(s)).strip()
 
-# ---------- 날짜 파싱 ----------
+
 def try_parse_date(x: str):
     x = str(x)
     fmts = ("%Y-%m-%d", "%Y.%m.%d", "%Y/%m/%d", "%Y%m%d")
@@ -23,10 +22,12 @@ def try_parse_date(x: str):
         return datetime(y, mo, d, tzinfo=KST)
     return None
 
+
 DATE_PATTERNS = [
     re.compile(r"(?:작성일|등록일|게시일)\s*[:\-]?\s*(\d{4}[./-]\d{1,2}[./-]\d{1,2})"),
     re.compile(r"(?:작성일|등록일|게시일)\s*[:\-]?\s*(\d{4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일)")
 ]
+
 
 def extract_date_from_content(txt: str):
     if not isinstance(txt, str):
@@ -37,7 +38,7 @@ def extract_date_from_content(txt: str):
             return try_parse_date(m.group(1))
     return None
 
-# ---------- 문장 분리 ----------
+
 try:
     import kss
 except ImportError:
@@ -45,12 +46,14 @@ except ImportError:
 
 _SENT_PAT = re.compile(r'.+?(?:다\.|요\.|[.!?])(?=\s+|$)')
 
+
 def _regex_split(text: str):
     text = ' '.join(str(text).split())
     if not text:
         return []
     sents = _SENT_PAT.findall(text)
     return sents if sents else [text]
+
 
 def sent_split(text: str):
     t = ' '.join(str(text).split())
@@ -63,7 +66,7 @@ def sent_split(text: str):
             pass
     return _regex_split(t)
 
-# ---------- 청킹 ----------
+
 def chunk_text(text, max_tokens=400, overlap=0.15):
     sents = [s for s in sent_split(text) if s.strip()]
     if not sents:
@@ -92,7 +95,7 @@ def chunk_text(text, max_tokens=400, overlap=0.15):
         chunks.append(" ".join(cur).strip())
     return chunks
 
-# ---------- 토크나이저 ----------
+
 def get_tokenizer():
     try:
         from konlpy.tag import Okt
@@ -106,18 +109,21 @@ def get_tokenizer():
             return re.findall(r"[가-힣A-Za-z0-9]+", s)
         return tokenize_kor
 
-# ---------- 연락처/조직 추출 ----------
+
 PHONE_RE = re.compile(r"\b0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}\b")
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 UNIT_RE  = re.compile(r"([가-힣A-Za-z·\s\-/()]{2,40}?(?:팀|센터|처|단|과|부|본부|위원회|연구소|지원실|실|연대|학부|학과))")
 
+
 def last_seg(title: str):
     return title.split("/")[-1].strip() if isinstance(title, str) else ""
+
 
 def clean_name(s: str) -> str:
     s = re.sub(r"\([^)]*\)", "", str(s))
     s = re.sub(r"[\s\-/·]+", "", s)
     return s.lower()
+
 
 def extract_units_and_contacts(row):
     text = row.get("content", "") if isinstance(row.get("content", ""), str) else ""
@@ -163,7 +169,9 @@ def extract_units_and_contacts(row):
             })
     return out
 
+
 CONTACT_HINTS = "연락처 전화 전화번호 이메일 메일 문의 상담 교직원 직원 담당자"
+
 
 def compose_contact_passage(unit, phone, email, origin_title, origin_url):
     phone_part = f"전화 {phone}" if phone and phone != "없음" else ""
@@ -173,10 +181,11 @@ def compose_contact_passage(unit, phone, email, origin_title, origin_url):
     tail = f" (출처: {origin_title})"
     return f"{core}{tail} {CONTACT_HINTS} {unit} {origin_title} {origin_url}"
 
-# ---------- 직렬화 ----------
+
 def dump_json_gz(obj, path):
     with gzip.open(path, "wt", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False)
+
 
 def load_json_gz(path):
     with gzip.open(path, "rt", encoding="utf-8") as f:
