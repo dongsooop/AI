@@ -11,18 +11,57 @@ from index_utils import (
     extract_units_and_contacts, clean_name, compose_contact_passage
 )
 
-
 THIS_DIR = Path(__file__).resolve().parent
-ROOT_DIR = THIS_DIR.parent
-
+ROOT_DIR = THIS_DIR.parent.parent
 
 load_dotenv()
 
-DATA_JSON = os.environ.get("DATA_JSON")
-DEPT_DIR  = os.environ.get("DEPT_DIR")
-ART_DIR = Path(os.environ.get("ART_DIR"))
-ART_DIR = Path(ART_DIR)
 
+art_dir_env = os.environ.get("ART_DIR", "").strip()
+
+if not art_dir_env:
+    raise FileNotFoundError("ART_DIR environment empty.")
+
+_art = Path(os.path.expandvars(art_dir_env))
+ART_DIR = (_art if _art.is_absolute() else (ROOT_DIR / _art)).resolve()
+
+
+def _resolve_env_path(var_name: str, default_filename: str, base_dir: Path = ART_DIR) -> Path:
+    raw = os.environ.get(var_name, "").strip()
+    if raw:
+        s = os.path.expandvars(raw)
+        s = s.replace("ART_DIR/", f"{base_dir}{os.sep}").replace("ART_DIR", str(base_dir))
+        p = Path(s)
+        if not p.is_absolute():
+            p = (ROOT_DIR / p)
+        return p.resolve()
+    return (base_dir / default_filename).resolve()
+
+SEARCH_DF_PATH = _resolve_env_path("SEARCH_DF_PATH", "search_df.parquet")
+EMB_PATH       = _resolve_env_path("EMB_PATH",       "embeddings.npy")
+BM25_PATH      = _resolve_env_path("BM25_PATH",      "bm25.pkl")
+TOK_PATH       = _resolve_env_path("TOK_PATH",       "tokenized_corpus.json.gz")
+CONTACTS_CSV   = _resolve_env_path("CONTACTS_CSV",   "contact_docs.csv")
+META_PATH      = _resolve_env_path("META_PATH",      "meta.json")
+
+
+for p in [SEARCH_DF_PATH, EMB_PATH, BM25_PATH, TOK_PATH, CONTACTS_CSV, META_PATH]:
+    p.parent.mkdir(parents=True, exist_ok=True)
+
+def _resolve_input(var_name: str, must_exist=True) -> Path | None:
+    raw = os.environ.get(var_name, "").strip()
+    if not raw:
+        return None
+    p = Path(os.path.expandvars(raw))
+    if not p.is_absolute():
+        p = (ROOT_DIR / p)
+    p = p.resolve()
+    if must_exist and not p.exists():
+        raise FileNotFoundError(f"{var_name} not found: {p}")
+    return p
+
+DATA_JSON = _resolve_input("DATA_JSON", must_exist=True)
+DEPT_DIR  = _resolve_input("DEPT_DIR",  must_exist=False)
 
 if not DATA_JSON:
     raise FileNotFoundError("dmu_documents_cleaned.json 경로를 찾을 수 없습니다.")
@@ -162,20 +201,19 @@ def embed_passages(texts):
 embeddings = embed_passages(search_df["text"].tolist())
 
 
-search_df.to_parquet(ART_DIR)
-np.save(ART_DIR)
+search_df.to_parquet(SEARCH_DF_PATH, index=False)
+np.save(EMB_PATH, embeddings)
 
 
 try:
-    with open(ART_DIR, "wb") as f:
+    with open(BM25_PATH, "wb") as f:
         pickle.dump(bm25, f, protocol=pickle.HIGHEST_PROTOCOL)
-except Exception as e:
+except Exception:
     from index_utils import dump_json_gz
-    dump_json_gz(tokenized_corpus, ART_DIR)
-
+    dump_json_gz(tokenized_corpus, str(TOK_PATH))
 
 if not contact_docs.empty:
-    contact_docs.to_csv(ART_DIR)
+    contact_docs.to_csv(CONTACTS_CSV, index=False, encoding="utf-8-sig")
 
 meta = {
     "built_at": datetime.now().isoformat(),
@@ -185,10 +223,20 @@ meta = {
     "n_contacts": int(contact_docs.shape[0]),
     "emb_dim": int(embeddings.shape[1]),
     "art_dir": str(ART_DIR),
+    "paths": {
+        "search_df": str(SEARCH_DF_PATH),
+        "embeddings": str(EMB_PATH),
+        "bm25": str(BM25_PATH),
+        "tokens_backup": str(TOK_PATH),
+        "contacts_csv": str(CONTACTS_CSV),
+    }
 }
-
-with open(ART_DIR, "w", encoding="utf-8") as f:
+with open(META_PATH, "w", encoding="utf-8") as f:
     json.dump(meta, f, ensure_ascii=False, indent=2)
 
-
-print(f"✅ Unified index built → {ART_DIR} | entries: {search_df.shape[0]}")
+print(f"✅ Unified index built → {ART_DIR}")
+print(f"   - search_df : {SEARCH_DF_PATH.name}")
+print(f"   - embeddings: {EMB_PATH.name}")
+print(f"   - bm25      : {BM25_PATH.name}")
+if not contact_docs.empty:
+    print(f"   - contacts  : {CONTACTS_CSV.name}")
