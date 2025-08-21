@@ -43,12 +43,11 @@ search_df  = pd.read_parquet(SEARCH_DF_PATH)
 def _preclean_text(s: str) -> str:
     if not isinstance(s, str):
         return ""
-    # NBSP, zero-width 제거 + 다양한 하이픈을 '-'로 통일
     s = s.replace("\u00A0", " ").replace("\u200B", "")
     s = re.sub(r"[\u2010\u2011\u2012\u2013\u2014\u2212\uFE58\uFE63\uFF0D]", "-", s)
     return s
 
-# 필수 컬럼 존재/형식/공백 정리
+
 for c in ["doc_type", "title", "text", "unit", "phone", "email"]:
     if c not in search_df.columns:
         search_df[c] = ""
@@ -58,11 +57,11 @@ search_df["title"]    = search_df["title"].fillna("").astype(str).str.strip()
 search_df["text"]     = search_df["text"].fillna("").astype(str)
 search_df["unit"]     = search_df["unit"].fillna("").astype(str)
 
-# phone/email은 공란/공백 제거
+
 search_df["phone"]    = search_df["phone"].fillna("").astype(str).str.replace(r"\s+", "", regex=True)
 search_df["email"]    = search_df["email"].fillna("").astype(str).str.strip()
 
-# 정규식 매칭용 정규화 텍스트
+
 search_df["norm_text"]  = search_df["text"].apply(_preclean_text)
 search_df["norm_title"] = search_df["title"].apply(_preclean_text)
 
@@ -103,6 +102,7 @@ def _unit_pattern_from_query(q: str):
         return None
     return re.compile("|".join(map(re.escape, terms)), re.IGNORECASE)
 
+
 def _extract_from_text(text: str):
     if not isinstance(text, str) or not text:
         return None, None
@@ -126,6 +126,7 @@ def _get_text_field(row):
 @lru_cache(maxsize=512)
 def embed_query(q: str):
     return model.encode([f"query: {q}"], normalize_embeddings=True)[0].astype(np.float32)
+
 
 def load_list_from_txt(path: Path) -> list:
     with open(path, "r", encoding="utf-8") as f:
@@ -192,6 +193,7 @@ def _compile_or(terms):
     safe = [re.escape(t) for t in terms if t]
     return re.compile("|".join(safe), flags=re.IGNORECASE)
 
+
 KW_RULES = [
     {
         "name": "contact",
@@ -218,22 +220,17 @@ for _r in KW_RULES:
 
 def hybrid_search(query, top_k=8, alpha=0.55, recency_weight=0.45, notice_boost=0.20, contact_boost=0.18):
     qv = embed_query(query)
-
-    # 기본(임베딩 + BM25)
     dense_raw = embeddings @ qv
     bm25_raw  = bm25.get_scores(tokenize_kor(query))
     base = alpha * _minmax(np.nan_to_num(dense_raw, 0, 0, 0)) \
          + (1 - alpha) * _minmax(np.nan_to_num(bm25_raw,  0, 0, 0))
 
-    # 최신성 신호
     upd = search_df["updated_at"] if "updated_at" in search_df.columns else [None]*len(search_df)
     rec = _minmax(np.array([recency_score(ts) for ts in upd]))
 
-    # 의도 판별
     is_notice_q  = _contains_any(query, NOTICE_KWS)
     contact_like = _contains_any(query, CONTACT_KWS)
 
-    # 공지 의도일 때만 최신성 강하게, 연락처 의도는 사실상 끔
     eff_rec_w = recency_weight if is_notice_q else (0.0 if contact_like else 0.05)
     bonus = eff_rec_w * rec
 
@@ -243,11 +240,9 @@ def hybrid_search(query, top_k=8, alpha=0.55, recency_weight=0.45, notice_boost=
 
     title_col = search_df["norm_title"]
     text_col  = search_df["norm_text"]
-
-    # 본문에서 실제 패턴 감지
-    phone_ex = text_col.str.extract(PHONE_RE, expand=True)            # g1,g2,g3
+    phone_ex = text_col.str.extract(PHONE_RE, expand=True)
     has_real_phone = phone_ex.notna().any(axis=1).astype(float).to_numpy()
-    email_ex = text_col.str.extract(EMAIL_RE, expand=False)           # Series
+    email_ex = text_col.str.extract(EMAIL_RE, expand=False)
     has_real_email = email_ex.notna().astype(float).to_numpy()
 
     if contact_like:
@@ -259,22 +254,18 @@ def hybrid_search(query, top_k=8, alpha=0.55, recency_weight=0.45, notice_boost=
         has_phone  = phone_col.str.len().gt(0).astype(float).to_numpy()
         has_email  = email_col.str.len().gt(0).astype(float).to_numpy()
 
-        # 1) 연락처 신호 큰 가중치
         bonus += 2.00 * is_contact
         bonus += 1.20 * _minmax(has_real_phone)
         bonus += 0.60 * _minmax(has_real_email)
 
-        # 2) 공지 감점
         if "notice_flag" in search_df.columns:
             nf = search_df["notice_flag"].to_numpy()
             bonus += (-0.80) * nf
 
-        # 3) 연락처 후보 아님(힌트/실패턴/컨택문서 모두 없음) → 강한 페널티
         title_has_hint = title_col.str.contains(CONTACT_HINT_RE, na=False).astype(float).to_numpy()
         cand_mask = (is_contact > 0) | (has_real_phone > 0) | (has_real_email > 0)
         bonus += np.where(cand_mask, 0.0, -2.00)
 
-        # 4) 질문 속 단위명 매칭 보너스
         unit_pat = _unit_pattern_from_query(query)
         if unit_pat is not None:
             title_match = title_col.str.contains(unit_pat, na=False).astype(float).to_numpy()
@@ -282,7 +273,7 @@ def hybrid_search(query, top_k=8, alpha=0.55, recency_weight=0.45, notice_boost=
             unit_match = unit_col.str.contains(unit_pat, na=False).astype(float).to_numpy()
             bonus += 0.80 * _minmax(title_match + unit_match)
 
-    # 키워드 규칙 보정(게이팅)
+
     try:
         kw_signal = np.zeros(len(search_df), dtype=float)
         for rule in KW_RULES:
@@ -293,30 +284,25 @@ def hybrid_search(query, top_k=8, alpha=0.55, recency_weight=0.45, notice_boost=
         if np.any(kw_signal):
             if contact_like:
                 gate = np.clip((has_real_phone > 0).astype(float) + (search_df["doc_type"].eq("contact")).astype(float), 0, 1)
-                kw_signal = kw_signal * (0.25 + 0.75 * gate)  # 연락처 후보에 더 많이 분배
+                kw_signal = kw_signal * (0.25 + 0.75 * gate)
             bonus += 0.35 * _minmax(kw_signal)
     except Exception:
         pass
 
-    # 점수 합산
     scores = np.nan_to_num(base + bonus, nan=-np.inf, posinf=-np.inf, neginf=-np.inf)
     out = search_df.copy()
     out["score"] = np.nan_to_num(pd.to_numeric(scores, errors="coerce"), nan=-np.inf, posinf=-np.inf, neginf=-np.inf)
 
-    # URL+doc_type 단위로 대표만 남기기 (연락처 문서가 페이지에 덮이지 않게)
     if "url" in out.columns:
         group_cols = ["url"] + (["doc_type"] if "doc_type" in out.columns else [])
         rep_idx = out.groupby(group_cols, dropna=False)["score"].idxmax()
         rep_idx = rep_idx.dropna().astype(int)
         out = out.loc[rep_idx]
 
-    # 정렬
     sort_cols = ["score"] + (["updated_at"] if "updated_at" in out.columns else [])
     out = out.sort_values(sort_cols, ascending=[False]*len(sort_cols), na_position="last")
 
-    # 연락처 의도인데도 contact이 하나도 없으면 후보 우선 재정렬(세이프가드)
     if contact_like and not (out["doc_type"].eq("contact").any()):
-        # 후보 신호 재계산
         title_has_hint = out["title"].str.contains(CONTACT_HINT_RE, na=False).astype(int)
         phone_ex2 = out["text"].str.extract(PHONE_RE, expand=True)
         has_real_phone2 = phone_ex2.notna().any(axis=1).astype(int)
@@ -351,7 +337,6 @@ def build_answer(query, top_k=6):
     doc_type_col = hits["doc_type"] if "doc_type" in hits.columns else pd.Series([""]*len(hits))
     top_contacts = hits[doc_type_col.eq("contact")]
 
-    # 연락처 의도인데 contact 문서가 없으면 2차 패스(더 크게 가져와 re-rank)
     if contact_like and top_contacts.empty:
         hits = hybrid_search(query, top_k=max(top_k, 25), contact_boost=1.2)
         doc_type_col = hits["doc_type"] if "doc_type" in hits.columns else pd.Series([""]*len(hits))
@@ -364,7 +349,6 @@ def build_answer(query, top_k=6):
             p = (r.get("phone") or "").strip()
             e = (r.get("email") or "").strip()
 
-            # 비어 있으면 본문에서 다시 추출
             if (not p or p.lower()=="nan") or (not e or e.lower()=="nan"):
                 tp, te = _extract_from_text(_get_text_field(r))
                 if not p and tp: p = tp
@@ -377,12 +361,10 @@ def build_answer(query, top_k=6):
             srcs.append({"title": r.get("title",""), "url": r.get("url","")})
         return {"answer": "\n".join(lines), "sources": srcs}
 
-    # 일반 요약
     topn = hits.head(3)
     lines = [f"- {r.get('title','')}: {_snippet(r.get('text',''), query)}" for _, r in topn.iterrows()]
     srcs  = [{"title": r.get("title",""), "url": r.get("url","")} for _, r in topn.iterrows()]
     return {"answer": "\n".join(lines), "sources": srcs}
-
 
 
 if __name__ == "__main__":
