@@ -44,6 +44,13 @@ row_norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
 row_norms[row_norms == 0] = 1.0
 embeddings = embeddings / row_norms
 
+UNIT_TOK_RE = re.compile(r"[가-힣A-Za-z0-9]{2,}")
+
+def _unit_terms(q: str):
+    toks = UNIT_TOK_RE.findall(q or "")
+    prefer = [t for t in toks if re.search(r"(팀|과|센터|처|단|부|원|본부)$", t)]
+    return prefer if prefer else toks[:3]
+
 
 model_name = "intfloat/multilingual-e5-base"
 model = SentenceTransformer(model_name)
@@ -140,43 +147,45 @@ def hybrid_search(query, top_k=8, alpha=0.6, recency_weight=0.45, notice_boost=0
     return out.reset_index(drop=True)
 
 
-def _snippet(text, q, max_chars=220):
-    if not isinstance(text, str): return ""
-    t = " ".join(text.split())
-    if len(t) <= max_chars: return t
-    toks = [x for x in re.findall(r"[가-힣A-Za-z0-9]+", q) if len(x) >= 2]
-    pos = min([t.lower().find(x.lower()) for x in toks if t.lower().find(x.lower()) >= 0] or [0])
-    start = max(pos - 60, 0); end = min(start + max_chars, len(t))
-    return (("…" if start>0 else "") + t[start:end] + ("…" if end<len(t) else ""))
-
-
 def build_answer(query, top_k=6):
-    hits = hybrid_search(query, top_k=top_k)
     contact_like = any(k in query for k in CONTACT_KWS)
-    top_contacts = hits[hits["doc_type"]=="contact"]
-    if contact_like and not top_contacts.empty:
-        lines = []
-        for _, r in top_contacts.head(3).iterrows():
-            p = r.get("phone", ""); e = r.get("email", ""); u = r.get("unit", "")
-            parts = []
-            if isinstance(p, str) and p and p != "nan": parts.append(f"전화 {p}")
-            if isinstance(e, str) and e and e != "nan": parts.append(f"이메일 {e}")
-            joined = " / ".join(parts) if parts else "연락처 정보가 텍스트에 포함됨"
-            lines.append(f"- {u}: {joined}  (출처: {r['title']})")
-        others = hits[hits["doc_type"]!="contact"].head(2)
-        srcs = [{"title": r["title"], "url": r["url"]} for _, r in others.iterrows()]
-        srcs = [{"title": r["title"], "url": r["url"]} for _, r in top_contacts.head(3).iterrows()] + srcs
-        return {"answer": "\n".join(lines), "sources": srcs}
-    else:
-        lines = [f"- {r['title']}: {_snippet(r['text'], query)}" for _, r in hits.head(3).iterrows()]
-        srcs = [{"title": r["title"], "url": r["url"]} for _, r in hits.head(3).iterrows()]
-        return {"answer": "\n".join(lines), "sources": srcs}
+
+    if contact_like:
+        qv = embed_query(query)
+        dense_all = embeddings @ qv
+        mask = (search_df["doc_type"] == "contact").to_numpy()
+        idx = np.where(mask)[0]
+
+        if idx.size > 0:
+            scores = dense_all[idx].copy()
+            terms = _unit_terms(query)
+            if terms:
+                pat = re.compile("|".join(map(re.escape, terms)), flags=re.IGNORECASE)
+                hit_title = search_df.loc[idx, "title"].str.contains(pat, na=False).astype(float).to_numpy()
+                hit_unit  = search_df.loc[idx, "unit"].str.contains(pat,  na=False).astype(float).to_numpy()
+                scores += 0.20 * (hit_title + hit_unit)
+
+            order = np.argsort(-scores)
+            take = idx[order][:top_k]
+            picks = search_df.loc[take, ["title", "unit", "url"]].fillna("")
+
+            lines = []
+            for _, r in picks.iterrows():
+                label = (r["unit"] or r["title"]).strip() or r["title"]
+                lines.append(f"- {label}: {r['url']}")
+            return {"answer": "\n".join(lines)}
+
+    hits = hybrid_search(query, top_k=top_k)
+    picks = hits[["title", "url"]].fillna("")
+    lines = [f"- {r['title']}: {r['url']}" for _, r in picks.iterrows()]
+    return {"answer": "\n".join(lines)}
 
 
 if __name__ == "__main__":
     q1 = "학생성공지원팀 담당자 전화번호 알려줘"
-    q2 = "대학소개와 비전 전략체계를 요약해줘"
-    for q in [q1, q2]:
+    q2 = "컴퓨터공학부 담당자 전화번호 알려줘"
+    q3 = "총학생회"
+    for q in [q1, q2, q3]:
         res = build_answer(q, top_k=8)
         print("Q:", q)
         print("A:\n", res["answer"])
