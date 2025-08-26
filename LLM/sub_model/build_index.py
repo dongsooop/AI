@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from index_utils import (
     normalize_text, extract_date_from_content, chunk_text, get_tokenizer,
     extract_units_and_contacts, clean_name, compose_contact_passage,
-    dump_json_gz,  # ← 실패 대비 토큰 백업 저장용
+    dump_json_gz
 )
 
 load_dotenv()

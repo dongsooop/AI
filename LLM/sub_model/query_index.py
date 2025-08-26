@@ -147,8 +147,13 @@ def hybrid_search(query, top_k=8, alpha=0.6, recency_weight=0.45, notice_boost=0
     return out.reset_index(drop=True)
 
 
+def _norm(s: str) -> str:
+    return re.sub(r"\s+", "", (s or "").lower())
+
+
 def build_answer(query, top_k=6):
     contact_like = any(k in query for k in CONTACT_KWS)
+    notice_like = any(k in query for k in NOTICE_KWS)
 
     if contact_like:
         qv = embed_query(query)
@@ -158,9 +163,11 @@ def build_answer(query, top_k=6):
 
         if idx.size > 0:
             scores = dense_all[idx].copy()
-            terms = _unit_terms(query)
+            toks = re.findall(r"[가-힣A-Za-z0-9]{2,}", query or "")
+            prefer = [t for t in toks if re.search(r"(팀|과|센터|처|단|부|원|본부|회)$", t)]
+            terms = prefer if prefer else toks[:3]
             if terms:
-                pat = re.compile("|".join(map(re.escape, terms)), flags=re.IGNORECASE)
+                pat = re.compile("|".join(map(re.escape, terms)), re.IGNORECASE)
                 hit_title = search_df.loc[idx, "title"].str.contains(pat, na=False).astype(float).to_numpy()
                 hit_unit  = search_df.loc[idx, "unit"].str.contains(pat,  na=False).astype(float).to_numpy()
                 scores += 0.20 * (hit_title + hit_unit)
@@ -168,15 +175,32 @@ def build_answer(query, top_k=6):
             order = np.argsort(-scores)
             take = idx[order][:top_k]
             picks = search_df.loc[take, ["title", "unit", "url"]].fillna("")
-
             lines = []
             for _, r in picks.iterrows():
                 label = (r["unit"] or r["title"]).strip() or r["title"]
                 lines.append(f"- {label}: {r['url']}")
             return {"answer": "\n".join(lines)}
 
-    hits = hybrid_search(query, top_k=top_k)
-    picks = hits[["title", "url"]].fillna("")
+    hits = hybrid_search(query, top_k=max(top_k, 12))
+
+    if not contact_like and not notice_like and not hits.empty:
+        urls = hits["url"].fillna("")
+        home_like = urls.str.contains(r"/subview\.do|/intro|/dmu/\d+/subview", regex=True, case=False)
+        bbs_like  = urls.str.contains(r"/bbs/|artclView\.do", regex=True, case=False)
+        is_page   = hits["doc_type"].eq("page")
+        qn = _norm(query)
+        title_match = hits["title"].fillna("").map(lambda s: qn in _norm(s))
+        unit_match  = hits.get("unit", pd.Series([""]*len(hits))).fillna("").map(lambda s: qn in _norm(s))
+
+        rr = (
+            1.20 * home_like.astype(int)
+          + 1.00 * is_page.astype(int)
+          + 0.60 * (title_match.astype(int) | unit_match.astype(int))
+          - 0.80 * bbs_like.astype(int)
+        )
+        hits = hits.assign(_rr=rr).sort_values(["_rr", "score"], ascending=[False, False])
+
+    picks = hits.head(top_k)[["title", "url"]].fillna("")
     lines = [f"- {r['title']}: {r['url']}" for _, r in picks.iterrows()]
     return {"answer": "\n".join(lines)}
 
@@ -185,7 +209,8 @@ if __name__ == "__main__":
     q1 = "학생성공지원팀 담당자 전화번호 알려줘"
     q2 = "컴퓨터공학부 담당자 전화번호 알려줘"
     q3 = "총학생회"
-    for q in [q1, q2, q3]:
+    q4 = "대의원회"
+    for q in [q1, q2, q3, q4]:
         res = build_answer(q, top_k=8)
         print("Q:", q)
         print("A:\n", res["answer"])
