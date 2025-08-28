@@ -92,15 +92,18 @@ def extract_schedule_fixed_scaled(img):
 
             if len(course) < 2 or course in ["|", "-", "_"]:
                 continue
+            
+            start_time, end_time = time_slots[r].split("~")
 
             if course and professor:
                 results.append({
                     "day": weekdays[c],
                     "period": r + 1,
-                    "course": course,
+                    "name": course,
                     "professor": professor,
-                    "time": time_slots[r],
-                    "room": room
+                    "startAt": start_time,
+                    "endAt": end_time,
+                    "location": room
                 })
 
     return results
