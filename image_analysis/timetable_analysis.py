@@ -119,7 +119,7 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
 
         schedule = extract_schedule_fixed_scaled(img)
 
-        return JSONResponse(content={"status": "success", "schedule": schedule})
+        return JSONResponse(content={"schedule": schedule})
     
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
