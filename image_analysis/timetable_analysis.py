@@ -97,7 +97,7 @@ def extract_schedule_fixed_scaled(img):
 
             if course and professor:
                 results.append({
-                    "day": weekdays[c],
+                    "week": weekdays[c],
                     "period": r + 1,
                     "name": course,
                     "professor": professor,
