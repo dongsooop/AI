@@ -9,3 +9,4 @@ requirements.txt
 setting.txt
 __pycache__
 crawling
+debug
