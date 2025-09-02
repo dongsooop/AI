@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request
+from fastapi.responses import Response
 from fastapi.responses import JSONResponse
 import cv2
 import numpy as np
@@ -119,7 +120,10 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
 
         schedule = extract_schedule_fixed_scaled(img)
 
-        return JSONResponse(content={"schedule": schedule})
+        if not schedule:
+            return Response(status_code=204)
+
+        return JSONResponse(content=schedule)
     
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
