@@ -10,6 +10,8 @@ import base64
 from jose.exceptions import ExpiredSignatureError
 from multiprocessing import Pool, cpu_count
 from typing import List, Tuple, Optional
+from collections import Counter
+from datetime import time
 
 router = APIRouter()
 load_dotenv()
@@ -46,6 +48,86 @@ def _get_pool() -> Pool:
     if _POOL is None:
         _POOL = Pool(processes=max(2, min(8, cpu_count())))
     return _POOL
+
+def _parse_hms(t: str) -> time:
+    h,m,s = t.split(":")
+    return time(int(h), int(m), int(s))
+
+
+def _merge_adjacent_same_name(items: List[dict]) -> List[dict]:
+    groups: dict[tuple[str, str], List[dict]] = {}
+    for it in items:
+        key = (it["week"], it["name"])
+        groups.setdefault(key, []).append(it)
+
+    merged: List[dict] = []
+
+    for (week, name), group in groups.items():
+        group.sort(key=lambda x: (x.get("period", 10**9), _parse_hms(x["startAt"]), _parse_hms(x["endAt"])))
+
+        cur = None
+        for it in group:
+            p  = it["period"]
+            st = _parse_hms(it["startAt"])
+            et = _parse_hms(it["endAt"])
+
+            if cur is None:
+                cur = {
+                    "week": week,
+                    "name": name,
+                    "professor": it.get("professor", "") or "",
+                    "location": it.get("location", "") or "",
+                    "startAt": it["startAt"],
+                    "endAt": it["endAt"],
+                    "periods": [p],
+                }
+                continue
+
+            prev_last_p = cur["periods"][-1]
+            contiguous_by_period = (p == prev_last_p + 1)
+            contiguous_by_time   = (_parse_hms(cur["endAt"]) <= st)
+            if contiguous_by_period or contiguous_by_time:
+                if et > _parse_hms(cur["endAt"]):
+                    cur["endAt"] = it["endAt"]
+                cur["periods"].append(p)
+
+                if not cur["professor"] and it.get("professor"):
+                    cur["professor"] = it["professor"]
+                if not cur["location"] and it.get("location"):
+                    cur["location"] = it["location"]
+            else:
+                profs = [x.get("professor","") for x in group if x["period"] in cur["periods"]]
+                locs  = [x.get("location","")  for x in group if x["period"] in cur["periods"]]
+                if profs:
+                    cur["professor"] = Counter([p for p in profs if p]).most_common(1)[0][0] if any(profs) else ""
+                if locs:
+                    cur["location"]  = Counter([l for l in locs if l]).most_common(1)[0][0] if any(locs) else ""
+
+                cur["period"] = min(cur["periods"])
+                merged.append(cur)
+
+                cur = {
+                    "week": week,
+                    "name": name,
+                    "professor": it.get("professor", "") or "",
+                    "location": it.get("location", "") or "",
+                    "startAt": it["startAt"],
+                    "endAt": it["endAt"],
+                    "periods": [p],
+                }
+
+        if cur is not None:
+            profs = [x.get("professor","") for x in group if x["period"] in cur["periods"]]
+            locs  = [x.get("location","")  for x in group if x["period"] in cur["periods"]]
+            if profs:
+                cur["professor"] = Counter([p for p in profs if p]).most_common(1)[0][0] if any(profs) else ""
+            if locs:
+                cur["location"]  = Counter([l for l in locs if l]).most_common(1)[0][0] if any(locs) else ""
+            cur["period"] = min(cur["periods"])
+            merged.append(cur)
+
+    merged.sort(key=lambda x: (x["week"], x["period"], _parse_hms(x["startAt"])))
+    return merged
 
 
 def _is_valid_course(s: str) -> bool:
@@ -514,6 +596,8 @@ def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
             })
         
     _apply_backshift_if_prev_empty_once(results, _load_list_from_txt(TIME_SLOTS_FILE),period_min=1, period_max=14)
+
+    results = _merge_adjacent_same_name(results)
 
     return results
 
