@@ -46,7 +46,7 @@ _POOL: Optional[Pool] = None
 def _get_pool() -> Pool:
     global _POOL
     if _POOL is None:
-        _POOL = Pool(processes=max(2, min(8, cpu_count())))
+        _POOL = Pool(processes=os.cpu_count() or 8)
     return _POOL
 
 def _parse_hms(t: str) -> time:
@@ -576,7 +576,7 @@ def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
 
     results: List[dict] = []
     if tasks:
-        mapped = _get_pool().map(_ocr_task, tasks, chunksize=max(8, len(tasks)//(cpu_count() or 1)))
+        mapped = _get_pool().map(_ocr_task, tasks, chunksize=max(16, len(tasks)//(cpu_count() or 1)))
         for (period_idx, week, start_time, end_time, lines) in mapped:
             if not lines or len(lines[0]) < 2:
                 continue
