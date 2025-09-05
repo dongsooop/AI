@@ -193,26 +193,18 @@ async def text_filter_single_api(payload: TextRequest, username: str = Depends(v
         text = payload.text.strip()
         sentence_list = split_sentences(text)
         results = []
-        has_profanity = False
 
         for sent in sentence_list:
             label_num, label_text = predict(sent)
 
             if label_text == "정상" and contains_english_profanity(sent):
                 label_text = "비속어"
-                label_num = 1
 
             results.append(label_text)
 
-            if label_text == "비속어":
-                has_profanity = True
-
         return JSONResponse(
             status_code=200,
-            content={
-                "text": text,
-                "results": results
-            }
+            content={"text": text, "results": results}
         )
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
