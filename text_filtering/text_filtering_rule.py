@@ -167,6 +167,5 @@ async def rule_filter_api(
 
     except Exception as e:
         return JSONResponse(
-            status_code=500,
-            content={"error": "서버 내부 오류가 발생했습니다.", "detail": str(e)}
+            status_code=500,content={"error": str(e)}
         )
