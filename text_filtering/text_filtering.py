@@ -188,23 +188,20 @@ async def text_filter_market_api(request: Request, payload: TextRequest, usernam
 
 
 @router.post("/text_filter_single")
-async def text_filter_single_api(payload: TextRequest, username: str = Depends(verify_jwt_token)):
+async def text_filter_single_api(payload: TextRequest):
     try:
         text = payload.text.strip()
         sentence_list = split_sentences(text)
         results = []
-
         for sent in sentence_list:
             label_num, label_text = predict(sent)
-
             if label_text == "정상" and contains_english_profanity(sent):
                 label_text = "비속어"
-
             results.append(label_text)
 
         return JSONResponse(
             status_code=200,
-            content={"text": text, "results": results}
+            content={"text" : text, "results" : results}
         )
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
