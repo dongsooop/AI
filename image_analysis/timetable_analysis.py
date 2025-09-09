@@ -393,7 +393,7 @@ def verify_jwt_token(request: Request):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-@router.post("/timetable")
+@router.post("/timetable_analysis")
 async def upload_timetable(request: Request, file: UploadFile = File(...)):
     _ = verify_jwt_token(request)
     try:
