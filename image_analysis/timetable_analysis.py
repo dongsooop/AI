@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 import base64
 from jose.exceptions import ExpiredSignatureError
 from typing import List, Optional
-from collections import Counter
 from datetime import time
+from multiprocessing import Pool, cpu_count
 
 router = APIRouter()
 load_dotenv()
@@ -33,7 +33,12 @@ _hangul = re.compile(r"[가-힣]")
 _only_digits_symbols = re.compile(r"^[\d\W_]+$")
 _long_repeat = re.compile(r"(.)\1{3,}")
 
-from multiprocessing import Pool, cpu_count
+VDIV, HDIV = 50, 50
+H_MIN_LEN_RATIO = 0.60
+HOUGH_THRESH, HOUGH_MINLINE, HOUGH_MAXGAP = 120, 80, 10
+NEAR_EPS, BAND_MERGE = 6, 8
+TRIM_OUTER, TRIM_X_GAP, TRIM_Y_GAP = True, 20, 15
+
 
 _POOL: Optional[Pool] = None
 def _get_pool() -> Pool:
@@ -42,11 +47,13 @@ def _get_pool() -> Pool:
         _POOL = Pool(processes=os.cpu_count() or 8)
     return _POOL
 
+
 def _ocr_task(roi_bytes: bytes) -> List[str]:
     nparr = np.frombuffer(roi_bytes, np.uint8)
     roi_gray = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
     txt = pytesseract.image_to_string(Image.fromarray(roi_gray), config=tesseract_config).strip()
     return [re.sub(r"[|]", "", ln.strip().replace(" ", "")) for ln in txt.split("\n") if ln.strip()]
+
 
 def _is_valid_course(s: str) -> bool:
     s = s.strip()
@@ -114,13 +121,6 @@ def _make_base_gray(img_bgr: np.ndarray) -> np.ndarray:
     return cv2.filter2D(gray, -1, sharpen_kernel)
 
 
-VDIV, HDIV = 50, 50
-H_MIN_LEN_RATIO = 0.60
-HOUGH_THRESH, HOUGH_MINLINE, HOUGH_MAXGAP = 120, 80, 10
-NEAR_EPS, BAND_MERGE = 6, 8
-TRIM_OUTER, TRIM_X_GAP, TRIM_Y_GAP = True, 20, 15
-
-
 def _vertical_lines(base_gray: np.ndarray):
     thr = cv2.adaptiveThreshold(base_gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 31, 5)
     binv = 255 - thr
@@ -186,11 +186,6 @@ def _iterate_cells_autogrid(base_gray, x_lines, y_lines):
             pad_y = max(1, (y2 - y1) // 20)
             roi = base_gray[y1 + pad_y:y2 - pad_y, x1 + pad_x:x2 - pad_x]
             yield (r, c, roi)
-
-
-def _ocr_lines(img_gray: np.ndarray) -> List[str]:
-    txt = pytesseract.image_to_string(Image.fromarray(img_gray), config=tesseract_config).strip()
-    return [re.sub(r"[|]", "", ln.strip().replace(" ", "")) for ln in txt.split("\n") if ln.strip()]
 
 
 def _merge_adjacent_same_name(items: List[dict]) -> List[dict]:
