@@ -33,6 +33,20 @@ _hangul = re.compile(r"[가-힣]")
 _only_digits_symbols = re.compile(r"^[\d\W_]+$")
 _long_repeat = re.compile(r"(.)\1{3,}")
 
+from multiprocessing import Pool, cpu_count
+
+_POOL: Optional[Pool] = None
+def _get_pool() -> Pool:
+    global _POOL
+    if _POOL is None:
+        _POOL = Pool(processes=os.cpu_count() or 8)
+    return _POOL
+
+def _ocr_task(roi_bytes: bytes) -> List[str]:
+    nparr = np.frombuffer(roi_bytes, np.uint8)
+    roi_gray = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
+    txt = pytesseract.image_to_string(Image.fromarray(roi_gray), config=tesseract_config).strip()
+    return [re.sub(r"[|]", "", ln.strip().replace(" ", "")) for ln in txt.split("\n") if ln.strip()]
 
 def _is_valid_course(s: str) -> bool:
     s = s.strip()
@@ -264,18 +278,31 @@ def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
     if not weekdays or not time_slots:
         return []
 
-    raw_cells: List[dict] = []
-    for (r, c, roi_gray) in _iterate_cells_autogrid(base_gray, x_lines, y_lines):
+    tasks = []
+    meta_map = []
+    for(r, c, roi_gray) in _iterate_cells_autogrid(base_gray, x_lines, y_lines):
         if r == 0:
             continue
+        ok, buf = cv2.imencode(".png", roi_gray)
+        if not ok:
+            continue
+        tasks.append(buf.tobytes())
+        meta_map.append((r,c))
+    
+    lines_list: List[List[str]] = []
+    if tasks:
+        pool = _get_pool()
+        chunk = max(16, len(tasks)//(cpu_count() or 1))
+        lines_list = pool.map(_ocr_task, tasks, chunksize=chunk)
 
-        lines = _ocr_lines(roi_gray)
+    raw_cells: List[dict] = []
+    for (r, c), lines in zip(meta_map, lines_list):
         if not lines:
             continue
 
-        course = lines[0]
+        course    = lines[0]
         professor = lines[1] if len(lines) > 1 else ""
-        room = lines[2] if len(lines) > 2 else ""
+        room      = lines[2] if len(lines) > 2 else ""
 
         if not (_is_valid_course(course) and _is_valid_professor(professor)):
             continue
