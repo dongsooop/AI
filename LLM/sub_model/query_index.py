@@ -79,6 +79,7 @@ def _looks_like_grad_query(q: str) -> bool:
 _OLD_NEW_NUM = r"(\d{2,3})"
 _BYPYO1_RE   = r"\[?\s*별표\s*1\s*\]?"
 
+
 def _extract_3yr_from_tables(text: str):
     t = _preclean_text(text)
 
@@ -104,7 +105,7 @@ def _extract_3yr_from_tables(text: str):
             b2
         )
         if m:
-            old_raw = m.group(2) or m.group(3)  # '[별표1]' 또는 숫자
+            old_raw = m.group(2) or m.group(3)
             new_v   = int(m.group(4))
             if old_raw and re.search(_BYPYO1_RE, old_raw):
                 old_v = "별표1"
@@ -124,6 +125,7 @@ def env_path(name: str) -> Path:
     if not p.is_absolute():
         p = (ROOT_DIR / p)
     return p.resolve()
+
 
 def load_list_from_txt(path: Path) -> list:
     with open(path, "r", encoding="utf-8") as f:
@@ -148,11 +150,6 @@ row_norms[row_norms == 0] = 1.0
 embeddings = embeddings / row_norms
 
 UNIT_TOK_RE = re.compile(r"[가-힣A-Za-z0-9]{2,}")
-
-def _unit_terms(q: str):
-    toks = UNIT_TOK_RE.findall(q or "")
-    prefer = [t for t in toks if re.search(r"(팀|과|센터|처|단|부|원|본부)$", t)]
-    return prefer if prefer else toks[:3]
 
 model_name = "intfloat/multilingual-e5-base"
 model = SentenceTransformer(model_name)
@@ -248,10 +245,6 @@ def hybrid_search(query, top_k=8, alpha=0.6, recency_weight=0.45, notice_boost=0
         out = out.loc[rep_idx]
     out = out.sort_values(["score","updated_at"], ascending=[False, False], na_position="last").head(top_k)
     return out.reset_index(drop=True)
-
-
-def _norm(s: str) -> str:
-    return re.sub(r"\s+", "", (s or "").lower())
 
 
 def build_answer(query, top_k=6):
