@@ -14,6 +14,22 @@ ROOT_DIR = THIS_DIR.parent.parent
 
 
 GRAD_KWS = ["졸업", "졸업학점", "졸업 학점", "졸업요건", "졸업요구학점", "이수학점", "졸업 이수학점"]
+_OLD_NEW_NUM = r"(\d{2,3})"
+_BYPYO1_RE   = r"\[?\s*별표\s*1\s*\]?"
+PHONE_RE = re.compile(r'(0\d{1,2})[^\d]{0,4}(\d{3,4})[^\d]{0,4}(\d{4})')
+EMAIL_RE = re.compile(r'([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})')
+_TOTAL_PATS = [
+    re.compile(r"(?:총|전체)\s*(?:졸업|이수)\s*(?:요구)?\s*학점\s*[:：]?\s*(\d{3})\s*학점"),
+    re.compile(r"졸업\s*(?:이수)?\s*학점\s*[:：]?\s*(\d{3})\s*학점"),
+    re.compile(r"졸업\s*요구\s*학점\s*[:：]?\s*(\d{3})\s*학점"),
+]
+_PART_PATS = {
+    "전공": re.compile(r"전공[^0-9]{0,8}(\d{2,3})\s*학점"),
+    "교양": re.compile(r"(?:교양|공통교양)[^0-9]{0,8}(\d{2,3})\s*학점"),
+    "자유선택": re.compile(r"(?:자유선택|자율선택)[^0-9]{0,8}(\d{2,3})\s*학점"),
+}
+NEAR_NUM_RE = re.compile(r"(\d{3})\s*학점")
+
 
 def _preclean_text(s: str) -> str:
     if not isinstance(s, str):
@@ -23,19 +39,48 @@ def _preclean_text(s: str) -> str:
     return s
 
 
-_TOTAL_PATS = [
-    re.compile(r"(?:총|전체)\s*(?:졸업|이수)\s*(?:요구)?\s*학점\s*[:：]?\s*(\d{3})\s*학점"),
-    re.compile(r"졸업\s*(?:이수)?\s*학점\s*[:：]?\s*(\d{3})\s*학점"),
-    re.compile(r"졸업\s*요구\s*학점\s*[:：]?\s*(\d{3})\s*학점"),
-]
+def _extract_phones_from_text(text: str):
+    if not isinstance(text, str) or not text:
+        return []
+    t = _preclean_text(text)
+    phones = ["-".join(m) for m in PHONE_RE.findall(t)]
+    return list(dict.fromkeys(phones))
 
-_PART_PATS = {
-    "전공": re.compile(r"전공[^0-9]{0,8}(\d{2,3})\s*학점"),
-    "교양": re.compile(r"(?:교양|공통교양)[^0-9]{0,8}(\d{2,3})\s*학점"),
-    "자유선택": re.compile(r"(?:자유선택|자율선택)[^0-9]{0,8}(\d{2,3})\s*학점"),
-}
 
-NEAR_NUM_RE = re.compile(r"(\d{3})\s*학점")
+def _extract_contact_from_row(row, prefer_terms=None):
+    p = (row.get("phone") or "").strip()
+    e = (row.get("email") or "").strip()
+
+    texts = []
+    base_text = (row.get("text") or row.get("content") or "")
+    if base_text:
+        texts.append(base_text)
+
+    if (not p) or (not e):
+        mask = (search_df["url"].eq(row.get("url","")) &
+                search_df["doc_type"].eq(row.get("doc_type","")))
+        sibs = search_df.loc[mask, "text"].dropna().astype(str)
+        if not sibs.empty:
+            texts.append("\n".join(sibs.tolist()))
+
+    blob = "\n".join(texts)
+    phones = _extract_phones_from_text(blob) if (not p) else [p]
+    emails = [e] if e else EMAIL_RE.findall(_preclean_text(blob))
+
+    if prefer_terms and phones and blob:
+        ranked = []
+        for ph in phones:
+            m = re.search(re.escape(ph).replace(r'\-', '[-–—]?'), blob)
+            score = 0
+            if m:
+                L = max(0, m.start() - 80); R = min(len(blob), m.end() + 80)
+                ctx = blob[L:R].lower()
+                if any(t.lower() in ctx for t in prefer_terms):
+                    score += 1
+            ranked.append((score, ph))
+        ranked.sort(reverse=True)
+        phones = [ph for _, ph in ranked]
+    return phones, emails
 
 
 def _extract_grad_credits_from_text(text: str):
@@ -68,16 +113,12 @@ def _extract_grad_credits_from_text(text: str):
                 candidates.append(val)
         good = [v for v in candidates if 100 <= v <= 200]
         total = max(good) if good else (max(candidates) if candidates else None)
-
     return total, parts
 
 
 def _looks_like_grad_query(q: str) -> bool:
     ql = (q or "").lower()
     return any(k in q or k in ql for k in GRAD_KWS)
-
-_OLD_NEW_NUM = r"(\d{2,3})"
-_BYPYO1_RE   = r"\[?\s*별표\s*1\s*\]?"
 
 
 def _extract_3yr_from_tables(text: str):
@@ -90,7 +131,6 @@ def _extract_3yr_from_tables(text: str):
         return t[m.end(): m.end() + window]
 
     out = {}
-
     b1 = _find_block(r"졸업이수\s*학점")
     if b1:
         m = re.search(rf"3\s*년제[^\d]{{0,30}}{_OLD_NEW_NUM}[^\d]{{0,15}}{_OLD_NEW_NUM}", b1)
@@ -112,7 +152,6 @@ def _extract_3yr_from_tables(text: str):
             else:
                 old_v = int(old_raw) if old_raw else None
             out["major_min"] = {"old": old_v, "new": new_v}
-
     return out
 
 
@@ -252,30 +291,35 @@ def build_answer(query, top_k=6):
     notice_like = any(k in query for k in NOTICE_KWS)
 
     if contact_like:
-        qv = embed_query(query)
-        dense_all = embeddings @ qv
-        mask = (search_df["doc_type"] == "contact").to_numpy()
-        idx = np.where(mask)[0]
+        hits = hybrid_search(query, top_k=max(top_k, 20))
+        toks = re.findall(r"[가-힣A-Za-z0-9]{2,}", query or "")
+        prefer = [t for t in toks if re.search(r"(학부|과|팀|센터|처|단|부|원|본부)$", t)]
+        terms = prefer if prefer else toks[:3]
+        urls = hits["url"].fillna("")
+        is_contact = hits["doc_type"].eq("contact").astype(int)
+        is_subview = urls.str.contains(r"/subview\.do", case=False, regex=True).astype(int)
+        hits = hits.assign(_cc=1.0*is_contact + 0.5*is_subview) \
+                .sort_values(["_cc","score"], ascending=[False, False])
+        lines, seen = [], set()
+        for _, r in hits.iterrows():
+            phones, emails = _extract_contact_from_row(r, prefer_terms=terms)
+            label = (r.get("unit") or r.get("title") or "").strip() or "연락처"
+            if phones:
+                picked = [ph for ph in phones if ph not in seen][:2]
+                for ph in picked:
+                    seen.add(ph)
+                if picked:
+                    lines.append(f"- {label}: 전화 {', '.join(picked)} (출처: {r.get('url','')})")
+            elif emails:
+                lines.append(f"- {label}: 이메일 {', '.join(dict.fromkeys(emails))} (출처: {r.get('url','')})")
 
-        if idx.size > 0:
-            scores = dense_all[idx].copy()
-            toks = re.findall(r"[가-힣A-Za-z0-9]{2,}", query or "")
-            prefer = [t for t in toks if re.search(r"(팀|과|센터|처|단|부|원|본부|회)$", t)]
-            terms = prefer if prefer else toks[:3]
-            if terms:
-                pat = re.compile("|".join(map(re.escape, terms)), re.IGNORECASE)
-                hit_title = search_df.loc[idx, "title"].str.contains(pat, na=False).astype(float).to_numpy()
-                hit_unit  = search_df.loc[idx, "unit"].str.contains(pat,  na=False).astype(float).to_numpy()
-                scores += 0.20 * (hit_title + hit_unit)
+            if len(lines) >= 4:
+                break
 
-            order = np.argsort(-scores)
-            take = idx[order][:top_k]
-            picks = search_df.loc[take, ["title", "unit", "url"]].fillna("")
-            lines = []
-            for _, r in picks.iterrows():
-                label = (r["unit"] or r["title"]).strip() or r["title"]
-                lines.append(f"- {label}: {r['url']}")
-            return {"answer": "\n".join(lines)}
+        if not lines:
+            picks = hits.head(top_k)[["title","url"]].fillna("")
+            lines = [f"- {rv['title']}: {rv['url']}" for _, rv in picks.iterrows()]
+        return {"answer": "\n".join(lines)}
 
     if _looks_like_grad_query(query):
         three_year_like = bool(re.search(r"\b3\s*년제\b", query))
