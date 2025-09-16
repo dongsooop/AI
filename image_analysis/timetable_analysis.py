@@ -108,6 +108,24 @@ def _parse_hms(t: str) -> time:
     return time(0, 0, 0)
 
 
+def _prune_x_lines(x_lines: List[int], base_gray: np.ndarray) -> List[int]:
+    if not x_lines:
+        return x_lines
+
+    H, W = base_gray.shape[:2]
+    margin = max(2, int(W * 0.02))
+    xs = [x for x in x_lines if margin <= x <= (W - margin)]
+    if len(xs) < 2:
+        xs = x_lines[:]
+
+    if len(xs) >= 4:
+        gaps = np.diff(xs)
+        med = float(np.median(gaps[:-1])) if len(gaps) > 1 else float(np.median(gaps))
+        if med > 0 and gaps[-1] > 1.6 * med:
+            xs = xs[:-1]
+    return xs
+
+
 def _load_list_from_txt(path: str) -> List[str]:
     with open(path, "r", encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip()]
@@ -251,6 +269,7 @@ def _merge_adjacent_same_name(items: List[dict]) -> List[dict]:
 def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
     base_gray = _make_base_gray(img)
     x_lines, vmask = _vertical_lines(base_gray)
+    x_lines = _prune_x_lines(x_lines, base_gray)
     y_lines, hmask = _horizontal_lines(base_gray, vertical_mask=vmask)
 
     if TRIM_OUTER:
@@ -298,6 +317,11 @@ def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
         course    = lines[0]
         professor = lines[1] if len(lines) > 1 else ""
         room      = lines[2] if len(lines) > 2 else ""
+
+        if len(course) > 15 or len(professor) > 8 or len(room) > 10:
+            continue
+        
+        room = room.replace("=", "-")
 
         if not (_is_valid_course(course) and _is_valid_professor(professor)):
             continue
