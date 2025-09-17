@@ -15,6 +15,11 @@ async def limit_upload_size(request: Request, call_next):
 
     return await call_next(request)
 
+# 헬스체크
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 # 라우터 등록
 app.include_router(text_filter_router)
 app.include_router(text_filter_rule_router)
