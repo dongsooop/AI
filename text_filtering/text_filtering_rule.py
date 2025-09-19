@@ -169,3 +169,43 @@ async def rule_filter_api(
         return JSONResponse(
             status_code=500,content={"error": str(e)}
         )
+
+
+@router.post("/text_filter_content")
+async def text_filter_content_api(
+    payload: TextRequest):
+    try:
+        text = payload.text.strip()
+        sentences = split_sentences(text)
+        results = []
+        has_profanity = False
+
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            for sent in sentences:
+                label_num, label_text = predict(sent)
+
+                if label_text == "정상" and contains_english_profanity(sent):
+                    label_text = "비속어"
+                    label_num = 1
+
+                results.append({"sentence": sent, "label": label_text})
+                f.write(f"{sent}|{label_num}\n")
+
+                if label_text == "비속어":
+                    has_profanity = True
+
+        response = {
+            "content": {
+                "field": "content",
+                "has_profanity": has_profanity,
+                "results": results
+            }
+        }
+
+        return JSONResponse(
+            status_code=400 if has_profanity else 200,
+            content=response
+        )
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
