@@ -10,3 +10,5 @@ setting.txt
 __pycache__
 crawling
 debug
+finetuning
+test
