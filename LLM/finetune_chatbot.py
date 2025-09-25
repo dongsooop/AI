@@ -8,13 +8,15 @@ from tqdm import tqdm
 import sentencepiece as spm
 
 
+# -------------------- Model --------------------
+
 class Encoder(nn.Module):
     def __init__(self, vocab_size, embed_size, hidden_size, num_layers=2, dropout=0.1):
         super(Encoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embed_size, padding_idx=0)
-        self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, 
+        self.lstm = nn.LSTM(embed_size, hidden_size, num_layers,
                             batch_first=True, dropout=dropout, bidirectional=False)
-        
+
     def forward(self, x):
         embeded = self.embedding(x)
         outputs, (hidden, cell) = self.lstm(embeded)
@@ -30,7 +32,6 @@ class Attention(nn.Module):
     def forward(self, hidden, encoder_outputs):
         if hidden.dim() == 2:
             hidden = hidden.unsqueeze(1)
-
         seq_len = encoder_outputs.size(1)
         hidden = hidden.repeat(1, seq_len, 1)
         energy = torch.tanh(self.attn(torch.cat((hidden, encoder_outputs), dim=2)))
@@ -43,7 +44,6 @@ class Attention(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, vocab_size, embed_size, hidden_size, num_layers=2, dropout=0.1):
         super(Decoder, self).__init__()
-
         self.embedding = nn.Embedding(vocab_size, embed_size, padding_idx=0)
         self.lstm = nn.LSTM(embed_size + hidden_size, hidden_size,
                             num_layers, batch_first=True, dropout=dropout)
@@ -53,15 +53,12 @@ class Decoder(nn.Module):
     def forward(self, input_token, hidden, cell, encoder_outputs):
         if input_token.dim() == 1:
             input_token = input_token.unsqueeze(1)
-
         embedded = self.embedding(input_token)
         context, attn_weights = self.attention(hidden[-1], encoder_outputs)
         lstm_input = torch.cat((embedded, context), dim=2)
-
         outputs, (hidden, cell) = self.lstm(lstm_input, (hidden, cell))
         concat = torch.cat((outputs, context), dim=2)
         logits = self.fc_out(concat).squeeze(1)
-
         return logits, hidden, cell, attn_weights
 
 
@@ -75,20 +72,20 @@ class Seq2Seq(nn.Module):
     def forward(self, src, trg, teacher_forcing_ratio=0.5):
         batch_size, trg_len = trg.shape
         vocab_size = self.decoder.embedding.num_embeddings
-
         outputs = torch.zeros(batch_size, trg_len, vocab_size).to(self.device)
 
         encoder_outputs, (hidden, cell) = self.encoder(src)
-        input_token = trg[:, 0]
+        input_token = trg[:, 0]  # <bos>
 
         for t in range(1, trg_len):
             output, hidden, cell, _ = self.decoder(input_token, hidden, cell, encoder_outputs)
             outputs[:, t] = output
             top1 = output.argmax(1)
             input_token = trg[:, t] if torch.rand(1).item() < teacher_forcing_ratio else top1
-
         return outputs
 
+
+# -------------------- Tokenizer --------------------
 
 class SentencePieceTokenizer:
     def __init__(self, model_path: str):
@@ -104,13 +101,37 @@ class SentencePieceTokenizer:
     def eos_id(self): return self.sp.eos_id()
 
 
+# -------------------- Cleaning --------------------
+
 def clean_text(s: str) -> str:
     if not isinstance(s, str): return ""
-    s = re.sub(r'#@\S+', '', s)
-    s = re.sub(r'[^\S\r\n]+', ' ', s)
+    s = re.sub(r'#@\S+', '', s)         # 시스템/마크업 토큰 제거
+    s = re.sub(r'[^\S\r\n]+', ' ', s)   # 다중 공백 정리
     s = s.strip()
     return unicodedata.normalize('NFC', s)
 
+def looks_bad(s):
+    if not s: return True
+    s = unicodedata.normalize("NFC", s)
+    if len(s) < 2: return True
+    if re.search(r'(.)\1{3,}', s): return True                     # ㅋㅋㅋㅋ/??? 등
+    if "싸우자" in s: return True
+    if len(re.sub(r'[\w가-힣]', '', s)) > len(s) * 0.5: return True # 특수문자 과다
+    return False
+
+def clean_pairs(path_in, path_out):
+    data = json.load(open(path_in, encoding="utf-8"))
+    out = []
+    for ex in data:
+        src = clean_text(ex["input"]); tgt = clean_text(ex["target"])
+        if not src or not tgt: continue
+        if looks_bad(tgt): continue
+        out.append({"input": src, "target": tgt})
+    json.dump(out, open(path_out, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    print(f"✅ {len(out)} examples -> {path_out}")
+
+
+# -------------------- Dataset --------------------
 
 class ChatDataset(Dataset):
     def __init__(self, json_path, tokenizer, max_len=64):
@@ -129,6 +150,8 @@ class ChatDataset(Dataset):
         return torch.tensor(inp), torch.tensor(tgt)
 
 
+# -------------------- Utils --------------------
+
 def _resize_linear_out(linear: nn.Linear, new_out: int):
     old_out, in_dim = linear.weight.shape
     new_linear = nn.Linear(in_dim, new_out, bias=True)
@@ -139,13 +162,11 @@ def _resize_linear_out(linear: nn.Linear, new_out: int):
             new_linear.bias[:copy] = linear.bias[:copy]
     return new_linear
 
-
 def resize_embeddings_if_needed(model, tokenizer):
     new_vocab = tokenizer.vocab_size
     old_vocab = model.decoder.embedding.num_embeddings
     if new_vocab == old_vocab:
         return model, False
-    
     def _resize_embedding(emb: nn.Embedding, new_num):
         new_emb = nn.Embedding(new_num, emb.embedding_dim, padding_idx=emb.padding_idx)
         with torch.no_grad():
@@ -159,7 +180,6 @@ def resize_embeddings_if_needed(model, tokenizer):
     model.decoder.fc_out   = _resize_linear_out(model.decoder.fc_out, new_out=new_vocab)
     return model, True
 
-
 def load_checkpoint(model, optimizer=None, ckpt_path=None, map_location=None):
     if not ckpt_path or not os.path.exists(ckpt_path):
         print("🆕 체크포인트 없음 → 새로 시작")
@@ -168,8 +188,10 @@ def load_checkpoint(model, optimizer=None, ckpt_path=None, map_location=None):
     if 'model_state_dict' in ckpt:
         model.load_state_dict(ckpt['model_state_dict'], strict=False)
         if optimizer and 'optimizer_state_dict' in ckpt:
-            try: optimizer.load_state_dict(ckpt['optimizer_state_dict'])
-            except Exception as e: print(f"⚠️ 옵티마이저 로드 무시: {e}")
+            try:
+                optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+            except Exception as e:
+                print(f"⚠️ 옵티마이저 로드 무시: {e}")
         start_epoch = ckpt.get('epoch', -1) + 1
         print(f"✅ 체크포인트 로드 (epoch={start_epoch})")
         return start_epoch, ckpt
@@ -178,11 +200,20 @@ def load_checkpoint(model, optimizer=None, ckpt_path=None, map_location=None):
         print("✅ state_dict 로드")
         return 0, ckpt
 
+def _make_criterion(pad_id, smoothing=0.1):
+    # PyTorch 버전에 따라 label_smoothing 미지원일 수도 있으므로 안전 처리
+    try:
+        return nn.CrossEntropyLoss(ignore_index=pad_id, label_smoothing=smoothing)
+    except TypeError:
+        return nn.CrossEntropyLoss(ignore_index=pad_id)
 
-def train_one_epoch(model, loader, tokenizer, optimizer, device, tfr=0.6, clip=1.0):
+
+# -------------------- Train / Eval --------------------
+
+def train_one_epoch(model, loader, tokenizer, optimizer, device, tfr=0.6, clip=1.0, smoothing=0.1):
     model.train()
     pad_id = tokenizer.pad_id()
-    crit = nn.CrossEntropyLoss(ignore_index=pad_id)
+    crit = _make_criterion(pad_id, smoothing=smoothing)
     total = 0.0
     for src, trg in tqdm(loader, desc="train"):
         src, trg = src.to(device), trg.to(device)
@@ -191,17 +222,17 @@ def train_one_epoch(model, loader, tokenizer, optimizer, device, tfr=0.6, clip=1
         V = out.size(-1)
         loss = crit(out[:,1:].reshape(-1, V), trg[:,1:].reshape(-1))
         loss.backward()
-        if clip: torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+        if clip:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
         optimizer.step()
         total += loss.item()
     return total / max(1, len(loader))
 
-
 @torch.no_grad()
-def evaluate(model, loader, tokenizer, device):
+def evaluate(model, loader, tokenizer, device, smoothing=0.1):
     model.eval()
     pad_id = tokenizer.pad_id()
-    crit = nn.CrossEntropyLoss(ignore_index=pad_id)
+    crit = _make_criterion(pad_id, smoothing=smoothing)
     total = 0.0
     for src, trg in tqdm(loader, desc="valid"):
         src, trg = src.to(device), trg.to(device)
@@ -213,30 +244,36 @@ def evaluate(model, loader, tokenizer, device):
 
 
 def finetune(model, tokenizer, train_loader, valid_loader, device,
-            ckpt_in=None, ckpt_out_dir="./ft_ckpts",
-            lr=5e-4, epochs_p1=2, epochs_p2=4, freeze_encoder_first=True):
+             ckpt_in=None, ckpt_out_dir="./ft_ckpts",
+             lr=5e-4, epochs_p1=2, epochs_p2=4, freeze_encoder_first=True):
     os.makedirs(ckpt_out_dir, exist_ok=True)
     model, resized = resize_embeddings_if_needed(model, tokenizer)
-
     if resized: print("🔧 임베딩/출력층 리사이즈 → 토크나이저와 동기화")
     model.to(device)
 
     enc_params = list(model.encoder.parameters())
     dec_params = list(model.decoder.parameters())
 
+    # ---------- Phase 1 (Decoder만 업데이트) ----------
     if freeze_encoder_first:
         for p in enc_params: p.requires_grad = False
         optimizer = optim.Adam([p for p in dec_params if p.requires_grad], lr=lr)
     else:
         optimizer = optim.Adam(model.parameters(), lr=lr)
 
+    # 스케줄러 추가 (검증 loss 개선 없으면 LR 0.5배)
+    sched = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=1, verbose=True, min_lr=1e-6
+    )
+
     start_epoch, _ = load_checkpoint(model, optimizer, ckpt_in, map_location=device)
 
     epoch_idx = start_epoch
     for _ in range(epochs_p1):
-        tr = train_one_epoch(model, train_loader, tokenizer, optimizer, device, tfr=0.7)
-        va = evaluate(model, valid_loader, tokenizer, device)
-        print(f"[P1][{epoch_idx+1}] train={tr:.4f} | valid={va:.4f}")
+        tr = train_one_epoch(model, train_loader, tokenizer, optimizer, device, tfr=0.7, smoothing=0.1)
+        va = evaluate(model, valid_loader, tokenizer, device, smoothing=0.1)
+        sched.step(va)  # 에폭 말에 스케줄러 스텝
+        print(f"[P1][{epoch_idx+1}] train={tr:.4f} | valid={va:.4f} | lr={optimizer.param_groups[0]['lr']:.2e}")
         torch.save({
             "epoch": epoch_idx,
             "model_state_dict": model.state_dict(),
@@ -245,13 +282,19 @@ def finetune(model, tokenizer, train_loader, valid_loader, device,
         }, os.path.join(ckpt_out_dir, f"ft_epoch{epoch_idx+1}.pt"))
         epoch_idx += 1
 
+    # ---------- Phase 2 (전체 파인튜닝) ----------
     for p in enc_params: p.requires_grad = True
     optimizer = optim.Adam(model.parameters(), lr=lr*0.5)
+    sched = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=1, verbose=True, min_lr=1e-6
+    )
+
     for e in range(epochs_p2):
         tfr = max(0.3, 0.7 - 0.1*e)
-        tr = train_one_epoch(model, train_loader, tokenizer, optimizer, device, tfr=tfr)
-        va = evaluate(model, valid_loader, tokenizer, device)
-        print(f"[P2][{epoch_idx+1}] train={tr:.4f} | valid={va:.4f} | tfr={tfr:.2f}")
+        tr = train_one_epoch(model, train_loader, tokenizer, optimizer, device, tfr=tfr, smoothing=0.1)
+        va = evaluate(model, valid_loader, tokenizer, device, smoothing=0.1)
+        sched.step(va)
+        print(f"[P2][{epoch_idx+1}] train={tr:.4f} | valid={va:.4f} | tfr={tfr:.2f} | lr={optimizer.param_groups[0]['lr']:.2e}")
         torch.save({
             "epoch": epoch_idx,
             "model_state_dict": model.state_dict(),
@@ -264,9 +307,35 @@ def finetune(model, tokenizer, train_loader, valid_loader, device,
     return model
 
 
+# -------------------- Inference --------------------
+
 @torch.no_grad()
-def generate(model, tokenizer, text, device, max_len=64, temperature=0.8, top_k=50, top_p=0.9, repetition_penalty=1.1, min_len=2):
+def generate(model, tokenizer, text, device, max_len=64,
+             temperature=0.9, top_k=50, top_p=0.9,
+             repetition_penalty=1.2, min_len=3,
+             no_repeat_ngram_size=3,
+             bad_words=("싸우자",),   # ← 반드시 튜플로!
+):
     model.eval()
+
+    def ban_bad_words(probs):
+        # 단일 토큰 금지어만 간단히 처리 (멀티토큰은 piece 단위 마스킹 필요)
+        for bw in bad_words:
+            ids = tokenizer.encode(bw)
+            if len(ids) == 1:
+                probs[ids[0]] = 0.0
+        return probs
+
+    def ban_no_repeat_ngram(probs, generated, n):
+        if n <= 0 or len(generated) < n-1:
+            return probs
+        tail = generated[-(n-1):]
+        for i in range(len(generated)-(n-1)):
+            if generated[i:i+n-1] == tail:
+                nxt = generated[i+n-1]
+                probs[nxt] = 0.0
+        return probs
+
     src_ids = [tokenizer.bos_id()] + tokenizer.encode(clean_text(text)) + [tokenizer.eos_id()]
     src_ids = src_ids[:max_len]
     pad = tokenizer.pad_id()
@@ -280,15 +349,25 @@ def generate(model, tokenizer, text, device, max_len=64, temperature=0.8, top_k=
         logits, h, c, _ = model.decoder(inp, h, c, enc_out)
         logits = logits.squeeze(0)
 
+        # 반복 패널티
         for tok, cnt in seen.items():
-            if cnt > 0: logits[tok] /= repetition_penalty
+            if cnt > 0:
+                logits[tok] /= repetition_penalty
 
+        # 온도 & softmax
         logits = logits / max(1e-8, temperature)
         probs = F.softmax(logits, dim=-1)
 
+        # 마스킹
+        probs = ban_bad_words(probs)
+        probs = ban_no_repeat_ngram(probs, out_ids, no_repeat_ngram_size)
+
+        # top-k / top-p
         if top_k and top_k > 0:
             topk = torch.topk(probs, k=min(top_k, probs.numel()))
-            mask = torch.full_like(probs, 0.0); mask.scatter_(0, topk.indices, topk.values); probs = mask
+            mask = torch.full_like(probs, 0.0)
+            mask.scatter_(0, topk.indices, topk.values)
+            probs = mask
 
         if top_p and 0 < top_p < 1:
             sorted_probs, sorted_idx = torch.sort(probs, descending=True)
@@ -296,21 +375,28 @@ def generate(model, tokenizer, text, device, max_len=64, temperature=0.8, top_k=
             cutoff = (cumsum > top_p)
             cutoff_idx = torch.argmax(cutoff.int()).item() if cutoff.any() else (len(sorted_probs)-1)
             keep = sorted_idx[:cutoff_idx+1]
-            mask = torch.zeros_like(probs); mask[keep] = probs[keep]; probs = mask
+            mask = torch.zeros_like(probs)
+            mask[keep] = probs[keep]
+            probs = mask
 
-        if probs.sum() <= 0: probs = F.softmax(logits, dim=-1)
+        if probs.sum() <= 0:
+            probs = F.softmax(logits, dim=-1)
+
         next_id = torch.multinomial(probs, num_samples=1).item()
 
         if t < min_len and next_id == tokenizer.eos_id():
             next_id = torch.topk(probs, k=2).indices[1].item()
 
-        if next_id == tokenizer.eos_id(): break
+        if next_id == tokenizer.eos_id():
+            break
         out_ids.append(next_id)
         seen[next_id] = seen.get(next_id, 0) + 1
         inp = torch.tensor([[next_id]], device=device)
 
     return clean_text(tokenizer.decode(out_ids))
 
+
+# -------------------- Main --------------------
 
 def main():
     ap = argparse.ArgumentParser()
@@ -330,8 +416,8 @@ def main():
     ap.add_argument("--ckpt_out", default="./ft_ckpts")
     args = ap.parse_args()
 
-
-    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
+    device = torch.device("cuda" if torch.cuda.is_available()
+                        else ("mps" if torch.backends.mps.is_available() else "cpu"))
     print("🔌 device:", device)
 
     tok = SentencePieceTokenizer(args.spm_model)
