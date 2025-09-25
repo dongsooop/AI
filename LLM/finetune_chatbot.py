@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import sentencepiece as spm
-
+from torch.cuda.amp import autocast, GradScaler  # ✅ AMP
 
 # -------------------- Model --------------------
 
@@ -208,38 +208,72 @@ def _make_criterion(pad_id, smoothing=0.1):
         return nn.CrossEntropyLoss(ignore_index=pad_id)
 
 
-# -------------------- Train / Eval --------------------
+# -------------------- Train / Eval (✅ AMP 반영) --------------------
 
 def train_one_epoch(model, loader, tokenizer, optimizer, device, tfr=0.6, clip=1.0, smoothing=0.1):
     model.train()
     pad_id = tokenizer.pad_id()
     crit = _make_criterion(pad_id, smoothing=smoothing)
+
+    # ✅ CUDA에서만 AMP 사용
+    use_amp = (device.type == "cuda")
+    scaler = GradScaler(enabled=use_amp)
+
     total = 0.0
     for src, trg in tqdm(loader, desc="train"):
-        src, trg = src.to(device), trg.to(device)
-        optimizer.zero_grad()
-        out = model(src, trg, teacher_forcing_ratio=tfr)
-        V = out.size(-1)
-        loss = crit(out[:,1:].reshape(-1, V), trg[:,1:].reshape(-1))
-        loss.backward()
-        if clip:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-        optimizer.step()
+        # 전송
+        src = src.to(device, non_blocking=True)
+        trg = trg.to(device, non_blocking=True)
+
+        optimizer.zero_grad(set_to_none=True)
+
+        # ✅ autocast 구간
+        with autocast(enabled=use_amp):
+            out = model(src, trg, teacher_forcing_ratio=tfr)
+            V = out.size(-1)
+            loss = crit(out[:, 1:].reshape(-1, V), trg[:, 1:].reshape(-1))
+
+        if use_amp:
+            # ✅ AMP 경로
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            if clip:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            # 일반 경로
+            loss.backward()
+            if clip:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+            optimizer.step()
+
         total += loss.item()
+
     return total / max(1, len(loader))
+
 
 @torch.no_grad()
 def evaluate(model, loader, tokenizer, device, smoothing=0.1):
     model.eval()
     pad_id = tokenizer.pad_id()
     crit = _make_criterion(pad_id, smoothing=smoothing)
+
+    use_amp = (device.type == "cuda")
     total = 0.0
+
     for src, trg in tqdm(loader, desc="valid"):
-        src, trg = src.to(device), trg.to(device)
-        out = model(src, trg, teacher_forcing_ratio=0.0)
-        V = out.size(-1)
-        loss = crit(out[:,1:].reshape(-1, V), trg[:,1:].reshape(-1))
+        src = src.to(device, non_blocking=True)
+        trg = trg.to(device, non_blocking=True)
+
+        # ✅ eval에서도 autocast로 속도/메모리 절감
+        with autocast(enabled=use_amp):
+            out = model(src, trg, teacher_forcing_ratio=0.0)
+            V = out.size(-1)
+            loss = crit(out[:, 1:].reshape(-1, V), trg[:, 1:].reshape(-1))
+
         total += loss.item()
+
     return total / max(1, len(loader))
 
 
@@ -251,6 +285,10 @@ def finetune(model, tokenizer, train_loader, valid_loader, device,
     if resized: print("🔧 임베딩/출력층 리사이즈 → 토크나이저와 동기화")
     model.to(device)
 
+    # (선택) cudnn auto-tuner: 고정 크기 배치면 속도 향상
+    if device.type == "cuda":
+        torch.backends.cudnn.benchmark = True
+
     enc_params = list(model.encoder.parameters())
     dec_params = list(model.decoder.parameters())
 
@@ -261,7 +299,6 @@ def finetune(model, tokenizer, train_loader, valid_loader, device,
     else:
         optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    # 스케줄러 추가 (검증 loss 개선 없으면 LR 0.5배)
     sched = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=1, verbose=True, min_lr=1e-6
     )
@@ -272,7 +309,7 @@ def finetune(model, tokenizer, train_loader, valid_loader, device,
     for _ in range(epochs_p1):
         tr = train_one_epoch(model, train_loader, tokenizer, optimizer, device, tfr=0.7, smoothing=0.1)
         va = evaluate(model, valid_loader, tokenizer, device, smoothing=0.1)
-        sched.step(va)  # 에폭 말에 스케줄러 스텝
+        sched.step(va)
         print(f"[P1][{epoch_idx+1}] train={tr:.4f} | valid={va:.4f} | lr={optimizer.param_groups[0]['lr']:.2e}")
         torch.save({
             "epoch": epoch_idx,
@@ -314,12 +351,11 @@ def generate(model, tokenizer, text, device, max_len=64,
              temperature=0.9, top_k=50, top_p=0.9,
              repetition_penalty=1.2, min_len=3,
              no_repeat_ngram_size=3,
-             bad_words=("싸우자",),   # ← 반드시 튜플로!
+             bad_words=("싸우자",),
 ):
     model.eval()
 
     def ban_bad_words(probs):
-        # 단일 토큰 금지어만 간단히 처리 (멀티토큰은 piece 단위 마스킹 필요)
         for bw in bad_words:
             ids = tokenizer.encode(bw)
             if len(ids) == 1:
@@ -349,20 +385,16 @@ def generate(model, tokenizer, text, device, max_len=64,
         logits, h, c, _ = model.decoder(inp, h, c, enc_out)
         logits = logits.squeeze(0)
 
-        # 반복 패널티
         for tok, cnt in seen.items():
             if cnt > 0:
                 logits[tok] /= repetition_penalty
 
-        # 온도 & softmax
         logits = logits / max(1e-8, temperature)
         probs = F.softmax(logits, dim=-1)
 
-        # 마스킹
         probs = ban_bad_words(probs)
         probs = ban_no_repeat_ngram(probs, out_ids, no_repeat_ngram_size)
 
-        # top-k / top-p
         if top_k and top_k > 0:
             topk = torch.topk(probs, k=min(top_k, probs.numel()))
             mask = torch.full_like(probs, 0.0)
@@ -425,9 +457,9 @@ def main():
     train_ds = ChatDataset(args.train_json, tok, max_len=args.max_len)
     valid_ds = ChatDataset(args.valid_json, tok, max_len=args.max_len)
     train_dl = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, drop_last=True,
-                        num_workers=0, pin_memory=False)
+                        num_workers=0, pin_memory=(device.type=="cuda"))
     valid_dl = DataLoader(valid_ds, batch_size=args.batch_size, shuffle=False, drop_last=False,
-                        num_workers=0, pin_memory=False)
+                        num_workers=0, pin_memory=(device.type=="cuda"))
 
     vocab = tok.vocab_size
     enc = Encoder(vocab, args.embed_size, args.hidden_size, num_layers=args.layers, dropout=args.dropout)
