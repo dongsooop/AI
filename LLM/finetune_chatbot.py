@@ -6,9 +6,8 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import sentencepiece as spm
-from torch.cuda.amp import autocast, GradScaler  # ✅ AMP
+from torch.cuda.amp import autocast, GradScaler
 
-# -------------------- Model --------------------
 
 class Encoder(nn.Module):
     def __init__(self, vocab_size, embed_size, hidden_size, num_layers=2, dropout=0.1):
@@ -85,7 +84,6 @@ class Seq2Seq(nn.Module):
         return outputs
 
 
-# -------------------- Tokenizer --------------------
 
 class SentencePieceTokenizer:
     def __init__(self, model_path: str):
@@ -101,12 +99,11 @@ class SentencePieceTokenizer:
     def eos_id(self): return self.sp.eos_id()
 
 
-# -------------------- Cleaning --------------------
 
 def clean_text(s: str) -> str:
     if not isinstance(s, str): return ""
-    s = re.sub(r'#@\S+', '', s)         # 시스템/마크업 토큰 제거
-    s = re.sub(r'[^\S\r\n]+', ' ', s)   # 다중 공백 정리
+    s = re.sub(r'#@\S+', '', s)
+    s = re.sub(r'[^\S\r\n]+', ' ', s)
     s = s.strip()
     return unicodedata.normalize('NFC', s)
 
@@ -114,10 +111,11 @@ def looks_bad(s):
     if not s: return True
     s = unicodedata.normalize("NFC", s)
     if len(s) < 2: return True
-    if re.search(r'(.)\1{3,}', s): return True                     # ㅋㅋㅋㅋ/??? 등
+    if re.search(r'(.)\1{3,}', s): return True
     if "싸우자" in s: return True
-    if len(re.sub(r'[\w가-힣]', '', s)) > len(s) * 0.5: return True # 특수문자 과다
+    if len(re.sub(r'[\w가-힣]', '', s)) > len(s) * 0.5: return True
     return False
+
 
 def clean_pairs(path_in, path_out):
     data = json.load(open(path_in, encoding="utf-8"))
@@ -130,8 +128,6 @@ def clean_pairs(path_in, path_out):
     json.dump(out, open(path_out, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     print(f"✅ {len(out)} examples -> {path_out}")
 
-
-# -------------------- Dataset --------------------
 
 class ChatDataset(Dataset):
     def __init__(self, json_path, tokenizer, max_len=64):
@@ -150,8 +146,6 @@ class ChatDataset(Dataset):
         return torch.tensor(inp), torch.tensor(tgt)
 
 
-# -------------------- Utils --------------------
-
 def _resize_linear_out(linear: nn.Linear, new_out: int):
     old_out, in_dim = linear.weight.shape
     new_linear = nn.Linear(in_dim, new_out, bias=True)
@@ -162,11 +156,14 @@ def _resize_linear_out(linear: nn.Linear, new_out: int):
             new_linear.bias[:copy] = linear.bias[:copy]
     return new_linear
 
+
 def resize_embeddings_if_needed(model, tokenizer):
     new_vocab = tokenizer.vocab_size
     old_vocab = model.decoder.embedding.num_embeddings
+
     if new_vocab == old_vocab:
         return model, False
+    
     def _resize_embedding(emb: nn.Embedding, new_num):
         new_emb = nn.Embedding(new_num, emb.embedding_dim, padding_idx=emb.padding_idx)
         with torch.no_grad():
@@ -175,10 +172,13 @@ def resize_embeddings_if_needed(model, tokenizer):
             if emb.padding_idx is not None and emb.padding_idx < new_num:
                 new_emb.weight[emb.padding_idx].zero_()
         return new_emb
+    
     model.encoder.embedding = _resize_embedding(model.encoder.embedding, new_vocab)
     model.decoder.embedding = _resize_embedding(model.decoder.embedding, new_vocab)
     model.decoder.fc_out   = _resize_linear_out(model.decoder.fc_out, new_out=new_vocab)
+
     return model, True
+
 
 def load_checkpoint(model, optimizer=None, ckpt_path=None, map_location=None):
     if not ckpt_path or not os.path.exists(ckpt_path):
@@ -200,41 +200,32 @@ def load_checkpoint(model, optimizer=None, ckpt_path=None, map_location=None):
         print("✅ state_dict 로드")
         return 0, ckpt
 
+
 def _make_criterion(pad_id, smoothing=0.1):
-    # PyTorch 버전에 따라 label_smoothing 미지원일 수도 있으므로 안전 처리
     try:
         return nn.CrossEntropyLoss(ignore_index=pad_id, label_smoothing=smoothing)
     except TypeError:
         return nn.CrossEntropyLoss(ignore_index=pad_id)
 
 
-# -------------------- Train / Eval (✅ AMP 반영) --------------------
-
 def train_one_epoch(model, loader, tokenizer, optimizer, device, tfr=0.6, clip=1.0, smoothing=0.1):
     model.train()
     pad_id = tokenizer.pad_id()
     crit = _make_criterion(pad_id, smoothing=smoothing)
-
-    # ✅ CUDA에서만 AMP 사용
     use_amp = (device.type == "cuda")
     scaler = GradScaler(enabled=use_amp)
 
     total = 0.0
     for src, trg in tqdm(loader, desc="train"):
-        # 전송
         src = src.to(device, non_blocking=True)
         trg = trg.to(device, non_blocking=True)
-
         optimizer.zero_grad(set_to_none=True)
-
-        # ✅ autocast 구간
         with autocast(enabled=use_amp):
             out = model(src, trg, teacher_forcing_ratio=tfr)
             V = out.size(-1)
             loss = crit(out[:, 1:].reshape(-1, V), trg[:, 1:].reshape(-1))
 
         if use_amp:
-            # ✅ AMP 경로
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
             if clip:
@@ -242,7 +233,6 @@ def train_one_epoch(model, loader, tokenizer, optimizer, device, tfr=0.6, clip=1
             scaler.step(optimizer)
             scaler.update()
         else:
-            # 일반 경로
             loss.backward()
             if clip:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
@@ -266,7 +256,6 @@ def evaluate(model, loader, tokenizer, device, smoothing=0.1):
         src = src.to(device, non_blocking=True)
         trg = trg.to(device, non_blocking=True)
 
-        # ✅ eval에서도 autocast로 속도/메모리 절감
         with autocast(enabled=use_amp):
             out = model(src, trg, teacher_forcing_ratio=0.0)
             V = out.size(-1)
@@ -278,21 +267,19 @@ def evaluate(model, loader, tokenizer, device, smoothing=0.1):
 
 
 def finetune(model, tokenizer, train_loader, valid_loader, device,
-             ckpt_in=None, ckpt_out_dir="./ft_ckpts",
-             lr=5e-4, epochs_p1=2, epochs_p2=4, freeze_encoder_first=True):
+            ckpt_in=None, ckpt_out_dir="./ft_ckpts",
+            lr=5e-4, epochs_p1=2, epochs_p2=4, freeze_encoder_first=True):
     os.makedirs(ckpt_out_dir, exist_ok=True)
     model, resized = resize_embeddings_if_needed(model, tokenizer)
     if resized: print("🔧 임베딩/출력층 리사이즈 → 토크나이저와 동기화")
     model.to(device)
 
-    # (선택) cudnn auto-tuner: 고정 크기 배치면 속도 향상
     if device.type == "cuda":
         torch.backends.cudnn.benchmark = True
 
     enc_params = list(model.encoder.parameters())
     dec_params = list(model.decoder.parameters())
 
-    # ---------- Phase 1 (Decoder만 업데이트) ----------
     if freeze_encoder_first:
         for p in enc_params: p.requires_grad = False
         optimizer = optim.Adam([p for p in dec_params if p.requires_grad], lr=lr)
@@ -304,8 +291,8 @@ def finetune(model, tokenizer, train_loader, valid_loader, device,
     )
 
     start_epoch, _ = load_checkpoint(model, optimizer, ckpt_in, map_location=device)
-
     epoch_idx = start_epoch
+
     for _ in range(epochs_p1):
         tr = train_one_epoch(model, train_loader, tokenizer, optimizer, device, tfr=0.7, smoothing=0.1)
         va = evaluate(model, valid_loader, tokenizer, device, smoothing=0.1)
@@ -319,7 +306,6 @@ def finetune(model, tokenizer, train_loader, valid_loader, device,
         }, os.path.join(ckpt_out_dir, f"ft_epoch{epoch_idx+1}.pt"))
         epoch_idx += 1
 
-    # ---------- Phase 2 (전체 파인튜닝) ----------
     for p in enc_params: p.requires_grad = True
     optimizer = optim.Adam(model.parameters(), lr=lr*0.5)
     sched = optim.lr_scheduler.ReduceLROnPlateau(
@@ -344,15 +330,12 @@ def finetune(model, tokenizer, train_loader, valid_loader, device,
     return model
 
 
-# -------------------- Inference --------------------
-
 @torch.no_grad()
 def generate(model, tokenizer, text, device, max_len=64,
-             temperature=0.9, top_k=50, top_p=0.9,
-             repetition_penalty=1.2, min_len=3,
-             no_repeat_ngram_size=3,
-             bad_words=("싸우자",),
-):
+            temperature=0.9, top_k=50, top_p=0.9,
+            repetition_penalty=1.2, min_len=3,
+            no_repeat_ngram_size=3,
+            bad_words=("싸우자",),):
     model.eval()
 
     def ban_bad_words(probs):
@@ -427,8 +410,6 @@ def generate(model, tokenizer, text, device, max_len=64,
 
     return clean_text(tokenizer.decode(out_ids))
 
-
-# -------------------- Main --------------------
 
 def main():
     ap = argparse.ArgumentParser()
