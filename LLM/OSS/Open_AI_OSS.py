@@ -1,12 +1,19 @@
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, pipeline
+from openai import OpenAI
 
-model_id = "unsloth/gpt-oss-20b-bnb-4bit"  # 4bit 사전양자화 체크포인트
-tok = AutoTokenizer.from_pretrained(model_id, use_fast=True)
+client = OpenAI(
+    base_url="http://localhost:11434/v1",  # Ollama OpenAI 호환
+    api_key="ollama"                       # 임의 값
+)
 
-bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=bnb)
+messages = [
+    {"role":"system","content":"Reasoning: medium\nYou are a helpful assistant."},
+    {"role":"user","content":"홍대입구역 10만원 데이트 코스를 표로 정리해줘."},
+]
 
-pipe = pipeline("text-generation", model=model, tokenizer=tok)
-msgs = [{"role":"system","content":"Reasoning: medium"}, {"role":"user","content":"테스트"}]
-print(pipe(msgs, max_new_tokens=128)[0]["generated_text"][-1]["content"])
+resp = client.chat.completions.create(
+    model="gpt-oss:20b",
+    messages=messages,
+    temperature=0.7,
+    max_tokens=256,
+)
+print(resp.choices[0].message.content)
