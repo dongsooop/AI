@@ -3,17 +3,25 @@ from pathlib import Path
 from functools import lru_cache
 from sentence_transformers import SentenceTransformer
 from rank_bm25 import BM25Okapi
-from index_utils import get_tokenizer, load_json_gz
+from LLM.sub_model.index_utils import get_tokenizer, load_json_gz  # 서버용
+# from index_utils import get_tokenizer, load_json_gz
 from dotenv import load_dotenv
-
 
 load_dotenv()
 
 THIS_DIR = Path(__file__).resolve().parent
 ROOT_DIR = THIS_DIR.parent.parent
 
-
 GRAD_KWS = ["졸업", "졸업학점", "졸업 학점", "졸업요건", "졸업요구학점", "이수학점", "졸업 이수학점"]
+UNIT_SUFFIX_RE = re.compile(r"(학부|학과|팀|센터|처|단|부|원|본부)$")
+OTHER_UNIT_TOKEN_RE = re.compile(r"([가-힣A-Za-z0-9]{2,}(?:학부|학과|팀|센터|처|단|부|원|본부))")
+FAX_RE = re.compile(r"(?:팩스|FAX)", re.I)
+GENERIC_LABEL_RE = re.compile(r"(?:대표|교무|입학|장학|취업|총무|홍보|학생상담|콜센터)")
+
+# === 추가: 직원/부서 통합 전화안내(교직원검색) 우선 적용용 패턴 ===
+STAFF_TITLE_RE = re.compile(r"(?:교직원\s*검색|전화번호\s*안내)", re.I)
+STAFF_URL_RE   = re.compile(r"/dmu/4408/subview\.do$", re.I)
+
 _OLD_NEW_NUM = r"(\d{2,3})"
 _BYPYO1_RE   = r"\[?\s*별표\s*1\s*\]?"
 PHONE_RE = re.compile(r'(0\d{1,2})[^\d]{0,4}(\d{3,4})[^\d]{0,4}(\d{4})')
@@ -30,6 +38,10 @@ _PART_PATS = {
 }
 NEAR_NUM_RE = re.compile(r"(\d{3})\s*학점")
 
+def _canonical_unit_from_query(q: str) -> str | None:
+    toks = re.findall(r"[가-힣A-Za-z0-9]{2,}", q or "")
+    units = [t for t in toks if UNIT_SUFFIX_RE.search(t)]
+    return max(units, key=len) if units else None
 
 def _preclean_text(s: str) -> str:
     if not isinstance(s, str):
@@ -38,7 +50,6 @@ def _preclean_text(s: str) -> str:
     s = re.sub(r"[\u2010\u2011\u2012\u2013\u2014\u2212\uFE58\uFE63\uFF0D]", "-", s)
     return s
 
-
 def _extract_phones_from_text(text: str):
     if not isinstance(text, str) or not text:
         return []
@@ -46,8 +57,7 @@ def _extract_phones_from_text(text: str):
     phones = ["-".join(m) for m in PHONE_RE.findall(t)]
     return list(dict.fromkeys(phones))
 
-
-def _extract_contact_from_row(row, prefer_terms=None):
+def _extract_contact_from_row(row, prefer_terms=None, target_unit=None):
     p = (row.get("phone") or "").strip()
     e = (row.get("email") or "").strip()
 
@@ -64,24 +74,41 @@ def _extract_contact_from_row(row, prefer_terms=None):
             texts.append("\n".join(sibs.tolist()))
 
     blob = "\n".join(texts)
+
     phones = _extract_phones_from_text(blob) if (not p) else [p]
     emails = [e] if e else EMAIL_RE.findall(_preclean_text(blob))
+    if not phones:
+        return [], emails
 
-    if prefer_terms and phones and blob:
-        ranked = []
-        for ph in phones:
-            m = re.search(re.escape(ph).replace(r'\-', '[-–—]?'), blob)
-            score = 0
-            if m:
-                L = max(0, m.start() - 80); R = min(len(blob), m.end() + 80)
-                ctx = blob[L:R].lower()
-                if any(t.lower() in ctx for t in prefer_terms):
-                    score += 1
-            ranked.append((score, ph))
-        ranked.sort(reverse=True)
-        phones = [ph for _, ph in ranked]
+    ranked = []
+    row_unit = (row.get("unit") or row.get("title") or "").strip()
+
+    for ph in phones:
+        m = re.search(re.escape(ph).replace(r'\-', '[-–—]?'), blob)
+        score = 0.0
+        if m:
+            L = max(0, m.start() - 40)
+            R = min(len(blob), m.end() + 40)
+            ctx = blob[L:R]
+            ctx_l = ctx.lower()
+
+            if target_unit and target_unit in ctx:
+                score += 2.5
+            if target_unit and row_unit and (target_unit in row_unit):
+                score += 0.6
+            if prefer_terms and any(t.lower() in ctx_l for t in [*prefer_terms, "전화", "연락처"]):
+                score += 0.5
+            if FAX_RE.search(ctx): score -= 3.0
+            if GENERIC_LABEL_RE.search(ctx): score -= 0.7
+            if target_unit:
+                others = [u for u in set(OTHER_UNIT_TOKEN_RE.findall(ctx)) if u != target_unit]
+                if others: score -= 1.2
+
+        ranked.append((score, ph))
+
+    ranked.sort(reverse=True)
+    phones = [ph for _, ph in ranked]
     return phones, emails
-
 
 def _extract_grad_credits_from_text(text: str):
     t = _preclean_text(text)
@@ -115,11 +142,9 @@ def _extract_grad_credits_from_text(text: str):
         total = max(good) if good else (max(candidates) if candidates else None)
     return total, parts
 
-
 def _looks_like_grad_query(q: str) -> bool:
     ql = (q or "").lower()
     return any(k in q or k in ql for k in GRAD_KWS)
-
 
 def _extract_3yr_from_tables(text: str):
     t = _preclean_text(text)
@@ -154,7 +179,6 @@ def _extract_3yr_from_tables(text: str):
             out["major_min"] = {"old": old_v, "new": new_v}
     return out
 
-
 def env_path(name: str) -> Path:
     val = os.getenv(name, "").strip()
     if not val:
@@ -165,11 +189,9 @@ def env_path(name: str) -> Path:
         p = (ROOT_DIR / p)
     return p.resolve()
 
-
 def load_list_from_txt(path: Path) -> list:
     with open(path, "r", encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip()]
-
 
 DATA_JSON        = env_path("DATA_JSON")
 DEPT_DIR         = env_path("DEPT_DIR")
@@ -218,7 +240,6 @@ else:
         tokenized_courpus = [tokenize_kor(t) for t in search_df["text"].astype(str).tolist()]
     bm25 = BM25Okapi(tokenized_courpus)
 
-
 def _parse_dt(ts):
     if ts is None or (isinstance(ts, float) and np.isnan(ts)):
         return pd.NaT
@@ -239,24 +260,20 @@ def _parse_dt(ts):
 
 search_df["updated_at"] = search_df["updated_at"].apply(_parse_dt)
 
-
 @lru_cache(maxsize=512)
 def embed_query(q: str):
     return model.encode([f"query: {q}"], normalize_embeddings=True)[0].astype(np.float32)
-
 
 def _minmax(x):
     x = np.asarray(x, float)
     lo, hi = x.min(), x.max()
     return np.zeros_like(x) if hi - lo < 1e-9 else (x - lo) / (hi - lo + 1e-9)
 
-
 def recency_score(ts, half_life_days=30):
     if pd.isna(ts) or ts is None: return 0.0
     ts = pd.to_datetime(ts)
     days = max((pd.Timestamp.now(tz="Asia/Seoul") - ts).days, 0)
     return float(np.exp(-np.log(2) * days / half_life_days))
-
 
 def hybrid_search(query, top_k=8, alpha=0.6, recency_weight=0.45, notice_boost=0.20, contact_boost=0.18):
     qv = embed_query(query)
@@ -285,24 +302,48 @@ def hybrid_search(query, top_k=8, alpha=0.6, recency_weight=0.45, notice_boost=0
     out = out.sort_values(["score","updated_at"], ascending=[False, False], na_position="last").head(top_k)
     return out.reset_index(drop=True)
 
-
 def build_answer(query, top_k=6):
     contact_like = any(k in query for k in CONTACT_KWS)
     notice_like = any(k in query for k in NOTICE_KWS)
 
     if contact_like:
-        hits = hybrid_search(query, top_k=max(top_k, 20))
+        hits = hybrid_search(query, top_k=max(top_k, 30))
+
         toks = re.findall(r"[가-힣A-Za-z0-9]{2,}", query or "")
         prefer = [t for t in toks if re.search(r"(학부|과|팀|센터|처|단|부|원|본부)$", t)]
         terms = prefer if prefer else toks[:3]
-        urls = hits["url"].fillna("")
-        is_contact = hits["doc_type"].eq("contact").astype(int)
-        is_subview = urls.str.contains(r"/subview\.do", case=False, regex=True).astype(int)
-        hits = hits.assign(_cc=1.0*is_contact + 0.5*is_subview) \
-                .sort_values(["_cc","score"], ascending=[False, False])
+        target_unit = _canonical_unit_from_query(query)
+
+        # === 추가: 교직원검색(4408) 페이지를 후보에 반드시 포함
+        staff_mask = (search_df["url"].astype(str).str.contains(STAFF_URL_RE) |
+                      search_df["title"].astype(str).str.contains(STAFF_TITLE_RE))
+        staff_rows = search_df.loc[staff_mask, ["doc_type","title","text","unit","url","phone","email"]].copy()
+        if not staff_rows.empty:
+            hits = pd.concat([hits, staff_rows], ignore_index=True)
+            hits = hits.drop_duplicates(subset=["url","doc_type"], keep="first")
+
+        # === 재정렬 가중치: 단위매칭/교직원검색/연락처문서/학부홈 가산, 게시판 감점
+        urls   = hits["url"].fillna("")
+        titles = hits["title"].fillna("")
+        units  = hits["unit"].fillna("")
+
+        unit_match = pd.Series([False]*len(hits))
+        if target_unit:
+            unit_match = (units.str.contains(re.escape(target_unit))) | (titles.str.contains(re.escape(target_unit)))
+        unit_match = unit_match.astype(int)
+
+        is_staff    = (urls.str.contains(STAFF_URL_RE) | titles.str.contains(STAFF_TITLE_RE)).astype(int)
+        is_contact  = hits["doc_type"].eq("contact").astype(int)
+        is_dept_home= urls.str.contains(r"/dmu/\d{4}/subview\.do$", case=False, regex=True).astype(int)
+        is_board    = urls.str.contains(r"/bbs/|artclView\.do", case=False, regex=True).astype(int)
+
+        _prio = 2.2*unit_match + 1.6*is_staff + 1.3*is_contact + 0.7*is_dept_home - 0.8*is_board
+        hits = hits.assign(_prio=_prio).sort_values(["_prio","score"], ascending=[False, False])
+
+        # === 번호 추출
         lines, seen = [], set()
         for _, r in hits.iterrows():
-            phones, emails = _extract_contact_from_row(r, prefer_terms=terms)
+            phones, emails = _extract_contact_from_row(r, prefer_terms=terms, target_unit=target_unit)
             label = (r.get("unit") or r.get("title") or "").strip() or "연락처"
             if phones:
                 picked = [ph for ph in phones if ph not in seen][:2]
@@ -312,7 +353,6 @@ def build_answer(query, top_k=6):
                     lines.append(f"- {label}: 전화 {', '.join(picked)} (출처: {r.get('url','')})")
             elif emails:
                 lines.append(f"- {label}: 이메일 {', '.join(dict.fromkeys(emails))} (출처: {r.get('url','')})")
-
             if len(lines) >= 4:
                 break
 
@@ -378,7 +418,6 @@ def build_answer(query, top_k=6):
         lines = [f"- {r['title']}: {r['url']}" for _, r in picks.iterrows()]
         return {"answer": "\n".join(lines)}
 
-
     hits = hybrid_search(query, top_k=max(top_k, 12))
 
     if not contact_like and not notice_like and not hits.empty:
@@ -402,12 +441,11 @@ def build_answer(query, top_k=6):
     lines = [f"- {r['title']}: {r['url']}" for _, r in picks.iterrows()]
     return {"answer": "\n".join(lines)}
 
-
 if __name__ == "__main__":
     q1 = "학생성공지원팀 담당자 전화번호 알려줘"
     q2 = "컴퓨터공학부 담당자 전화번호 알려줘"
-    q3 = "총학생회"
-    q4 = "3년제 졸업조건"
+    q3 = "경영학부 담당자 연락처"
+    q4 = "2년제 졸업조건"
     for q in [q1, q2, q3, q4]:
         res = build_answer(q, top_k=8)
         print("Q:", q)
