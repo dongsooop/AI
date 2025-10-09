@@ -28,4 +28,5 @@ COPY image_analysis/timetable_analysis.py ./image_analysis/timetable_analysis.py
 COPY main.py ./main.py
 COPY .env ./.env
 
+EXPOSE 8888
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8888"]
