@@ -6,6 +6,7 @@ database/
 *.env
 .ipynb_checkpoints/
 requirements.txt
+requirements_oss.txt
 setting.txt
 __pycache__
 crawling
