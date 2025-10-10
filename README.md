@@ -19,6 +19,8 @@
 <br/>
 <br/>
 
+# 3. Key Feature(주요기능)
+
 - **회원가입 & 로그인**:
 
   - 학과 정보를 포함한 회원가입 후 JWT 기반 인증으로 로그인합니다.
@@ -116,6 +118,15 @@
 - **Notion** - 문서화 및 협업
 - **Discord** - 팀 커뮤니케이션 및 편의성 파이프라인
 
+<br><br>
+
+# 6. Architecture Overview
+
+- 동숲 프로젝트는 마이크로서비스 기반 아키텍처로 설계되었으며, Oracle Cloud 인프라 위에서 구동됩니다.
+
+<img width="1000" height="700" alt="image" src="https://github.com/user-attachments/assets/2b088207-9c65-4065-baaf-7dfb09d34d7d" />
+
+<br/>
 <br/>
 
 ## 아키텍처
@@ -131,8 +142,6 @@ AI (this repo)
 ├─ main.py              # 기본 실행 엔트리포인트 (서비스 통합)
 └─ app_oss_main.py      # OSS(OpenAI 호환) 엔드포인트 실행
 ```
-
----
 
 ## 디렉터리 구조
 
@@ -151,16 +160,7 @@ Dockerfile
 └── main.py
 ```
 
-<br><br>
-
-# 7. Architecture Overview
-
-- 동숲 프로젝트는 마이크로서비스 기반 아키텍처로 설계되었으며, Oracle Cloud 인프라 위에서 구동됩니다.
-
-<img width="1000" height="700" alt="image" src="https://github.com/user-attachments/assets/2b088207-9c65-4065-baaf-7dfb09d34d7d" />
-
-<br/>
-<br/>
+<br>
 
 **Client Layer**
 
@@ -193,7 +193,7 @@ Dockerfile
 
 <br/>
 
-# 8. Development Workflow (개발 워크플로우)
+# 7. Development Workflow (개발 워크플로우)
 
 ## 브랜치 전략 (Branch Strategy)
 
