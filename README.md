@@ -19,7 +19,7 @@
 <br/>
 <br/>
 
-# 3. Key Feature(주요기능)
+# 3. Key Feature (주요기능)
 
 - **회원가입 & 로그인**:
 
@@ -147,17 +147,17 @@ AI (this repo)
 
 ```
 AI/
-├── LLM/
-├── image_analysis/
-├── text_filtering/
+├── LLM
+├── image_analysis
+├── text_filtering
+Main
+├── app_oss_main.py
+├── main.py
+Setting
 ├── .dockerignore
 ├── .gitignore
-├── Dockerfile
-├── Dockerfiles_oss/           # (옵션) OSS 전용
-│
-Dockerfile
-├── app_oss_main.py
-└── main.py
+├── Dockerfiles_oss
+└─  Dockerfile
 ```
 
 <br>
@@ -205,3 +205,41 @@ Dockerfile
 - {Commit Message Convention Style} 기능이름
   - 팀원 각자의 개발 브랜치입니다.
   - 모든 기능 개발은 이 브랜치에서 이루어집니다.
+
+<br><br>
+
+# 8. 오픈소스 라이선스
+
+본 서비스는 아래 오픈소스/오픈웨이트 소프트웨어를 사용합니다.  
+배포 형태: **서버 호스팅 추론(가중치 미배포)**, **모델/파라미터 수정 없음**.
+
+---
+
+## gpt-oss-20b
+
+- **License**: Apache License 2.0 · 원문: https://github.com/openai/gpt-oss/blob/main/LICENSE
+- **Source**: OpenAI gpt-oss
+- **Notes**: 원본 그대로 사용(파인튜닝/양자화/파라미터 변경 없음), 서버 내 추론만 수행
+
+```text
+Model: gpt-oss:20b
+Digest: sha256:b112e727c6f18875636c56a779790a590d705aec9e1c0eb5a97d51fc2a778583
+Short ID: aa4295ac10c3
+Deployed at: 2025-10-10 KST
+OpenAI SDK (Python): 2.2.0
+Modifications: none (no finetune/quant/param changes)
+```
+
+---
+
+## Python Runtime Libraries
+
+- OpenAI Python SDK — Apache-2.0
+- FastAPI — MIT
+- Starlette — BSD-3-Clause
+- Uvicorn — BSD-3-Clause
+- Pydantic — MIT
+- python-dotenv — BSD
+- requests — Apache-2.0
+
+**전체 목록: [`THIRD_PARTY_LICENSES.md`](https://github.com/dongsooop/AI/THIRD_PARTY_LICENSES.md)**
