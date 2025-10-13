@@ -242,4 +242,4 @@ Modifications: none (no finetune/quant/param changes)
 - python-dotenv — BSD
 - requests — Apache-2.0
 
-**전체 목록: [`THIRD_PARTY_LICENSES.md`](https://github.com/dongsooop/AI/THIRD_PARTY_LICENSES.md)**
+**전체 목록: [`THIRD_PARTY_LICENSES.md`](https://github.com/dongsooop/AI/blob/main/THIRD_PARTY_LICENSES.md)**
