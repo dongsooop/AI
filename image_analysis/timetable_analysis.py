@@ -26,7 +26,7 @@ TARGET_WIDTH  = 1170
 TARGET_HEIGHT = 2532
 SCALE         = 2
 
-WEEKDAY_BASE_COL_1 = 4
+WEEKDAY_BASE_COL_1 = 3
 TIME_FIRST_ROW     = 3
 
 _hangul = re.compile(r"[가-힣]")
