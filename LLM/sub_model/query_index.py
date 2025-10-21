@@ -12,6 +12,7 @@ load_dotenv()
 THIS_DIR = Path(__file__).resolve().parent
 ROOT_DIR = THIS_DIR.parent.parent
 
+# 졸업학점 관련 키워드 복원 (학교 기본 정보 포함)
 GRAD_KWS = ["졸업", "졸업학점", "졸업 학점", "졸업요건", "졸업요구학점", "이수학점", "졸업 이수학점"]
 UNIT_SUFFIX_RE = re.compile(r"(학부|학과|팀|센터|처|단|부|원|본부)$")
 OTHER_UNIT_TOKEN_RE = re.compile(r"([가-힣A-Za-z0-9]{2,}(?:학부|학과|팀|센터|처|단|부|원|본부))")
@@ -22,6 +23,7 @@ GENERIC_LABEL_RE = re.compile(r"(?:대표|교무|입학|장학|취업|총무|홍
 STAFF_TITLE_RE = re.compile(r"(?:교직원\s*검색|전화번호\s*안내)", re.I)
 STAFF_URL_RE   = re.compile(r"/dmu/4408/subview\.do$", re.I)
 
+# 졸업학점 관련 변수들 복원 (학교 기본 정보 포함)
 _OLD_NEW_NUM = r"(\d{2,3})"
 _BYPYO1_RE   = r"\[?\s*별표\s*1\s*\]?"
 PHONE_RE = re.compile(r'(0\d{1,2})[^\d]{0,4}(\d{3,4})[^\d]{0,4}(\d{4})')
@@ -194,7 +196,6 @@ def load_list_from_txt(path: Path) -> list:
         return [line.strip() for line in f if line.strip()]
 
 DATA_JSON        = env_path("DATA_JSON")
-DEPT_DIR         = env_path("DEPT_DIR")
 ART_DIR          = env_path("ART_DIR")
 SEARCH_DF_PATH   = env_path("SEARCH_DF_PATH")
 EMB_PATH         = env_path("EMB_PATH")
@@ -202,7 +203,6 @@ BM25_PATH        = env_path("BM25_PATH")
 TOK_PATH         = env_path("TOK_PATH")
 CONTACTS_CSV     = env_path("CONTACTS_CSV")
 META_PATH        = env_path("META_PATH")
-NOTICE_KWS       = load_list_from_txt(env_path("NOTICE_KWS_PATH"))
 CONTACT_KWS      = load_list_from_txt(env_path("CONTACT_KWS_PATH"))
 
 embeddings = np.load(EMB_PATH, mmap_mode="r").astype(np.float32)
@@ -216,7 +216,7 @@ model_name = "intfloat/multilingual-e5-base"
 model = SentenceTransformer(model_name)
 
 search_df = pd.read_parquet(SEARCH_DF_PATH)
-for c in ["doc_type", "title", "text", "unit", "phone", "email", "updated_at", "notice_flag", "url"]:
+for c in ["doc_type", "title", "text", "unit", "phone", "email", "url"]:
     if c not in search_df.columns:
         search_df[c] = np.nan
 
@@ -226,7 +226,6 @@ search_df["text"]       = search_df["text"].fillna("").astype(str)
 search_df["unit"]       = search_df["unit"].fillna("").astype(str)
 search_df["phone"]      = search_df["phone"].fillna("").astype(str).str.replace(r"\s+", "", regex=True)
 search_df["email"]      = search_df["email"].fillna("").astype(str).str.strip()
-search_df["notice_flag"]= pd.to_numeric(search_df["notice_flag"], errors="coerce").fillna(0).astype(int)
 
 tokenize_kor = get_tokenizer()
 
@@ -240,25 +239,7 @@ else:
         tokenized_courpus = [tokenize_kor(t) for t in search_df["text"].astype(str).tolist()]
     bm25 = BM25Okapi(tokenized_courpus)
 
-def _parse_dt(ts):
-    if ts is None or (isinstance(ts, float) and np.isnan(ts)):
-        return pd.NaT
-    try:
-        return pd.to_datetime(ts)
-    except Exception:
-        s = str(ts)
-        for fmt in ("%Y-%m-%d", "%Y.%m.%d", "%Y/%m/%d", "%Y%m%d"):
-            try:
-                return pd.to_datetime(s[:10], format=fmt)
-            except Exception:
-                pass
-        m = re.search(r"(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일", s)
-        if m:
-            y, mo, d = map(int, m.groups())
-            return pd.Timestamp(year=y, month=mo, day=d)
-        return pd.NaT
-
-search_df["updated_at"] = search_df["updated_at"].apply(_parse_dt)
+# 날짜 파싱 함수 제거됨 (학교 기본 정보만 제공)
 
 @lru_cache(maxsize=512)
 def embed_query(q: str):
@@ -269,29 +250,21 @@ def _minmax(x):
     lo, hi = x.min(), x.max()
     return np.zeros_like(x) if hi - lo < 1e-9 else (x - lo) / (hi - lo + 1e-9)
 
-def recency_score(ts, half_life_days=30):
-    if pd.isna(ts) or ts is None: return 0.0
-    ts = pd.to_datetime(ts)
-    days = max((pd.Timestamp.now(tz="Asia/Seoul") - ts).days, 0)
-    return float(np.exp(-np.log(2) * days / half_life_days))
+# 최신성 점수 함수 제거됨 (학교 기본 정보만 제공)
 
-def hybrid_search(query, top_k=8, alpha=0.6, recency_weight=0.45, notice_boost=0.20, contact_boost=0.18):
+def hybrid_search(query, top_k=8, alpha=0.6, contact_boost=0.18):
     qv = embed_query(query)
     dense_raw = embeddings @ qv
     bm25_raw  = bm25.get_scores(tokenize_kor(query))
     base = alpha * _minmax(dense_raw) + (1 - alpha) * _minmax(bm25_raw)
 
-    rec = _minmax(np.array([recency_score(ts) for ts in search_df["updated_at"]]))
-    bonus = recency_weight * rec
-
-    if any(k in query for k in NOTICE_KWS):
-        bonus = bonus + notice_boost * search_df["notice_flag"].to_numpy()
+    bonus = np.zeros(len(search_df))
 
     if any(k in query for k in CONTACT_KWS):
         is_contact = (search_df["doc_type"] == "contact").astype(float).to_numpy()
         has_phone = (search_df["phone"].astype(str) != "").astype(float).to_numpy()
         has_email = (search_df["email"].astype(str) != "").astype(float).to_numpy()
-        bonus = bonus + contact_boost * (is_contact + 0.5*has_phone + 0.5*has_email)
+        bonus = contact_boost * (is_contact + 0.5*has_phone + 0.5*has_email)
 
     scores = base + bonus
     out = search_df.copy()
@@ -299,12 +272,11 @@ def hybrid_search(query, top_k=8, alpha=0.6, recency_weight=0.45, notice_boost=0
     if "url" in out.columns:
         rep_idx = out.groupby(["url","doc_type"], dropna=False)["score"].idxmax()
         out = out.loc[rep_idx]
-    out = out.sort_values(["score","updated_at"], ascending=[False, False], na_position="last").head(top_k)
+    out = out.sort_values(["score"], ascending=[False], na_position="last").head(top_k)
     return out.reset_index(drop=True)
 
 def build_answer(query, top_k=6):
     contact_like = any(k in query for k in CONTACT_KWS)
-    notice_like = any(k in query for k in NOTICE_KWS)
 
     if contact_like:
         hits = hybrid_search(query, top_k=max(top_k, 30))
@@ -314,7 +286,7 @@ def build_answer(query, top_k=6):
         terms = prefer if prefer else toks[:3]
         target_unit = _canonical_unit_from_query(query)
 
-        # === 추가: 교직원검색(4408) 페이지를 후보에 반드시 포함
+        # 교직원검색(4408) 페이지를 후보에 반드시 포함
         staff_mask = (search_df["url"].astype(str).str.contains(STAFF_URL_RE) |
                       search_df["title"].astype(str).str.contains(STAFF_TITLE_RE))
         staff_rows = search_df.loc[staff_mask, ["doc_type","title","text","unit","url","phone","email"]].copy()
@@ -322,7 +294,7 @@ def build_answer(query, top_k=6):
             hits = pd.concat([hits, staff_rows], ignore_index=True)
             hits = hits.drop_duplicates(subset=["url","doc_type"], keep="first")
 
-        # === 재정렬 가중치: 단위매칭/교직원검색/연락처문서/학부홈 가산, 게시판 감점
+        # 재정렬 가중치: 단위매칭/교직원검색/연락처문서/학부홈 가산, 게시판 감점
         urls   = hits["url"].fillna("")
         titles = hits["title"].fillna("")
         units  = hits["unit"].fillna("")
@@ -340,7 +312,7 @@ def build_answer(query, top_k=6):
         _prio = 2.2*unit_match + 1.6*is_staff + 1.3*is_contact + 0.7*is_dept_home - 0.8*is_board
         hits = hits.assign(_prio=_prio).sort_values(["_prio","score"], ascending=[False, False])
 
-        # === 번호 추출
+        # 번호 추출
         lines, seen = [], set()
         for _, r in hits.iterrows():
             phones, emails = _extract_contact_from_row(r, prefer_terms=terms, target_unit=target_unit)
@@ -361,6 +333,7 @@ def build_answer(query, top_k=6):
             lines = [f"- {rv['title']}: {rv['url']}" for _, rv in picks.iterrows()]
         return {"answer": "\n".join(lines)}
 
+    # 졸업학점 관련 질문 처리
     if _looks_like_grad_query(query):
         three_year_like = bool(re.search(r"\b3\s*년제\b", query))
 
@@ -418,9 +391,10 @@ def build_answer(query, top_k=6):
         lines = [f"- {r['title']}: {r['url']}" for _, r in picks.iterrows()]
         return {"answer": "\n".join(lines)}
 
+    # 일반 검색 (연락처가 아닌 경우)
     hits = hybrid_search(query, top_k=max(top_k, 12))
 
-    if not contact_like and not notice_like and not hits.empty:
+    if not hits.empty:
         urls = hits["url"].fillna("")
         home_like = urls.str.contains(r"/subview\.do|/intro|/dmu/\d+/subview", case=False, regex=True)
         bbs_like  = urls.str.contains(r"/bbs/|artclView\.do", case=False, regex=True)
@@ -445,8 +419,10 @@ if __name__ == "__main__":
     q1 = "학생성공지원팀 담당자 전화번호 알려줘"
     q2 = "컴퓨터공학부 담당자 전화번호 알려줘"
     q3 = "경영학부 담당자 연락처"
-    q4 = "2년제 졸업조건"
-    for q in [q1, q2, q3, q4]:
+    q4 = "졸업학점 요구사항"
+    q5 = "3년제 졸업학점"
+    for q in [q1, q2, q3, q4, q5]:
         res = build_answer(q, top_k=8)
         print("Q:", q)
         print("A:\n", res["answer"])
+        print("-" * 50)
