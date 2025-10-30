@@ -3,11 +3,15 @@ FROM python:3.11-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+    curl ca-certificates \
+    default-jre-headless \
+    build-essential \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements_oss.txt .
 RUN pip install --no-cache-dir -r requirements_oss.txt
+RUN pip install --no-cache-dir JPype1==1.5.0 konlpy==0.6.0
 
 COPY model/artifacts/ ./model/artifacts/
 COPY LLM/ ./LLM/
@@ -15,6 +19,7 @@ COPY app_oss_main.py ./app_oss_main.py
 COPY .env ./.env
 COPY data/department.txt ./data/department.txt
 COPY data/sub_model_data/ ./data/sub_model_data/
+COPY data/school_info/old_data/dmu_documents_cleaned.json ./data/school_info/old_data/dmu_documents_cleaned.json
 
 EXPOSE 8010
 CMD ["uvicorn", "app_oss_main:app", "--host", "0.0.0.0", "--port", "8010"]
