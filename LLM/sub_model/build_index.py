@@ -51,7 +51,7 @@ print(f"   - ART_DIR: {ART_DIR}")
 if not DATA_JSON.exists():
     raise FileNotFoundError(f"메인 데이터 파일을 찾을 수 없습니다: {DATA_JSON}")
     
-# 메인 데이터만 로드 (공지사항 제외)
+
 print("📖 학교 기본 정보 로딩 중...")
 with open(DATA_JSON, "r", encoding="utf-8") as f:
     data = json.load(f)
@@ -63,18 +63,16 @@ df["source"] = "main"
 print(f"   - 학교 기본 정보: {len(df)}개 문서")
 
 
-# 텍스트 정규화 및 중복 제거
 print("🔧 텍스트 정규화 및 중복 제거 중...")
 df["title"]       = df["title"].apply(normalize_text)
 df["content"]     = df["content"].apply(normalize_text)
 df["fulltext"]    = (df["title"] + " " + df["content"]).apply(normalize_text)
 
-# 중복 제거 (URL 기준만)
+
 df = df.drop_duplicates(subset=["url"]).reset_index(drop=True)
 print(f"   - 중복 제거 후: {len(df)}개 문서")
 
 
-# 문서를 청크로 분할
 print("✂️ 문서 청킹 중...")
 rows = []
 for i, r in df.iterrows():
@@ -95,7 +93,6 @@ page_chunks = pd.DataFrame(rows).reset_index(drop=True)
 print(f"   - 총 청크 수: {len(page_chunks)}개")
 
 
-# 연락처 추출 (학교 기본 정보에서만)
 print("📞 연락처 추출 중...")
 DASH_CHARS = r"\-\u2010\u2011\u2012\u2013\u2014\u2212\uFE58\uFE63\uFF0D"
 def _preclean_contact_text(s: str) -> str:
@@ -107,7 +104,7 @@ def _preclean_contact_text(s: str) -> str:
 
 contact_cands = []
 
-# 메인 데이터에서만 연락처 추출
+
 for _, r in df.iterrows():
     row_like = pd.Series({
         "title":   r["title"],
@@ -131,7 +128,6 @@ else:
     except Exception:
         print(contacts_raw.head(10).to_string(index=False))
 
-    # 연락처 클러스터링 (중복 제거)
     contacts_raw["unit_norm"] = contacts_raw["unit"].apply(clean_name)
     CLUSTER_SIM = 0.92
     cluster_map, reps = {}, []
@@ -162,7 +158,6 @@ else:
         .reset_index(drop=True)
     )
     
-    # 연락처 문서 생성
     contact_rows = []
     for idx, r in contacts_df.iterrows():
         txt = compose_contact_passage(
@@ -189,7 +184,6 @@ else:
     print(f"   - 최종 연락처 문서: {len(contact_docs)}개")
 
 
-# 최종 데이터 통합
 print("🔗 최종 데이터 통합 중...")
 ALL_COLS = [
     "doc_id","chunk_id","title","url","source",
@@ -215,7 +209,7 @@ print(f"   - 페이지 청크: {len(page_chunks)}개")
 print(f"   - 연락처 문서: {len(contact_docs)}개")
 print(f"   - 총 검색 문서: {len(search_df)}개")
 
-# BM25 및 임베딩 생성
+
 print("🧠 BM25 및 임베딩 생성 중...")
 tokenize_kor = get_tokenizer()
 tokenized_corpus = [tokenize_kor(t) for t in search_df["text"].tolist()]
@@ -233,7 +227,7 @@ def embed_passages(texts):
 
 embeddings = embed_passages(search_df["text"].tolist())
 
-# 아티팩트 저장
+
 print("💾 아티팩트 저장 중...")
 ART_DIR.mkdir(parents=True, exist_ok=True)
 

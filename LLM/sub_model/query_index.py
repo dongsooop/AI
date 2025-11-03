@@ -239,7 +239,7 @@ else:
         tokenized_courpus = [tokenize_kor(t) for t in search_df["text"].astype(str).tolist()]
     bm25 = BM25Okapi(tokenized_courpus)
 
-# 날짜 파싱 함수 제거됨 (학교 기본 정보만 제공)
+
 
 @lru_cache(maxsize=512)
 def embed_query(q: str):
@@ -288,7 +288,7 @@ def build_answer(query, top_k=6):
 
         # 교직원검색(4408) 페이지를 후보에 반드시 포함
         staff_mask = (search_df["url"].astype(str).str.contains(STAFF_URL_RE) |
-                      search_df["title"].astype(str).str.contains(STAFF_TITLE_RE))
+                    search_df["title"].astype(str).str.contains(STAFF_TITLE_RE))
         staff_rows = search_df.loc[staff_mask, ["doc_type","title","text","unit","url","phone","email"]].copy()
         if not staff_rows.empty:
             hits = pd.concat([hits, staff_rows], ignore_index=True)
