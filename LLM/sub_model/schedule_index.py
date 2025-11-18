@@ -197,8 +197,15 @@ def schedule_search(query: str, top_k=8, today=None):
 
     today_ts = pd.Timestamp(today)
     df1 = df1.dropna(subset=["start_date"]).copy()
-    df1["_is_future"] = (df1["start_date"] >= today_ts)
-    df1 = df1.sort_values(by=["_is_future", "start_date"], ascending=[False, True])
+
+    sort_mode = (os.getenv("SCHEDULE_SORT_MODE") or "upcoming_first").lower()
+    if sort_mode == "chronological":
+        df1 = df1.sort_values(by=["start_date", "end_date", "일정명"], ascending=[True, True, True])
+    elif sort_mode in ("reverse", "reverse_chronological", "desc"):
+        df1 = df1.sort_values(by=["start_date", "end_date", "일정명"], ascending=[False, False, True])
+    else:
+        df1["_is_future"] = (df1["start_date"] >= today_ts)
+        df1 = df1.sort_values(by=["_is_future", "start_date"], ascending=[False, True])
 
     if df1.empty:
         return ""
