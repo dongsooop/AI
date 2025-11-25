@@ -71,7 +71,7 @@ model.eval()
 
 
 def split_sentences(text: str) -> List[str]:
-    text = re.sub(r'([.!?])', r'\1\n', text)
+    text = re.sub(r'([.!?])\s+', r'\1\n', text)
     endings = ['다', '요', '죠', '네', '습니다', '습니까', '해요', '했어요', '하였습니다', '하네요', '해봐요']
     for end in endings:
         text = re.sub(rf'({end})(?=\s)', r'\1\n', text)
