@@ -28,7 +28,6 @@ def _academic_year(today=None):
     today = today or dt.date.today()
     return today.year if today.month >= 3 else (today.year - 1)
 
-
 RANGE_SPLIT_RE       = re.compile(r"\s*[~∼〜]\s*")
 WEEKDAY_PARENS_RE    = re.compile(r"\([^)]*\)")
 NON_NUM_SEP_CLEAN_RE = re.compile(r"[^\d./\-]")
@@ -53,12 +52,13 @@ def _parse_mmdd_token(tok: str, default_m: int) -> tuple[int, int]:
         mon = _safe_month(m.group(1)) if m.group(1) else _safe_month(default_m)
         day = int(m.group(2))
         return mon, day
-    only_d = re.match(r"^(\d{1,2})$", t)
 
+    only_d = re.match(r"^(\d{1,2})$", t)
     if only_d:
         return _safe_month(default_m), int(only_d.group(1))
-    
+
     raise ValueError(f"Unparsable date token: {tok!r}")
+
 
 def _daterange_from_parts(y, m, day_str):
     parts = RANGE_SPLIT_RE.split(str(day_str or ""))
@@ -66,6 +66,7 @@ def _daterange_from_parts(y, m, day_str):
         raise ValueError("empty date field")
 
     sm, sd = _parse_mmdd_token(parts[0], default_m=int(m))
+
     if len(parts) >= 2 and parts[1].strip():
         em, ed = _parse_mmdd_token(parts[1], default_m=sm)
     else:
@@ -121,10 +122,10 @@ def _parse_time_constraints(q, today=None):
 
 def _load_df():
     if not CSV_PATH:
-        raise ValueError("SCHEDULE_CSV_PATH 환경변수가 비어있습니다.")
+        raise ValueError("SCHEDULE_CSV_PATH environment empty.")
     csv_path = Path(CSV_PATH).expanduser()
     if not csv_path.exists():
-        raise FileNotFoundError(f"학사일정 CSV가 존재하지 않습니다: {csv_path}")
+        raise FileNotFoundError("office_schedule CSV is undefined")
 
     df = pd.read_csv(csv_path, dtype=str, encoding="utf-8-sig")
 
@@ -145,6 +146,7 @@ def _load_df():
         except Exception as ex:
             raise ValueError(f"잘못된 날짜 행 -> 년도:{y}, 월:{m}, 날짜:{d}, 일정명:{title} :: {ex}")
         starts.append(pd.Timestamp(s)); ends.append(pd.Timestamp(e)); tags.append(_tag_title(title))
+
     df["start_date"] = starts
     df["end_date"]   = ends
     df["tags"]       = tags
@@ -154,6 +156,28 @@ _DF = _load_df()
 
 def _looks_like_schedule_query(q):
     return any(k in (q or "") for k in INTENT_HINTS)
+
+YEAR_RE = re.compile(r"(?:(\d{4})|(\d{2}))\s*년")
+ACAYEAR_RE = re.compile(r"(?:(\d{4})|(\d{2}))\s*학년도")
+
+def _yy_to_yyyy(y2: str) -> int:
+    return 2000 + int(y2)
+
+def _parse_year_hint(q: str):
+    t = re.sub(r"\s+", "", q or "")
+
+    m = ACAYEAR_RE.search(t)
+    if m:
+        y = int(m.group(1)) if m.group(1) else _yy_to_yyyy(m.group(2))
+        return ("academic", y)
+
+    m = YEAR_RE.search(t)
+    if m:
+        y = int(m.group(1)) if m.group(1) else _yy_to_yyyy(m.group(2))
+        return ("calendar", y)
+
+    return None
+
 
 def schedule_search(query: str, top_k=8, today=None):
     if not _looks_like_schedule_query(query):
@@ -167,11 +191,26 @@ def schedule_search(query: str, top_k=8, today=None):
         ay = int(over)
 
     df = _DF.copy()
-    df1 = df[df["학년도"] == ay]
-    if df1.empty:
-        df1 = df
 
     tr = _parse_time_constraints(query, today=today)
+    year_hint = _parse_year_hint(query)
+
+    if year_hint:
+        kind, y = year_hint
+        if kind == "academic":
+            df1 = df[df["학년도"] == y]
+        else:
+            s = dt.date(y, 1, 1)
+            e = dt.date(y, 12, 31)
+            df1 = df[(df["start_date"] <= pd.Timestamp(e)) & (df["end_date"] >= pd.Timestamp(s))]
+    else:
+        if tr:
+            df1 = df.copy()
+        else:
+            df1 = df[df["학년도"].isin([ay, ay + 1])]
+            if df1.empty:
+                df1 = df.copy()
+
     if tr:
         s, e = tr
         df1 = df1[(df1["start_date"] <= pd.Timestamp(e)) & (df1["end_date"] >= pd.Timestamp(s))]
@@ -185,7 +224,7 @@ def schedule_search(query: str, top_k=8, today=None):
     elif "수강" in ql: tag_need.add("REGISTRATION")
     if "정정" in ql: tag_need.add("ADD_DROP")
     if "성적" in ql: tag_need.add("GRADE")
-    if "등록" in ql: tag_need.add("TUITION")
+    if "등록" in ql or "등록금" in ql: tag_need.add("TUITION")
     if "보강" in ql: tag_need.add("MAKEUP")
     if "개강" in ql: tag_need.add("SEMESTER_START")
     if "종강" in ql: tag_need.add("SEMESTER_END")
@@ -195,10 +234,24 @@ def schedule_search(query: str, top_k=8, today=None):
     if tag_need:
         df1 = df1[df1["tags"].apply(lambda s: bool(s & tag_need))]
 
-    today_ts = pd.Timestamp(today)
     df1 = df1.dropna(subset=["start_date"]).copy()
+    if df1.empty:
+        return ""
+
+    if (year_hint is None) and (tr is None):
+        cur = df1[df1["start_date"].dt.year == today.year]
+        if not cur.empty:
+            df1 = cur
+        else:
+            prev = df1[df1["start_date"].dt.year == (today.year - 1)]
+            if not prev.empty:
+                df1 = prev
+            else:
+                return "아직 일정이 업로드되지 않았어요."
 
     sort_mode = (os.getenv("SCHEDULE_SORT_MODE") or "upcoming_first").lower()
+    today_ts = pd.Timestamp(today)
+
     if sort_mode == "chronological":
         df1 = df1.sort_values(by=["start_date", "end_date", "일정명"], ascending=[True, True, True])
     elif sort_mode in ("reverse", "reverse_chronological", "desc"):
@@ -206,9 +259,6 @@ def schedule_search(query: str, top_k=8, today=None):
     else:
         df1["_is_future"] = (df1["start_date"] >= today_ts)
         df1 = df1.sort_values(by=["_is_future", "start_date"], ascending=[False, True])
-
-    if df1.empty:
-        return ""
 
     def _fmt(r):
         s = r["start_date"].date().isoformat()
