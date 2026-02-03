@@ -17,8 +17,8 @@ router = APIRouter()
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 
-
 ENGLISH_BAD_WORDS_PATH = "data/eng_bad_text.txt"
+INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN")
 
 def load_english_bad_words(file_path: str) -> set:
     bad_words = set()
@@ -35,7 +35,10 @@ def load_english_bad_words(file_path: str) -> set:
 ENGLISH_BAD_WORDS = load_english_bad_words(ENGLISH_BAD_WORDS_PATH)
 
 
-def verify_jwt_token(request: Request):
+def verify_jwt_or_internal(request: Request):
+    internal = request.headers.get("X-INTERNAL-TOKEN")
+    if INTERNAL_TOKEN and internal == INTERNAL_TOKEN:
+        return "internal"
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authorization header missing or malformed")
@@ -126,7 +129,7 @@ def analyze_field(field_name: str, text: str, log_file) -> Dict:
 
 
 @router.post("/text_filter_board")
-async def text_filter_board_api(request: Request, payload: TextRequest, username: str = Depends(verify_jwt_token)):
+async def text_filter_board_api(request: Request, payload: TextRequest, username: str = Depends(verify_jwt_or_internal)):
     try:
         full_text = payload.text.strip()
         try:
@@ -157,7 +160,7 @@ async def text_filter_board_api(request: Request, payload: TextRequest, username
 
 
 @router.post("/text_filter_market")
-async def text_filter_market_api(request: Request, payload: TextRequest, username: str = Depends(verify_jwt_token)):
+async def text_filter_market_api(request: Request, payload: TextRequest, username: str = Depends(verify_jwt_or_internal)):
     try:
         full_text = payload.text.strip()
         try:
@@ -188,7 +191,11 @@ async def text_filter_market_api(request: Request, payload: TextRequest, usernam
 
 
 @router.post("/text_filter_single")
-async def text_filter_single_api(payload: TextRequest):
+async def text_filter_single_api(
+    payload: TextRequest,
+    request: Request,
+    username: str = Depends(verify_jwt_or_internal)
+    ):
     try:
         text = payload.text.strip()
         sentence_list = split_sentences(text)
