@@ -20,7 +20,7 @@ ALGORITHM = os.getenv("ALGORITHM")
 MODEL_PATH = "model/my_electra_finetuned"
 LOG_PATH = "data/bad_text_sample.txt"
 ENGLISH_BAD_WORDS_PATH = "data/eng_bad_text.txt"
-
+INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN")
 
 def load_english_bad_words(file_path: str) -> set:
     bad_words = set()
@@ -37,7 +37,10 @@ def load_english_bad_words(file_path: str) -> set:
 ENGLISH_BAD_WORDS = load_english_bad_words(ENGLISH_BAD_WORDS_PATH)
 
 
-def verify_jwt_token(request: Request):
+def verify_jwt_or_internal(request: Request):
+    internal = request.headers.get("X-INTERNAL-TOKEN")
+    if INTERNAL_TOKEN and internal == INTERNAL_TOKEN:
+        return "internal"
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authorization header missing or malformed")
@@ -134,7 +137,7 @@ def analyze_field(field_name: str, text: str, log_file=None) -> Dict:
 async def rule_filter_api(
     request: Request,
     payload: TextRequest,
-    username: str = Depends(verify_jwt_token)
+    username: str = Depends(verify_jwt_or_internal)
 ):
     try:
         full_text = payload.text.strip()
@@ -173,7 +176,9 @@ async def rule_filter_api(
 
 @router.post("/text_filter_content")
 async def text_filter_content_api(
-    payload: TextRequest):
+    payload: TextRequest,
+    username: str = Depends(verify_jwt_or_internal)
+    ):
     try:
         text = payload.text.strip()
         sentences = split_sentences(text)
@@ -195,6 +200,7 @@ async def text_filter_content_api(
                     has_profanity = True
 
         response = {
+            "username": username,
             "content": {
                 "field": "content",
                 "has_profanity": has_profanity,
