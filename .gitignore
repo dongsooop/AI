@@ -1,4 +1,5 @@
 .DS_Store
+.vscode
 data/
 model/
 database/
@@ -13,5 +14,8 @@ crawling
 debug
 finetuning
 test
-LLM/OSS/
+# 기본적으로 OSS 디렉토리는 제외하되, 공개할 엔드포인트 파일은 추적 허용
+LLM/OSS/*
+!LLM/OSS/
+!LLM/OSS/Open_AI_OSS.py
 backup_file

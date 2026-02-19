@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "ko-KR"
+
+reviews:
+  # 리뷰 톤/강도(부드럽게)
+  profile: "chill"
+
+  # PR 전체 요약(High-level summary) 생성
+  high_level_summary: true
+
+  # 요약/리뷰를 "친근한 말투"로 유도 (요약 커스터마이징)
+  high_level_summary_instructions: |
+    한국어로 친근하고 짧게 요약해줘.
+    아래 형식으로 작성해줘:
+    - 변경 요약(1~3줄)
+    - 주요 변경점(불릿 3~7개)
+    - 주의/리스크(있으면 1~3개)
+    - 다음 액션(있으면 1~3개)
+
+  # PR 열리거나 커밋이 추가되면 자동 리뷰 시작
+  auto_review:
+    enabled: true
+    drafts: false
+
+  poem: false
+
+  # (선택) PR에 리뷰 상태/체크 형태로도 표시
+  review_status: true
+
+chat:
+  auto_reply: true

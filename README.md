@@ -1,71 +1,75 @@
-# 1. Project Overview (프로젝트 개요)
+# 🪴 동숲 프로젝트 개요
 
-- 프로젝트 이름: 동양미래대학교 숲 (동숲)
-- 프로젝트 설명: 동양미래대학교 학생들의 교내 생활 편리성 증진을 목적으로 개발된 통합 커뮤니티 및 정보 제공 애플리케이션
+동양미래대학교 숲의 줄임말로, 학생들의 교내 생활 편리성 증진 목적의 정보 제공 및 통합 커뮤니티 서비스입니다.  
+사용자에게 공지사항, 학사 일정 등 정보를 실시간으로 제공하고, 시간표를 등록해 학업 관리를 돕습니다.  
+팀원 모집, 맛집 추천, 과팅 기능 등 교내 다른 학우들과 소통할 수 있는 커뮤니티를 제공합니다.
 
-<br/>
 <img width="975" height="456" alt="image" src="https://github.com/user-attachments/assets/bafe1cd2-f0ec-484d-9317-b484c3d7dfe5" />
 
-<br/>
-<br/>
+# 🚀 핵심 기능
 
-# 2. Team Members (팀원 및 팀 소개)
+## 💘 과팅
 
-|                                                [주성준](https://github.com/rdyjun)                                                 |                                                [백승민](https://github.com/alpin87)                                                |                                              [유제승](https://github.com/Yu-JeSeung)                                               |                                                [우승원](https://github.com/wsw0922)                                                |                                            [전승빈](https://github.com/JEON-SEUNGBHIN)                                             |
-| :--------------------------------------------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------------------------------: |
-| <img width="150" height="150" alt="image" src="https://github.com/user-attachments/assets/9026c7ce-f063-4377-9a43-044e72598056" /> | <img width="150" height="150" alt="image" src="https://github.com/user-attachments/assets/9026c7ce-f063-4377-9a43-044e72598056" /> | <img width="150" height="150" alt="image" src="https://github.com/user-attachments/assets/9026c7ce-f063-4377-9a43-044e72598056" /> | <img width="150" height="150" alt="image" src="https://github.com/user-attachments/assets/9026c7ce-f063-4377-9a43-044e72598056" /> | <img width="150" height="150" alt="image" src="https://github.com/user-attachments/assets/9026c7ce-f063-4377-9a43-044e72598056" /> |
-|                                                                 BE                                                                 |                                                                 BE                                                                 |                                                                 BE                                                                 |                                                                 FE                                                                 |                                                                 FE                                                                 |
+> <a href="https://github.com/dongsooop/backend/wiki/%EA%B3%BC%ED%8C%85-%EB%AC%B8%EC%A0%9C-%ED%95%B4%EA%B2%B0-%EA%B2%BD%ED%97%98">동시성 및 스케줄링 문제 해결 경험 WIKI</a>
 
-<br/>
-<br/>
+정해진 세션 정원 수에 따라 매칭 인원 충족 시 과팅 세션이 시작됩니다.  
+과팅은 채팅봇의 안내에 따라 진행되며, 주어진 대화 주제로 사용자가 대화를 하게 됩니다.  
+세션 마지막에는 마음에 드는 사람을 선택할 수 있으며, 서로를 선택한 경우 1:1 채팅방이 개설됩니다.
 
-# 3. Key Feature (주요기능)
+<img alt="과팅" height="600" src="https://github.com/user-attachments/assets/b65d43be-7bba-4c9e-a42c-4a325167f6d3">
 
-- **회원가입 & 로그인**:
+<br />
+<br />
 
-  - 학과 정보를 포함한 회원가입 후 JWT 기반 인증으로 로그인합니다.
+## 🔔 학사 정보 알림
 
-- **맞춤형 공지사항**:
+사용자는 자신이 선택한 공지사항과 대학 공지를 실시간으로 받아볼 수 있습니다.  
+등록된 학사 일정이 있는 날은 매일 아침 알림으로 리마인드합니다.  
+시간표를 등록한 경우도 학사 일정 알림과 같은 시간에 함께 알림으로 리마인드합니다.
 
-  - 전체 학교 공지와 본인 학과 공지를 필터링하여 확인할 수 있습니다.
+<img width="300" alt="학사 정보 알림" src="https://github.com/user-attachments/assets/22200841-44ef-4ce1-aeb4-b6679fb205a3" />
 
-- **학식 정보**:
+<br />
+<br />
 
-  - 실시간 학식 메뉴를 앱에서 바로 확인할 수 있습니다.
+## 🍖 학교 주변 맛집 추천
 
-- **시간표 관리**:
+Kakao map 기반 학교 주변 1Km 이내 식당을 확인할 수 있습니다.  
+사용자간 추천을 통해 많이 가는 맛집을 조회할 수 있습니다.
 
-  - 시간표 이미지를 업로드하면 AI가 자동으로 인식하여 일정을 등록합니다.
-  - 캘린더 UI를 통해 학업 일정을 추가 및 관리할 수 있습니다.
+<img height="600" alt="학교 주변 맛집 추천" src="https://github.com/user-attachments/assets/6b44eee9-cbe8-429e-aa38-cdd19dca0b50" />
 
-- **도서관 스터디룸 예약**:
+<br />
+<br />
 
-  - 앱 내에서 도서관 스터디룸 예약이 가능합니다.
+## 📅 시간표 관리
 
-- **커뮤니티 & 모임 모집**:
+- 시간표 이미지를 업로드하면 AI가 자동으로 인식하여 일정을 등록합니다.
+- 캘린더 UI를 통해 학업 일정을 추가 및 관리할 수 있습니다.
 
-  - 튜터링, 스터디, 프로젝트 등 다양한 모임을 모집하고 참여할 수 있습니다.
+<img alt="시간표 관리" height="600" src="https://github.com/user-attachments/assets/a6662139-ec4b-4cbe-8103-0ab52e1a9aed">
 
-- **중고 거래**:
+<br />
+<br />
 
-  - 교재 및 학용품 중고 거래 게시판을 통해 물품을 사고팔 수 있습니다.
+## 🎯 팀원 모집 및 장터 게시판
 
-- **실시간 채팅**:
+튜터링, 스터디, 프로젝트 등 다양한 모임을 모집하고 참여할 수 있습니다.  
+원하는 물건을 이미지와 함께 등록해 거래할 수 있습니다.
 
-  - 1:1 채팅 및 그룹 채팅 기능을 지원합니다.
-  - Socket.IO 기반 과팅(과 소개팅) 기능을 제공합니다.
+<img alt="모집 게시판" height="600" src="https://github.com/user-attachments/assets/9d4fca1f-6d34-41a9-82fe-4c5692b4f1dd">
+<img alt="장터 게시판" height="600" src="https://github.com/user-attachments/assets/ffa99a1b-177c-405c-9e02-6d74d42dea63">
 
-- **AI 챗봇**:
+<br />
+<br />
 
-  - 학교 관련 궁금한 점을 챗봇에게 질문하면 실시간 답변을 받을 수 있습니다.
+## 🤖 AI 챗봇
 
-- **통합 검색**:
-  - ELK Stack 기반으로 게시글, 공지사항 등을 빠르게 검색할 수 있습니다.
+학교 관련 궁금한 점을 챗봇에게 질문하면 실시간 답변을 받을 수 있습니다.
 
-<br/>
-<br/>
+<img alt="챗봇" height="600" src="https://github.com/user-attachments/assets/fcb669e1-4cce-4b81-8568-b2748e919d2f">
 
-# 4. Tasks & Responsibilities (작업 및 역할 분담)
+# ✌️ 작업 및 역할 분담
 
 | 이름   | 분담                                                                                                       |
 | ------ | ---------------------------------------------------------------------------------------------------------- |
@@ -78,137 +82,62 @@
 <br/>
 <br/>
 
-# 5. Technology Stack (기술 스택)
+# 🚀 기술 스택
 
-## 5.1 Frontend
+<markdown-accessiblity-table data-catalyst="">
+  <table>
+    <tbody>
+      <tr>
+        <td align="center" width="160px">FE</td>
+        <td align="center" width="560px">
+          <img src="https://img.shields.io/badge/Flutter 3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/Firebase-DD2C00?style=for-the-badge&logo=firebase&logoColor=white" height="24px"/>
+        </td>
+      </tr>
+      <tr>
+        <td align="center" width="160px">BE</td>
+        <td align="center" width="560px">
+          <img src="https://img.shields.io/badge/Spring Boot 3.4.3-6DB33F?style=for-the-badge&logo=springboot&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/Java 17-red?style=for-the-badge&logo=java&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/Postgresql 17-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/Redis-FF4438?style=for-the-badge&logo=redis&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/Nginx-009639?style=for-the-badge&logo=nginx&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/Elasticsearch-005571?style=for-the-badge&logo=elasticsearch&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/Firebase-DD2C00?style=for-the-badge&logo=firebase&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/New Relic-1CE783?style=for-the-badge&logo=newrelic&logoColor=white" height="24px"/>
+        </td>
+      </tr>
+      <tr>
+        <td align="center" width="160px">AI</td>
+        <td align="center" width="560px">
+          <img src="https://img.shields.io/badge/Python 3.11.3-3776AB?style=for-the-badge&logo=Python&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logo=Ollama&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=FastAPI&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/opencv-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/scikitlearn-F7931E?style=for-the-badge&logo=scikitlearn&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/pytorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" height="24px"/>
+        </td>
+    </tbody>
+  </table>
+</markdown-accessiblity-table>
 
-- **Flutter** 3.x (Dart)
+<br/>
 
-## 5.2 Backend
+# 🏗️ Architecture Overview
 
-- **Spring Boot** 3.x (Java 17)
-- **NestJS** 10.x (TypeScript)
-- **FastAPI** 0.x (Python)
+<img width="100%" alt="image" src="https://github.com/user-attachments/assets/9fa1aa7f-77ed-41f2-906a-c6e295c2e0c7" />
 
-## 5.3 Database
+# 🌱 Team Members (팀원 및 팀 소개)
 
-- **PostgreSQL** 14.x
-- **Redis** 7.x
-
-## 5.4 Infrastructure & DevOps
-
-- **Oracle Cloud** - 클라우드 인프라
-- **Docker** - 컨테이너화
-- **Nginx** - 리버스 프록시 및 웹 서버
-- **GitHub Actions** - CI/CD
-
-## 5.5 Monitoring & Logging
-
-- **New Relic** - APM 모니터링
-- **Elasticsearch** - 로그 분석 및 검색
-
-## 5.6 External Services
-
-- **Firebase** - FCM 푸시 알림
-- **AWS S3** - 파일 스토리지
-
-## 5.7 Collaboration Tools
-
-- **Git** - 버전 관리
-- **Notion** - 문서화 및 협업
-- **Discord** - 팀 커뮤니케이션 및 편의성 파이프라인
+|                                   [주성준](https://github.com/rdyjun)                                   |                                  [백승민](https://github.com/alpin87)                                   |                                 [유제승](https://github.com/Yu-JeSeung)                                 |                                   [우승원](https://github.com/wsw0922)                                   |                               [전승빈](https://github.com/JEON-SEUNGBHIN)                                |
+| :-----------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------: |
+| <img width="150" height="150" alt="image" src="https://avatars.githubusercontent.com/u/45596014?v=4" /> | <img width="150" height="150" alt="image" src="https://avatars.githubusercontent.com/u/35371121?v=4" /> | <img width="150" height="150" alt="image" src="https://avatars.githubusercontent.com/u/88806404?v=4" /> | <img width="150" height="150" alt="image" src="https://avatars.githubusercontent.com/u/107173046?v=4" /> | <img width="150" height="150" alt="image" src="https://avatars.githubusercontent.com/u/104238055?v=4" /> |
+|                                                   BE                                                    |                                                   BE                                                    |                                                   AI                                                    |                                                    FE                                                    |                                                    FE                                                    |
 
 <br><br>
 
-# 6. Architecture Overview
-
-- 동숲 프로젝트는 마이크로서비스 기반 아키텍처로 설계되었으며, Oracle Cloud 인프라 위에서 구동됩니다.
-
-<img width="1000" height="700" alt="image" src="https://github.com/user-attachments/assets/2b088207-9c65-4065-baaf-7dfb09d34d7d" />
-
-<br/>
-<br/>
-
-## 아키텍처
-
-```
-backend (API Gateway)
-│  REST/gRPC
-▼
-AI (this repo)
-├─ LLM                  # LLM 파이프라인/클라이언트/프롬프트·유틸
-├─ text_filtering       # 비속어/유해 표현 감지 API/룰·모델
-├─ image_analysis       # OCR/시각 분석 노트북·스크립트
-├─ main.py              # 기본 실행 엔트리포인트 (서비스 통합)
-└─ app_oss_main.py      # OSS(OpenAI 호환) 엔드포인트 실행
-```
-
-## 디렉터리 구조
-
-```
-AI/
-├── LLM
-├── image_analysis
-├── text_filtering
-Main
-├── app_oss_main.py
-├── main.py
-Setting
-├── .dockerignore
-├── .gitignore
-├── Dockerfiles_oss
-└─  Dockerfile
-```
-
-<br>
-
-**Client Layer**
-
-- **Flutter**: Android, iOS 크로스 플랫폼 지원
-
-**API Gateway & Application Layer (Oracle Cloud)**
-
-- **Spring Boot (OpenJDK)**: 메인 REST API 서버
-- **NestJS**: 실시간 과팅 채팅 서버
-- **Python/FastAPI**: 챗봇 및 텍스트 필터링, OpenCV 이미지 전처리
-- **Nginx**: 리버스 프록시
-- **ELK Stack**: 로그 수집 및 검색
-
-**Data Layer**
-
-- **PostgreSQL**: 메인 관계형 데이터베이스
-- **Redis**: 캐시 및 세션 관리
-
-**External Services**
-
-- **Firebase**: FCM 푸시 알림
-- **Discord**: 실시간 백엔드 로그 확인 및 각종 편의성 파이프라인
-
-**DevOps & Infrastructure**
-
-- **Docker**: 컨테이너 기반 배포
-- **GitHub**: 소스 코드 관리 및 CI/CD
-- **New Relic**: APM 성능 모니터링
-- **Oracle Cloud**: 클라우드 인프라 호스팅
-
-<br/>
-
-# 7. Development Workflow (개발 워크플로우)
-
-## 브랜치 전략 (Branch Strategy)
-
-우리의 브랜치 전략은 Git Flow를 기반으로 하며, 다음과 같은 브랜치를 사용합니다.
-
-- Main Branch
-  - 배포 가능한 상태의 코드를 유지합니다.
-  - 모든 배포는 이 브랜치에서 이루어집니다.
-- {Commit Message Convention Style} 기능이름
-  - 팀원 각자의 개발 브랜치입니다.
-  - 모든 기능 개발은 이 브랜치에서 이루어집니다.
-
-<br><br>
-
-# 8. 오픈소스 라이선스
+# 💻 오픈소스 라이선스
 
 본 서비스는 아래 오픈소스/오픈웨이트 소프트웨어를 사용합니다.  
 배포 형태: **서버 호스팅 추론(가중치 미배포)**, **모델/파라미터 수정 없음**.
