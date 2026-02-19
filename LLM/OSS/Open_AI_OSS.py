@@ -801,13 +801,13 @@ def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
         return {"engine":"relation", "text":f"우리는 {ORG_NAME} 정보를 함께 해결하는 대화 파트너이고, 저는 {SERVICE_NAME}의 {BOT_NAME}입니다."}
 
     if mode == "fast":
-        clarify = dept_clarification_message(user_text)
-        if clarify:
-            return {"engine":"fast", "text": clarify}
-
         sched_only = schedule_search(user_text, top_k=8)
         if sched_only:
             return {"engine":"fast", "text": render_chatty_schedule(sched_only, user_text)}
+        
+        clarify = dept_clarification_message(user_text)
+        if clarify:
+            return {"engine":"fast", "text": clarify}
 
         sub = call_submodel(user_text)
         text, url = one_sentence_from_sub_answer(user_text, sub)
