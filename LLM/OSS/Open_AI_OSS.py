@@ -15,8 +15,10 @@ from LLM.sub_model.schedule_index import schedule_search
 
 oss_router = APIRouter()
 load_dotenv()
+
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
+
 ORG_NAME = os.getenv("ORG_NAME", "해당 기관")
 BOT_NAME = os.getenv("BOT_NAME", "챗봇")
 SERVICE_NAME = os.getenv("SERVICE_NAME", "챗봇 서비스")
@@ -24,12 +26,14 @@ ORG_HOMEPAGE_LABEL = os.getenv("ORG_HOMEPAGE_LABEL", "공식 홈페이지")
 ORG_HOMEPAGE_URL = os.getenv("ORG_HOMEPAGE_URL", "https://example.com")
 GRAD_PAGE_URL = os.getenv("GRAD_PAGE_URL", ORG_HOMEPAGE_URL)
 STAFF_URL_PATTERN = os.getenv("STAFF_URL_PATTERN", r"/staff|/contact")
+
 BOT_ALIASES = tuple(x.strip() for x in os.getenv("BOT_ALIASES", "").split(",") if x.strip())
+
 OSS_BASE_URL = os.getenv("OSS_BASE_URL")
 OSS_API_KEY  = os.getenv("OSS_API_KEY")
 OSS_MODEL    = os.getenv("OSS_MODEL")
-
 client = OpenAI(base_url=OSS_BASE_URL, api_key=OSS_API_KEY)
+
 PHONE_GUARD_PAT = re.compile(r"(?:\+?\d[\d\s\--–—−]{6,}\d)")
 URL_PAT         = re.compile(r"https?://\S+")
 PHONE_PAT_KR  = re.compile(r'(0(?:2|[3-9]\d))\D{0,2}(\d{3,4})\D{0,2}(\d{4})')
@@ -37,50 +41,63 @@ TEL_FIRST_PAT = re.compile(
     r'(?:TEL\.?|Tel\.?|T\.?|전화(?:번호)?|연락처)\s*[:.\-]?\s*'
     r'(0(?:2|[3-9]\d))\D{0,2}(\d{3,4})\D{0,2}(\d{4})'
 )
+
 LABEL_PAT       = re.compile(r'^\s*-\s*([^:：]+)[:：]\s*', re.MULTILINE)
 LINE_PAT        = re.compile(r'^\s*-\s*(?P<label>[^:：]+)[:：]\s*(?P<body>.+)$', re.MULTILINE)
 SRC_URL_PAT     = re.compile(r'\(출처:\s*(?P<url>https?://[^)]+)\)')
 SRC_URL_DOT_PAT = re.compile(r'\(출처:\s*[^·\)]*·\s*(?P<url>https?://[^)]+)\)')
 TITLE_URL_PAT   = re.compile(r"^\s*-\s*(?P<title>[^:]+):\s*(?P<url>\S+)", re.MULTILINE)
+
 GOOD_URL_RE     = re.compile(r"/subview\.do($|\?)", re.I)
 STAFF_URL_RE    = re.compile(STAFF_URL_PATTERN, re.I)
 BAD_URL_RE      = re.compile(r"(?:/bbs/|artclView\.do|combBbs)", re.I)
+
 SAFETY_URL_RE   = re.compile(r"(safety|lab|ehs|env|환경|안전)", re.I)
 SAFETY_TITLE_RE = re.compile(r"(연구실|실험실|실습실|안전|환경안전|EHS)", re.I)
 CONTACT_WORD_RE = re.compile(r"(연락처|전화|전화번호|문의)", re.I)
 INTRO_WORD_RE   = re.compile(r"(학부\s*소개|학과\s*소개|소개|안내|개요)", re.I)
+
 SCHED_LINE_RE = re.compile(
     r"^\s*-\s*(?P<title>[^:]+):\s*(?P<s>\d{4}-\d{2}-\d{2})(?:\s*~\s*(?P<e>\d{4}-\d{2}-\d{2}))?$",
     re.MULTILINE
 )
+
 GREETING_RE = re.compile(r"^\s*(안녕|안녕하세요|하이|hello|hi)\b", re.I)
 WHOAMI_EN   = re.compile(r"\b(who\s+are\s+you|what\s+are\s+you|your\s+name)\b", re.I)
 WHOAMI_KO   = re.compile(r"(무슨\s*(챗봇|봇)|뭐\s*하는\s*(챗봇|봇)|역할|무엇을\s*할\s*수|기능|소개해\s*줘)")
 RELATION_RE = re.compile(r"(우리\s*관계|우린\s*무슨\s*관계|너와\s*나|무슨\s*사이|사이(?:야|냐)?|관계(?:야|냐)?)")
+
 UNIT_SUFFIX_RE = re.compile(r"(학부|학과|과|전공|대학|대학원|본부|센터|팀|처|단|부|원)$")
 DEPT_ROOT_SUFFIX_RE = re.compile(r"(공학부|공학과|학부|학과|과)$")
 UNIT_LIKE_LABEL_RE  = re.compile(r"(학과|학부)")
 NON_DEPT_LABEL_RE   = re.compile(r"(팀|지원팀|실|센터|본부)$")
 GENERIC_LABEL_RE    = re.compile(r"(담당부|연락처|대표|대표번호)")
 NON_TARGET_TEAM_PAT = re.compile(r"(정보지원팀|전산실|시설관리팀|재무팀|홍보팀|홍보대사단)")
+
 CEREMONY_RE = re.compile(r"(졸업식|학위수여식)")
 GRAD_POLICY_RE = re.compile(r"(졸업학점|이수학점|졸업요건|전공최저|최저이수|학위수여(?!식)|졸업(?!식))")
 
 PRONOUNS    = ("너","넌","니","네가","당신","챗봇","봇","ai","에이아이", *BOT_ALIASES)
 QWORDS      = ("누구","정체","이름","뭐야","뭐냐","무엇","뉘신","누구야","누구냐")
+
 TOPIC_KWS = ("학부","학과","전공","소개","안내","위치","학사","졸업")
+
 COUNCIL_KWS = (
     "총학생회","총학생","총학","대의원회","대의원실",
     "학생회","학생대표기구","홍보대사단","동아리연합회","동양학보","학보사","총학생실"
 )
+
 SCHEDULE_HINTS_BASE = (
     "학사일정","학사 일정","중간","중간고사","기말","기말고사",
     "수강","정정","성적","등록","보강","개강","종강",
     "휴일","공휴","시험","고사","이번주","다음주","이번달","다음달",
     "졸업식","학위수여식"
 )
+
 STOP_TOKENS = {"담당","담당부","전화","전화번호","연락처","문의","상담","번호"}
 CONTACT_INTENT_RE = re.compile(r"(연락처|전화|전화번호|문의|상담|담당자)")
+GOVERNANCE_REMOVE_RE = re.compile(r"(없애|폐지|해체)\s*(시키|하는\s*법)?")
+GOVERNANCE_TARGET_RE = re.compile(r"(총학생회|대의원회)")
 
 
 def verify_jwt_token(request: Request):
@@ -174,10 +191,6 @@ def looks_like_topic(text: str) -> bool:
     return bool(UNIT_SUFFIX_RE.search(t)) and len(t) <= 12
 
 
-def _kcompact(s: str) -> str:
-    return re.sub(r"[^가-힣A-Za-z0-9]", "", s or "")
-
-
 def _canon_unit(s: str) -> str:
     s = (s or "").strip()
     s = re.sub(r"\s+", "", s).replace("·", "").replace(".", "")
@@ -190,6 +203,7 @@ def _dept_map_path() -> Path:
     if env_p:
         return Path(os.path.expanduser(env_p)).resolve()
     return (REPO_ROOT / "data" / "department.txt").resolve()
+
 
 def _make_aliases(name: str) -> set[str]:
     raw = name.strip()
@@ -210,6 +224,7 @@ def _make_aliases(name: str) -> set[str]:
         }
     variants = {v for v in variants if v and isinstance(v, str)}
     return variants
+
 
 def load_dept_map():
     path = _dept_map_path()
@@ -233,8 +248,8 @@ def load_dept_map():
                 continue
     return dept_map, alias
 
-DEPT_MAP, DEPT_ALIAS = load_dept_map()
 
+DEPT_MAP, DEPT_ALIAS = load_dept_map()
 ALL_DEPT_ALIASES: set[str] = set()
 for _s in DEPT_ALIAS.values():
     ALL_DEPT_ALIASES |= set(_s)
@@ -331,6 +346,8 @@ def dept_clarification_message(user_text: str) -> Optional[str]:
     if short_like or (len(candidates) >= 2 and hint is None):
         if candidates:
             picks = ", ".join(candidates[:4])
+            if len(candidates) == 1:
+                return f"혹시 '{candidates[0]}'을(를) 찾으시나요? 학과 풀네임으로 다시 입력해 주세요."
             return f"학과명이 축약되어 후보가 여러 개예요. 풀네임으로 입력해 주세요. 예: {picks}"
         return "학과명이 축약되어 정확한 매칭이 어려워요. 학과 풀네임으로 입력해 주세요. 예: 컴퓨터소프트웨어공학과 담당자 연락처"
     return None
@@ -338,11 +355,18 @@ def dept_clarification_message(user_text: str) -> Optional[str]:
 
 def expand_synonyms(user_text: str) -> list[str]:
     s = user_text or ""
-    syn = []
+    syn: list[str] = []
+
     if ("학생성공" in s) or ("성공지원" in s) or ("학생지원" in s):
         syn += ["학생성공", "학생지원", "학생지원팀"]
-    if "컴퓨터공학" in s and "소프트웨어" not in s:
-        syn += ["컴퓨터소프트웨어공학과","컴퓨터소프트웨어"]
+
+    hint = detect_dept_hint(s)
+    if hint:
+        aliases = list(hint.get("aliases") or [])
+        aliases = sorted(set(aliases), key=len, reverse=True)[:30]
+        syn += aliases
+
+    syn = list(dict.fromkeys([x for x in syn if x and isinstance(x, str)]))
     return syn
 
 
@@ -398,6 +422,7 @@ def _phone_near_alias(text: str, aliases: set[str]) -> Optional[str]:
         return best
     return "-".join(phones[0].groups())
 
+
 def _hint_matches_line(label: str, body: str, hint: dict | None) -> bool:
     if not hint:
         return False
@@ -405,6 +430,7 @@ def _hint_matches_line(label: str, body: str, hint: dict | None) -> bool:
     if not aliases:
         return False
     return any((a in (label or "")) or (a in (body or "")) for a in aliases)
+
 
 def _fallback_phone_from_sub_answer(user_text: str, sub_answer: str, hint: dict | None = None) -> Optional[str]:
     if not sub_answer:
@@ -757,13 +783,11 @@ def ensure_messages(req: ChatReq, user_text: str) -> List[Dict[str, str]]:
     return [{"role": "user", "content": user_text}]
 
 
-
 @oss_router.post("/chatbot")
 def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
     user_text = extract_user_text(req)
     messages_for_oss = ensure_messages(req, user_text)
-    GOVERNANCE_REMOVE_RE = re.compile(r"(없애|폐지|해체)\s*(시키|하는\s*법)?")
-    GOVERNANCE_TARGET_RE = re.compile(r"(총학생회|대의원회)")
+
     if GOVERNANCE_REMOVE_RE.search(user_text) and GOVERNANCE_TARGET_RE.search(user_text):
         return {"engine": "guard", "text": "해당 요청은 도움을 드리기 어려워요; 공식 절차나 문의는 학생자치기구 페이지의 연락처를 이용해 주세요."}
 
@@ -775,6 +799,7 @@ def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
         return {"engine":"whoami", "text":f"{SERVICE_NAME}의 {BOT_NAME}입니다."}
     if mode == "relation":
         return {"engine":"relation", "text":f"우리는 {ORG_NAME} 정보를 함께 해결하는 대화 파트너이고, 저는 {SERVICE_NAME}의 {BOT_NAME}입니다."}
+
     if mode == "fast":
         clarify = dept_clarification_message(user_text)
         if clarify:
@@ -782,8 +807,7 @@ def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
 
         sched_only = schedule_search(user_text, top_k=8)
         if sched_only:
-            pretty = render_chatty_schedule(sched_only, user_text)
-            return {"engine":"fast", "text": pretty}
+            return {"engine":"fast", "text": render_chatty_schedule(sched_only, user_text)}
 
         sub = call_submodel(user_text)
         text, url = one_sentence_from_sub_answer(user_text, sub)
