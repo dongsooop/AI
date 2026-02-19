@@ -10,6 +10,9 @@ import base64
 from jose.exceptions import ExpiredSignatureError
 import datetime as dt
 
+from LLM.sub_model.query_index import build_answer
+from LLM.sub_model.schedule_index import schedule_search
+
 oss_router = APIRouter()
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -25,12 +28,8 @@ BOT_ALIASES = tuple(x.strip() for x in os.getenv("BOT_ALIASES", "").split(",") i
 OSS_BASE_URL = os.getenv("OSS_BASE_URL")
 OSS_API_KEY  = os.getenv("OSS_API_KEY")
 OSS_MODEL    = os.getenv("OSS_MODEL")
+
 client = OpenAI(base_url=OSS_BASE_URL, api_key=OSS_API_KEY)
-
-from LLM.sub_model.query_index import build_answer
-from LLM.sub_model.schedule_index import schedule_search
-
-
 PHONE_GUARD_PAT = re.compile(r"(?:\+?\d[\d\s\--–—−]{6,}\d)")
 URL_PAT         = re.compile(r"https?://\S+")
 PHONE_PAT_KR  = re.compile(r'(0(?:2|[3-9]\d))\D{0,2}(\d{3,4})\D{0,2}(\d{4})')
@@ -81,7 +80,7 @@ SCHEDULE_HINTS_BASE = (
     "졸업식","학위수여식"
 )
 STOP_TOKENS = {"담당","담당부","전화","전화번호","연락처","문의","상담","번호"}
-
+CONTACT_INTENT_RE = re.compile(r"(연락처|전화|전화번호|문의|상담|담당자)")
 
 
 def verify_jwt_token(request: Request):
@@ -284,12 +283,64 @@ def detect_dept_hint(text: str):
     return None
 
 
+def _extract_dept_query_core(text: str) -> str:
+    t = (text or "").strip()
+    t = CONTACT_INTENT_RE.sub(" ", t)
+    t = re.sub(r"(알려줘|알려\s*주세요|어디|뭐야|뭐지|좀)", " ", t)
+    t = re.sub(r"[^가-힣A-Za-z0-9·\s]", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _find_dept_candidates(core: str, limit: int = 5) -> list[str]:
+    if not core:
+        return []
+    toks = [x for x in re.findall(r"[가-힣A-Za-z0-9·]{2,}", core) if x not in STOP_TOKENS]
+    if not toks:
+        return []
+    scored = []
+    for canon, meta in DEPT_MAP.items():
+        aliases = DEPT_ALIAS.get(canon, {meta["name"]})
+        score = 0.0
+        for tok in toks:
+            if any((tok in a) or (a in tok) for a in aliases):
+                score += 3.0
+            elif tok in canon:
+                score += 2.0
+            elif len(tok) >= 2 and tok[:2] in canon:
+                score += 1.0
+        if score > 0:
+            scored.append((score, meta["name"]))
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    names = [n for _, n in scored]
+    return list(dict.fromkeys(names))[:limit]
+
+
+def dept_clarification_message(user_text: str) -> Optional[str]:
+    if not CONTACT_INTENT_RE.search(user_text or ""):
+        return None
+    core = _extract_dept_query_core(user_text)
+    if not core:
+        return "학과(또는 부서) 풀네임으로 다시 입력해 주세요. 예: 컴퓨터소프트웨어공학과 담당자 연락처"
+
+    hint = detect_dept_hint(core)
+    candidates = _find_dept_candidates(core, limit=5)
+    compact = re.sub(r"\s+", "", core)
+    short_like = (len(compact) <= 4) and not re.search(r"(학과|학부|전공|공학과|공학부)$", compact)
+
+    if short_like or (len(candidates) >= 2 and hint is None):
+        if candidates:
+            picks = ", ".join(candidates[:4])
+            return f"학과명이 축약되어 후보가 여러 개예요. 풀네임으로 입력해 주세요. 예: {picks}"
+        return "학과명이 축약되어 정확한 매칭이 어려워요. 학과 풀네임으로 입력해 주세요. 예: 컴퓨터소프트웨어공학과 담당자 연락처"
+    return None
+
+
 def expand_synonyms(user_text: str) -> list[str]:
     s = user_text or ""
     syn = []
     if ("학생성공" in s) or ("성공지원" in s) or ("학생지원" in s):
         syn += ["학생성공", "학생지원", "학생지원팀"]
-    # 간단 부서 동의어(예: 컴퓨터공학 → 컴퓨터소프트웨어)
     if "컴퓨터공학" in s and "소프트웨어" not in s:
         syn += ["컴퓨터소프트웨어공학과","컴퓨터소프트웨어"]
     return syn
@@ -346,6 +397,38 @@ def _phone_near_alias(text: str, aliases: set[str]) -> Optional[str]:
     if best:
         return best
     return "-".join(phones[0].groups())
+
+def _hint_matches_line(label: str, body: str, hint: dict | None) -> bool:
+    if not hint:
+        return False
+    aliases = set(hint.get("aliases") or [])
+    if not aliases:
+        return False
+    return any((a in (label or "")) or (a in (body or "")) for a in aliases)
+
+def _fallback_phone_from_sub_answer(user_text: str, sub_answer: str, hint: dict | None = None) -> Optional[str]:
+    if not sub_answer:
+        return None
+
+    if hint:
+        for mline in LINE_PAT.finditer(sub_answer):
+            label = (mline.group("label") or "").strip()
+            body = (mline.group("body") or "").strip()
+            if not _hint_matches_line(label, body, hint):
+                continue
+            mph = TEL_FIRST_PAT.search(body) or PHONE_PAT_KR.search(body)
+            if mph:
+                return "-".join(mph.groups())
+
+        p = _phone_near_alias(sub_answer, set(hint.get("aliases") or []))
+        if p:
+            return p
+        return None
+
+    m = TEL_FIRST_PAT.search(sub_answer) or PHONE_PAT_KR.search(sub_answer)
+    if m:
+        return "-".join(m.groups())
+    return None
 
 
 def looks_like_schedule(text: str) -> bool:
@@ -506,10 +589,21 @@ def one_sentence_from_sub_answer(user_text: str, sub_answer: str) -> tuple[str, 
         return ("요청하신 정보를 찾지 못했습니다.", None)
     hint = detect_dept_hint(user_text)
     label, phone, url = _parse_bullets_and_pick(user_text, sub_answer, hint)
+    contact_intent = bool(CONTACT_INTENT_RE.search(user_text or ""))
+    if contact_intent and not phone:
+        phone = _fallback_phone_from_sub_answer(user_text, sub_answer, hint)
+
     url = ensure_layout_unknown(url) if url else None
+
+    if contact_intent and hint and label and not _hint_matches_line(label, "", hint):
+        label = None
 
     if label and phone:
         return (f"{label} 전화번호는 {phone}입니다.", url)
+    if contact_intent and phone:
+        return (f"요청하신 부서 담당자 전화번호는 {phone}입니다.", url)
+    if contact_intent and not phone:
+        return ("담당자 연락처를 바로 찾지 못했습니다. 학과(또는 부서) 풀네임으로 다시 입력해 주세요.", url)
     if label and url:
         return (f"{label} 정보는 {url}에서 확인할 수 있습니다.", url)
 
@@ -682,6 +776,10 @@ def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
     if mode == "relation":
         return {"engine":"relation", "text":f"우리는 {ORG_NAME} 정보를 함께 해결하는 대화 파트너이고, 저는 {SERVICE_NAME}의 {BOT_NAME}입니다."}
     if mode == "fast":
+        clarify = dept_clarification_message(user_text)
+        if clarify:
+            return {"engine":"fast", "text": clarify}
+
         sched_only = schedule_search(user_text, top_k=8)
         if sched_only:
             pretty = render_chatty_schedule(sched_only, user_text)
