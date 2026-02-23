@@ -68,9 +68,36 @@ df["title"]       = df["title"].apply(normalize_text)
 df["content"]     = df["content"].apply(normalize_text)
 df["fulltext"]    = (df["title"] + " " + df["content"]).apply(normalize_text)
 
+def _merge_by_url(df_in: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for url, g in df_in.groupby("url", dropna=False, sort=False):
+        g = g.reset_index(drop=True)
+        source = (g["source"].dropna().astype(str).iloc[0] if "source" in g.columns and not g["source"].dropna().empty else "main")
+        titles = [str(x).strip() for x in g["title"].tolist() if str(x).strip()]
+        contents = [str(x).strip() for x in g["content"].tolist() if str(x).strip()]
+        titles = list(dict.fromkeys(titles))
+        contents = list(dict.fromkeys(contents))
+        merged_title = " / ".join(titles)
+        merged_content = "\n".join(contents)
+        merged_fulltext = normalize_text(f"{merged_title} {merged_content}")
 
-df = df.drop_duplicates(subset=["url"]).reset_index(drop=True)
-print(f"   - 중복 제거 후: {len(df)}개 문서")
+        rows.append({
+            "title": merged_title,
+            "url": url,
+            "source": source,
+            "content": merged_content,
+            "fulltext": merged_fulltext,
+        })
+    return pd.DataFrame(rows)
+
+before_rows = len(df)
+before_unique_url = int(df["url"].nunique(dropna=True))
+df = _merge_by_url(df).reset_index(drop=True)
+after_rows = len(df)
+print(f"   - 원본 행 수: {before_rows} / 고유 URL 수: {before_unique_url}")
+print(f"   - URL 병합 후 문서 수: {after_rows}")
+
+print(f"   - 중복 제거(병합) 후: {len(df)}개 문서")
 
 
 print("✂️ 문서 청킹 중...")

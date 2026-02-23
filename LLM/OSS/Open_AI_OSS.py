@@ -98,6 +98,7 @@ STOP_TOKENS = {"담당","담당부","전화","전화번호","연락처","문의"
 CONTACT_INTENT_RE = re.compile(r"(연락처|전화|전화번호|문의|상담|담당자)")
 GOVERNANCE_REMOVE_RE = re.compile(r"(없애|폐지|해체)\s*(시키|하는\s*법)?")
 GOVERNANCE_TARGET_RE = re.compile(r"(총학생회|대의원회)")
+JSON_ONLY_MODE = os.getenv("JSON_ONLY_MODE", "0").strip() == "1"
 
 
 def verify_jwt_token(request: Request):
@@ -491,6 +492,9 @@ def call_submodel(user_text: str) -> str:
     except Exception:
         base = ""
 
+    if JSON_ONLY_MODE:
+        return base
+
     try:
         sched = schedule_search(user_text, top_k=8)
     except Exception:
@@ -748,16 +752,41 @@ def one_sentence_dorm(user_text: str, sub_answer: str) -> tuple[str, Optional[st
     return (f"‘{user_text}’ 관련 공식 안내는 ‘{best_title}’ 페이지({best_url})에서 확인할 수 있습니다.", best_url)
 
 
+def _extract_url_from_text(text: str) -> Optional[str]:
+    if not text:
+        return None
+    m = SRC_URL_PAT.search(text) or SRC_URL_DOT_PAT.search(text)
+    if m:
+        return ensure_layout_unknown(_clean_url(m.group("url").strip()))
+    urls = URL_PAT.findall(text)
+    if urls:
+        return ensure_layout_unknown(_clean_url(urls[0]))
+    return None
+
 def one_sentence_grad(user_text: str, sub_answer: str) -> tuple[str, Optional[str]]:
-    T2_TOTAL, T2_MAJOR = 75, 52
-    T3_TOTAL, T3_MAJOR = 110, 78
+    if not sub_answer:
+        return (f"졸업 관련 정보는 {GRAD_PAGE_URL}에서 확인할 수 있습니다.", GRAD_PAGE_URL)
+
+    lines = [ln.strip().lstrip("- ").strip() for ln in sub_answer.splitlines() if ln.strip()]
+    lines = [re.sub(r"\*\*", "", ln) for ln in lines]
     ask_2 = bool(re.search(r"2\s*년제", user_text))
     ask_3 = bool(re.search(r"3\s*년제", user_text))
-    if ask_2 and not ask_3:
-        return (f"2년제 졸업학점은 총 {T2_TOTAL}학점(전공최저이수 {T2_MAJOR}학점)이며 자세한 내용은 {GRAD_PAGE_URL}에서 확인할 수 있습니다.", GRAD_PAGE_URL)
-    if ask_3 and not ask_2:
-        return (f"3년제 졸업학점은 총 {T3_TOTAL}학점(전공최저이수 {T3_MAJOR}학점)이며 자세한 내용은 {GRAD_PAGE_URL}에서 확인할 수 있습니다.", GRAD_PAGE_URL)
-    return (f"졸업학점은 2년제 총 {T2_TOTAL}학점(전공최저 {T2_MAJOR}학점), 3년제 총 {T3_TOTAL}학점(전공최저 {T3_MAJOR}학점)이며 자세한 내용은 {GRAD_PAGE_URL}에서 확인할 수 있습니다.", GRAD_PAGE_URL)
+
+    preferred = []
+    for ln in lines:
+        if ask_2 and ("2년제" in ln):
+            preferred.append(ln)
+        elif ask_3 and ("3년제" in ln):
+            preferred.append(ln)
+        elif any(k in ln for k in ("졸업학점", "졸업이수 학점", "전공최저", "총 졸업학점")):
+            preferred.append(ln)
+
+    summary_line = preferred[0] if preferred else (lines[0] if lines else "졸업 관련 정보를 찾지 못했습니다.")
+    src_url = _extract_url_from_text(sub_answer) or ensure_layout_unknown(GRAD_PAGE_URL)
+
+    if "확인할 수 있습니다." in summary_line:
+        return (summary_line, src_url)
+    return (f"{summary_line} 자세한 내용은 {src_url}에서 확인할 수 있습니다.", src_url)
 
 
 class ChatReq(BaseModel):
@@ -860,8 +889,14 @@ def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
                 sub = call_submodel(user_text)
                 if looks_like_schedule(user_text) and sub:
                     return {"engine":"fast", "text": render_chatty_schedule(sub, user_text)}
-                text, _ = one_sentence_topic(user_text, sub)
-                out = text if looks_like_topic(user_text) else "잘 이해하지 못했어요. 다시 질문해주세요."
+                if sub:
+                    if looks_like_topic(user_text):
+                        text, _ = one_sentence_topic(user_text, sub)
+                    else:
+                        text, _ = one_sentence_from_sub_answer(user_text, sub)
+                    out = text
+                else:
+                    out = "잘 이해하지 못했어요. 다시 질문해주세요."
         return {"engine":"oss", "text": out}
 
     sub = call_submodel(user_text)
@@ -880,6 +915,7 @@ def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
 
 def decide_mode(user_text: str) -> str:
     text = (user_text or "").strip()
+    compact = re.sub(r"\s+", "", text)
     if not text:
         return "greet"
     if GREETING_RE.search(text):
@@ -890,12 +926,12 @@ def decide_mode(user_text: str) -> str:
         return "relation"
     if CEREMONY_RE.search(text):
         return "fast"
-    if "학사일정" in text or "학사 일정" in text or looks_like_schedule(text):
+    if "학사일정" in text or "학사 일정" in text or "학사일정" in compact or looks_like_schedule(text):
         return "fast"
 
     contact_kws = ("연락처","전화","번호","상담","문의")
     if any(k in text for k in COUNCIL_KWS): return "fast"
-    if any(k in text for k in contact_kws): return "fast"
+    if any(k in text for k in contact_kws) or CONTACT_INTENT_RE.search(text): return "fast"
 
     policy_kws = ("복학","휴학","휴·복학","휴복학","학적","학적변동","자퇴","전과","재입학",
                 "제증명","수강신청","등록","장학","성적","계절학기","학점포기","학기포기")
