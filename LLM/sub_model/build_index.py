@@ -6,16 +6,16 @@ from sentence_transformers import SentenceTransformer
 from rank_bm25 import BM25Okapi
 from dotenv import load_dotenv
 
-from LLM.sub_model.index_utils import (
-    normalize_text, chunk_text, get_tokenizer,
-    extract_units_and_contacts, clean_name, compose_contact_passage,
-    dump_json_gz
-)
-# from index_utils import (
+# from LLM.sub_model.index_utils import (
 #     normalize_text, chunk_text, get_tokenizer,
 #     extract_units_and_contacts, clean_name, compose_contact_passage,
 #     dump_json_gz
 # )
+from index_utils import (
+    normalize_text, chunk_text, get_tokenizer,
+    extract_units_and_contacts, clean_name, compose_contact_passage,
+    dump_json_gz
+)
 
 
 load_dotenv()
@@ -69,10 +69,19 @@ df["content"]     = df["content"].apply(normalize_text)
 df["fulltext"]    = (df["title"] + " " + df["content"]).apply(normalize_text)
 
 def _merge_by_url(df_in: pd.DataFrame) -> pd.DataFrame:
+    df = df_in.copy()
+    df["url"] = df["url"].fillna("").astype(str).str.strip()
     rows = []
-    for url, g in df_in.groupby("url", dropna=False, sort=False):
+    df_has = df[df["url"].ne("")].copy()
+    for url, g in df_has.groupby("url", dropna=False, sort=False):
         g = g.reset_index(drop=True)
-        source = (g["source"].dropna().astype(str).iloc[0] if "source" in g.columns and not g["source"].dropna().empty else "main")
+
+        source = (
+            g["source"].dropna().astype(str).iloc[0]
+            if "source" in g.columns and not g["source"].dropna().empty
+            else "main"
+        )
+
         titles = [str(x).strip() for x in g["title"].tolist() if str(x).strip()]
         contents = [str(x).strip() for x in g["content"].tolist() if str(x).strip()]
         titles = list(dict.fromkeys(titles))
@@ -88,6 +97,21 @@ def _merge_by_url(df_in: pd.DataFrame) -> pd.DataFrame:
             "content": merged_content,
             "fulltext": merged_fulltext,
         })
+
+    df_no = df[df["url"].eq("")].copy()
+    if not df_no.empty:
+        for _, r in df_no.iterrows():
+            title = str(r.get("title", "")).strip()
+            content = str(r.get("content", "")).strip()
+            source = str(r.get("source", "main")).strip() or "main"
+            rows.append({
+                "title": title,
+                "url": "",
+                "source": source,
+                "content": content,
+                "fulltext": normalize_text(f"{title} {content}"),
+            })
+
     return pd.DataFrame(rows)
 
 before_rows = len(df)

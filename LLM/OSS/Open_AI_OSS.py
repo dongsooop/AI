@@ -778,7 +778,7 @@ def one_sentence_grad(user_text: str, sub_answer: str) -> tuple[str, Optional[st
             preferred.append(ln)
         elif ask_3 and ("3년제" in ln):
             preferred.append(ln)
-        elif any(k in ln for k in ("졸업학점", "졸업이수 학점", "전공최저", "총 졸업학점")):
+        elif any(k in ln for k in ("졸업학점", "졸업이수 학점", "전공최저", "총 졸업학점", "졸업이수학점")):
             preferred.append(ln)
 
     summary_line = preferred[0] if preferred else (lines[0] if lines else "졸업 관련 정보를 찾지 못했습니다.")
