@@ -73,7 +73,7 @@ def _merge_by_url(df_in: pd.DataFrame) -> pd.DataFrame:
     df["url"] = df["url"].fillna("").astype(str).str.strip()
     rows = []
     df_has = df[df["url"].ne("")].copy()
-    for url, g in df_has.groupby("url", dropna=False, sort=False):
+    for url, g in df_has.groupby("url", sort=False):
         g = g.reset_index(drop=True)
 
         source = (
