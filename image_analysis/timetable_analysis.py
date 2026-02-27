@@ -4,6 +4,8 @@ import cv2, re, numpy as np
 import pytesseract
 from PIL import Image
 import os
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from jose import JWTError, jwt
 from dotenv import load_dotenv
 import base64
@@ -46,6 +48,9 @@ def _get_pool() -> Pool:
     if _POOL is None:
         _POOL = Pool(processes=os.cpu_count() or 8)
     return _POOL
+
+
+_THREAD_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
 def _ocr_task(roi_bytes: bytes) -> List[str]:
@@ -420,7 +425,8 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
         npimg = np.frombuffer(file_bytes, np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
-        schedule = extract_schedule_fixed_scaled(img)
+        loop = asyncio.get_event_loop()
+        schedule = await loop.run_in_executor(_THREAD_EXECUTOR, extract_schedule_fixed_scaled, img)
 
         if not schedule:
             return Response(status_code=204)
