@@ -52,7 +52,7 @@ def _get_pool() -> Pool:
     return _POOL
 
 
-_THREAD_EXECUTOR = ThreadPoolExecutor(max_workers=2)
+_THREAD_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 # ── 인메모리 잡 큐 ──────────────────────────────────────────────
 class JobStatus(str, Enum):
@@ -472,6 +472,9 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
         file_bytes = await file.read()
         npimg = np.frombuffer(file_bytes, np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+
+        if img is None:
+            return JSONResponse(status_code=500, content={"error": "Invalid image format"})
 
         job_id = str(uuid.uuid4())
         _job_store[job_id] = {
