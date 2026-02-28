@@ -516,9 +516,11 @@ async def get_timetable_result(job_id: str, request: Request):
         return JSONResponse(status_code=504, content={"error": "Processing timeout"})
 
     if job["status"] == JobStatus.ERROR:
+        _job_store.pop(job_id, None)
         return JSONResponse(status_code=500, content={"error": job["error"]})
 
     result = job["result"]
+    _job_store.pop(job_id, None)
     if not result:
         return Response(status_code=204)
     return JSONResponse(content=result)
