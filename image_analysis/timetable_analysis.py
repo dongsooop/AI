@@ -1,16 +1,16 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from fastapi.responses import Response, JSONResponse
 import cv2, re, numpy as np
-import pytesseract
 from PIL import Image
-import os
+import os, asyncio, uuid, pytesseract, base64
+from concurrent.futures import ThreadPoolExecutor
 from jose import JWTError, jwt
 from dotenv import load_dotenv
-import base64
 from jose.exceptions import ExpiredSignatureError
-from typing import List, Optional
-from datetime import time
+from typing import List, Optional, Dict, Any
+from datetime import time, datetime, timedelta, timezone
 from multiprocessing import Pool, cpu_count
+from enum import Enum
 
 router = APIRouter()
 load_dotenv()
@@ -39,6 +39,7 @@ HOUGH_THRESH, HOUGH_MINLINE, HOUGH_MAXGAP = 120, 80, 10
 NEAR_EPS, BAND_MERGE = 6, 8
 TRIM_OUTER, TRIM_X_GAP, TRIM_Y_GAP = True, 20, 15
 
+JOB_TTL = timedelta(minutes=10)
 
 _POOL: Optional[Pool] = None
 def _get_pool() -> Pool:
@@ -46,6 +47,57 @@ def _get_pool() -> Pool:
     if _POOL is None:
         _POOL = Pool(processes=os.cpu_count() or 8)
     return _POOL
+
+
+class JobStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE    = "done"
+    ERROR   = "error"
+
+_job_store: Dict[str, Dict[str, Any]] = {}
+_job_queue: asyncio.Queue = asyncio.Queue(maxsize=20)
+_WORKER_CONCURRENCY = 2
+_THREAD_EXECUTOR = ThreadPoolExecutor(max_workers=2)
+
+
+def _cleanup_old_jobs():
+    now = datetime.now(timezone.utc)
+    expired = [
+        job_id for job_id, job in _job_store.items()
+        if now - job.get("created_at", now) > JOB_TTL
+    ]
+    for job_id in expired:
+        _job_store.pop(job_id, None)
+
+
+async def _queue_worker():
+    loop = asyncio.get_running_loop()
+    while True:
+        job_id, img = await _job_queue.get()
+        job = _job_store.get(job_id)
+        if job is None:
+            _job_queue.task_done()
+            continue
+        job["status"] = JobStatus.RUNNING
+        try:
+            result = await loop.run_in_executor(
+                _THREAD_EXECUTOR, extract_schedule_fixed_scaled, img
+            )
+            job["status"] = JobStatus.DONE
+            job["result"] = result
+        except Exception as exc:
+            job["status"] = JobStatus.ERROR
+            job["error"]  = str(exc)
+        finally:
+            job["event"].set()
+            _job_queue.task_done()
+            _cleanup_old_jobs()
+
+
+async def start_queue_workers():
+    for _ in range(_WORKER_CONCURRENCY):
+        asyncio.create_task(_queue_worker())
 
 
 def _ocr_task(roi_bytes: bytes) -> List[str]:
@@ -386,6 +438,12 @@ def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
         return []
 
     merged = _merge_adjacent_same_name(schedule_rows)
+
+    # 메모리 확보
+    del base_gray
+    del vmask
+    del hmask
+
     return merged
 
 
@@ -420,10 +478,49 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
         npimg = np.frombuffer(file_bytes, np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
-        schedule = extract_schedule_fixed_scaled(img)
+        if img is None:
+            return JSONResponse(status_code=400, content={"error": "Invalid image format"})
 
-        if not schedule:
-            return Response(status_code=204)
-        return JSONResponse(content=schedule)
+        job_id = str(uuid.uuid4())
+        _job_store[job_id] = {
+            "status":     JobStatus.PENDING,
+            "result":     None,
+            "error":      None,
+            "event":      asyncio.Event(),
+            "created_at": datetime.now(timezone.utc),
+        }
+        try:
+            await asyncio.wait_for(_job_queue.put((job_id, img)), timeout=30.0)
+        except asyncio.TimeoutError:
+            _job_store.pop(job_id, None)
+            return JSONResponse(status_code=503, content={"error": "server is busy"})
+
+        return JSONResponse(status_code=202, content={"job_id": job_id})
+
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@router.get("/timetable_result/{job_id}")
+async def get_timetable_result(job_id: str, request: Request):
+    _ = verify_jwt_token(request)
+
+    job = _job_store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+
+    try:
+        await asyncio.wait_for(job["event"].wait(), timeout=120.0)
+    except asyncio.TimeoutError:
+        _job_store.pop(job_id, None)
+        return JSONResponse(status_code=504, content={"error": "Processing timeout"})
+
+    if job["status"] == JobStatus.ERROR:
+        _job_store.pop(job_id, None)
+        return JSONResponse(status_code=500, content={"error": job["error"]})
+
+    result = job["result"]
+    _job_store.pop(job_id, None)
+    if not result:
+        return Response(status_code=204)
+    return JSONResponse(content=result)

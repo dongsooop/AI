@@ -14,6 +14,9 @@ crawling
 debug
 finetuning
 test
+CLAUDE.md
+.claude/
+
 # 기본적으로 OSS 디렉토리는 제외하되, 공개할 엔드포인트 파일은 추적 허용
 LLM/OSS/*
 !LLM/OSS/
