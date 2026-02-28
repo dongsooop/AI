@@ -489,7 +489,11 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
             "event":      asyncio.Event(),
             "created_at": datetime.now(timezone.utc),
         }
-        await _job_queue.put((job_id, img))
+        try:
+            await asyncio.wait_for(_job_queue.put((job_id, img)), timeout=30.0)
+        except asyncio.TimeoutError:
+            _job_store.pop(job_id, None)
+            return JSONResponse(status_code=503, content={"error": "server is busy"})
 
         return JSONResponse(status_code=202, content={"job_id": job_id})
 
@@ -511,7 +515,6 @@ async def get_timetable_result(job_id: str, request: Request):
         _job_store.pop(job_id, None)
         return JSONResponse(status_code=504, content={"error": "Processing timeout"})
 
-    job = _job_store.pop(job_id)
     if job["status"] == JobStatus.ERROR:
         return JSONResponse(status_code=500, content={"error": job["error"]})
 
