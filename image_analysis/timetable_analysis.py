@@ -63,7 +63,7 @@ class JobStatus(str, Enum):
 
 _job_store: Dict[str, Dict[str, Any]] = {}
 _job_queue: asyncio.Queue = asyncio.Queue()
-_WORKER_CONCURRENCY = 2   # 동시 처리할 최대 잡 수
+_WORKER_CONCURRENCY = 4   # 동시 처리할 최대 잡 수
 
 
 async def _queue_worker():
@@ -498,7 +498,10 @@ async def get_timetable_result(job_id: str, request: Request):
         raise HTTPException(status_code=404, detail="job not found")
 
     # 워커가 event.set()을 호출할 때까지 논블로킹 대기
-    await job["event"].wait()
+    try:
+        await asyncio.wait_for(job["event"].wait(), timeout=120.0)
+    except asyncio.TimeoutError:
+        return JSONResponse(status_code=504, content={"error": "Processing timeout"})
 
     job = _job_store.pop(job_id)
     if job["status"] == JobStatus.ERROR:
