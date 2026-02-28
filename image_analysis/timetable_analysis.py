@@ -5,14 +5,16 @@ import pytesseract
 from PIL import Image
 import os
 import asyncio
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from jose import JWTError, jwt
 from dotenv import load_dotenv
 import base64
 from jose.exceptions import ExpiredSignatureError
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import time
 from multiprocessing import Pool, cpu_count
+from enum import Enum
 
 router = APIRouter()
 load_dotenv()
@@ -50,7 +52,46 @@ def _get_pool() -> Pool:
     return _POOL
 
 
-_THREAD_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+_THREAD_EXECUTOR = ThreadPoolExecutor(max_workers=2)
+
+# ── 인메모리 잡 큐 ──────────────────────────────────────────────
+class JobStatus(str, Enum):
+    PENDING   = "pending"
+    RUNNING   = "running"
+    DONE      = "done"
+    ERROR     = "error"
+
+_job_store: Dict[str, Dict[str, Any]] = {}
+_job_queue: asyncio.Queue = asyncio.Queue()
+_WORKER_CONCURRENCY = 2   # 동시 처리할 최대 잡 수
+
+
+async def _queue_worker():
+    """큐에서 잡을 꺼내 처리하고, 완료 시 Event로 대기 중인 핸들러에 신호를 보낸다."""
+    loop = asyncio.get_running_loop()
+    while True:
+        job_id, img = await _job_queue.get()
+        job = _job_store[job_id]
+        job["status"] = JobStatus.RUNNING
+        try:
+            result = await loop.run_in_executor(
+                _THREAD_EXECUTOR, extract_schedule_fixed_scaled, img
+            )
+            job["status"] = JobStatus.DONE
+            job["result"] = result
+        except Exception as exc:
+            job["status"] = JobStatus.ERROR
+            job["error"]  = str(exc)
+        finally:
+            job["event"].set()   # POST 핸들러의 await를 해제
+            _job_queue.task_done()
+
+
+async def start_queue_workers():
+    """앱 시작 시 워커를 백그라운드로 띄운다 (main.py의 lifespan 또는 startup 이벤트에서 호출)"""
+    for _ in range(_WORKER_CONCURRENCY):
+        asyncio.create_task(_queue_worker())
+# ────────────────────────────────────────────────────────────────
 
 
 def _ocr_task(roi_bytes: bytes) -> List[str]:
@@ -391,6 +432,12 @@ def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
         return []
 
     merged = _merge_adjacent_same_name(schedule_rows)
+
+    # 메모리 확보
+    del base_gray
+    del vmask
+    del hmask
+
     return merged
 
 
@@ -419,17 +466,45 @@ def verify_jwt_token(request: Request):
 
 @router.post("/timetable_analysis")
 async def upload_timetable(request: Request, file: UploadFile = File(...)):
+    """이미지를 큐에 등록하고 job_id를 즉시 반환한다."""
     _ = verify_jwt_token(request)
     try:
         file_bytes = await file.read()
         npimg = np.frombuffer(file_bytes, np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
-        loop = asyncio.get_event_loop()
-        schedule = await loop.run_in_executor(_THREAD_EXECUTOR, extract_schedule_fixed_scaled, img)
+        job_id = str(uuid.uuid4())
+        _job_store[job_id] = {
+            "status": JobStatus.PENDING,
+            "result": None,
+            "error":  None,
+            "event":  asyncio.Event(),
+        }
+        await _job_queue.put((job_id, img))
 
-        if not schedule:
-            return Response(status_code=204)
-        return JSONResponse(content=schedule)
+        return JSONResponse(status_code=202, content={"job_id": job_id})
+
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@router.get("/timetable_result/{job_id}")
+async def get_timetable_result(job_id: str, request: Request):
+    """분석 완료까지 대기(long-poll)한 뒤 결과를 즉시 반환한다."""
+    _ = verify_jwt_token(request)
+
+    job = _job_store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+
+    # 워커가 event.set()을 호출할 때까지 논블로킹 대기
+    await job["event"].wait()
+
+    job = _job_store.pop(job_id)
+    if job["status"] == JobStatus.ERROR:
+        return JSONResponse(status_code=500, content={"error": job["error"]})
+
+    result = job["result"]
+    if not result:
+        return Response(status_code=204)
+    return JSONResponse(content=result)
