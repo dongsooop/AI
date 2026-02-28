@@ -96,6 +96,7 @@ async def _queue_worker():
 
 
 async def start_queue_workers():
+    _get_pool()
     for _ in range(_WORKER_CONCURRENCY):
         asyncio.create_task(_queue_worker())
 
