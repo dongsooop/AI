@@ -1,18 +1,14 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from fastapi.responses import Response, JSONResponse
 import cv2, re, numpy as np
-import pytesseract
 from PIL import Image
-import os
-import asyncio
-import uuid
+import os, asyncio, uuid, pytesseract, base64
 from concurrent.futures import ThreadPoolExecutor
 from jose import JWTError, jwt
 from dotenv import load_dotenv
-import base64
 from jose.exceptions import ExpiredSignatureError
 from typing import List, Optional, Dict, Any
-from datetime import time
+from datetime import time, datetime, timedelta, timezone
 from multiprocessing import Pool, cpu_count
 from enum import Enum
 
@@ -43,6 +39,7 @@ HOUGH_THRESH, HOUGH_MINLINE, HOUGH_MAXGAP = 120, 80, 10
 NEAR_EPS, BAND_MERGE = 6, 8
 TRIM_OUTER, TRIM_X_GAP, TRIM_Y_GAP = True, 20, 15
 
+JOB_TTL = timedelta(minutes=10)
 
 _POOL: Optional[Pool] = None
 def _get_pool() -> Pool:
@@ -52,26 +49,36 @@ def _get_pool() -> Pool:
     return _POOL
 
 
-_THREAD_EXECUTOR = ThreadPoolExecutor(max_workers=4)
-
-# ── 인메모리 잡 큐 ──────────────────────────────────────────────
 class JobStatus(str, Enum):
-    PENDING   = "pending"
-    RUNNING   = "running"
-    DONE      = "done"
-    ERROR     = "error"
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE    = "done"
+    ERROR   = "error"
 
 _job_store: Dict[str, Dict[str, Any]] = {}
-_job_queue: asyncio.Queue = asyncio.Queue()
-_WORKER_CONCURRENCY = 4   # 동시 처리할 최대 잡 수
+_job_queue: asyncio.Queue = asyncio.Queue(maxsize=20)
+_WORKER_CONCURRENCY = 2
+_THREAD_EXECUTOR = ThreadPoolExecutor(max_workers=2)
+
+
+def _cleanup_old_jobs():
+    now = datetime.now(timezone.utc)
+    expired = [
+        job_id for job_id, job in _job_store.items()
+        if now - job.get("created_at", now) > JOB_TTL
+    ]
+    for job_id in expired:
+        _job_store.pop(job_id, None)
 
 
 async def _queue_worker():
-    """큐에서 잡을 꺼내 처리하고, 완료 시 Event로 대기 중인 핸들러에 신호를 보낸다."""
     loop = asyncio.get_running_loop()
     while True:
         job_id, img = await _job_queue.get()
-        job = _job_store[job_id]
+        job = _job_store.get(job_id)
+        if job is None:
+            _job_queue.task_done()
+            continue
         job["status"] = JobStatus.RUNNING
         try:
             result = await loop.run_in_executor(
@@ -83,15 +90,14 @@ async def _queue_worker():
             job["status"] = JobStatus.ERROR
             job["error"]  = str(exc)
         finally:
-            job["event"].set()   # POST 핸들러의 await를 해제
+            job["event"].set()
             _job_queue.task_done()
+            _cleanup_old_jobs()
 
 
 async def start_queue_workers():
-    """앱 시작 시 워커를 백그라운드로 띄운다 (main.py의 lifespan 또는 startup 이벤트에서 호출)"""
     for _ in range(_WORKER_CONCURRENCY):
         asyncio.create_task(_queue_worker())
-# ────────────────────────────────────────────────────────────────
 
 
 def _ocr_task(roi_bytes: bytes) -> List[str]:
@@ -466,7 +472,6 @@ def verify_jwt_token(request: Request):
 
 @router.post("/timetable_analysis")
 async def upload_timetable(request: Request, file: UploadFile = File(...)):
-    """이미지를 큐에 등록하고 job_id를 즉시 반환한다."""
     _ = verify_jwt_token(request)
     try:
         file_bytes = await file.read()
@@ -474,14 +479,15 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
         if img is None:
-            return JSONResponse(status_code=500, content={"error": "Invalid image format"})
+            return JSONResponse(status_code=400, content={"error": "Invalid image format"})
 
         job_id = str(uuid.uuid4())
         _job_store[job_id] = {
-            "status": JobStatus.PENDING,
-            "result": None,
-            "error":  None,
-            "event":  asyncio.Event(),
+            "status":     JobStatus.PENDING,
+            "result":     None,
+            "error":      None,
+            "event":      asyncio.Event(),
+            "created_at": datetime.now(timezone.utc),
         }
         await _job_queue.put((job_id, img))
 
@@ -493,17 +499,16 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
 
 @router.get("/timetable_result/{job_id}")
 async def get_timetable_result(job_id: str, request: Request):
-    """분석 완료까지 대기(long-poll)한 뒤 결과를 즉시 반환한다."""
     _ = verify_jwt_token(request)
 
     job = _job_store.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
 
-    # 워커가 event.set()을 호출할 때까지 논블로킹 대기
     try:
         await asyncio.wait_for(job["event"].wait(), timeout=120.0)
     except asyncio.TimeoutError:
+        _job_store.pop(job_id, None)
         return JSONResponse(status_code=504, content={"error": "Processing timeout"})
 
     job = _job_store.pop(job_id)
