@@ -2,7 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from fastapi.responses import Response, JSONResponse
 import cv2, re, numpy as np
 from PIL import Image
-import os, asyncio, uuid, pytesseract, base64
+import os, asyncio, uuid, pytesseract, base64, httpx
 from concurrent.futures import ThreadPoolExecutor
 from jose import JWTError, jwt
 from dotenv import load_dotenv
@@ -17,6 +17,7 @@ load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
+SPRING_TIMETABLE_URL = os.getenv("SPRING_TIMETABLE_URL")
 
 WEEKDAYS_FILE = "data/weekdays.txt"
 TIME_SLOTS_FILE = "data/time_slots.txt"
@@ -56,6 +57,7 @@ class JobStatus(str, Enum):
     ERROR   = "error"
 
 _job_store: Dict[str, Dict[str, Any]] = {}
+_active_users: set = set()
 _job_queue: asyncio.Queue = asyncio.Queue(maxsize=20)
 _WORKER_CONCURRENCY = 2
 _THREAD_EXECUTOR = ThreadPoolExecutor(max_workers=2)
@@ -71,12 +73,38 @@ def _cleanup_old_jobs():
         _job_store.pop(job_id, None)
 
 
+async def _post_to_spring(user_id: str, job_id: str, schedules: List[dict], token: str):
+    now = datetime.now(timezone.utc)
+    month = now.month
+    year = now.year
+    semester = "FIRST" if 3 <= month <= 8 else "SECOND"
+
+    payload = [
+        {
+            "name":      item["name"],
+            "professor": item.get("professor", ""),
+            "location":  item.get("location", ""),
+            "week":      item["week"],
+            "startAt":   item["startAt"],
+            "endAt":     item["endAt"],
+            "year":      year,
+            "semester":  semester,
+        }
+        for item in schedules
+    ]
+
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        await client.post(SPRING_TIMETABLE_URL, json=payload, headers=headers)
+
+
 async def _queue_worker():
     loop = asyncio.get_running_loop()
     while True:
-        job_id, img = await _job_queue.get()
+        job_id, user_id, img, token = await _job_queue.get()
         job = _job_store.get(job_id)
         if job is None:
+            _active_users.discard(user_id)
             _job_queue.task_done()
             continue
         job["status"] = JobStatus.RUNNING
@@ -85,12 +113,14 @@ async def _queue_worker():
                 _THREAD_EXECUTOR, extract_schedule_fixed_scaled, img
             )
             job["status"] = JobStatus.DONE
-            job["result"] = result
+            if result:
+                await _post_to_spring(user_id, job_id, result, token)
         except Exception as exc:
             job["status"] = JobStatus.ERROR
             job["error"]  = str(exc)
         finally:
-            job["event"].set()
+            _active_users.discard(user_id)
+            _job_store.pop(job_id, None)
             _job_queue.task_done()
             _cleanup_old_jobs()
 
@@ -473,7 +503,12 @@ def verify_jwt_token(request: Request):
 
 @router.post("/timetable_analysis")
 async def upload_timetable(request: Request, file: UploadFile = File(...)):
-    _ = verify_jwt_token(request)
+    user_id = verify_jwt_token(request)
+
+    # 동일 유저 중복 분석 방지
+    if user_id in _active_users:
+        return JSONResponse(status_code=503, content={"error": "Already processing"})
+
     try:
         file_bytes = await file.read()
         npimg = np.frombuffer(file_bytes, np.uint8)
@@ -482,46 +517,23 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
         if img is None:
             return JSONResponse(status_code=400, content={"error": "Invalid image format"})
 
+        token = request.headers.get("Authorization", "").split(" ")[1]
         job_id = str(uuid.uuid4())
         _job_store[job_id] = {
             "status":     JobStatus.PENDING,
-            "result":     None,
-            "error":      None,
-            "event":      asyncio.Event(),
             "created_at": datetime.now(timezone.utc),
         }
+        _active_users.add(user_id)
+
         try:
-            await asyncio.wait_for(_job_queue.put((job_id, img)), timeout=30.0)
+            await asyncio.wait_for(_job_queue.put((job_id, user_id, img, token)), timeout=10.0)
         except asyncio.TimeoutError:
             _job_store.pop(job_id, None)
-            return JSONResponse(status_code=503, content={"error": "server is busy"})
+            _active_users.discard(user_id)
+            return JSONResponse(status_code=504, content={"error": "Server is busy"})
 
-        return JSONResponse(status_code=202, content={"job_id": job_id})
+        return JSONResponse(status_code=204, content={"job_id": job_id})
 
     except Exception as e:
+        _active_users.discard(user_id)
         return JSONResponse(status_code=500, content={"error": str(e)})
-
-
-@router.get("/timetable_result/{job_id}")
-async def get_timetable_result(job_id: str, request: Request):
-    _ = verify_jwt_token(request)
-
-    job = _job_store.get(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="job not found")
-
-    try:
-        await asyncio.wait_for(job["event"].wait(), timeout=120.0)
-    except asyncio.TimeoutError:
-        _job_store.pop(job_id, None)
-        return JSONResponse(status_code=504, content={"error": "Processing timeout"})
-
-    if job["status"] == JobStatus.ERROR:
-        _job_store.pop(job_id, None)
-        return JSONResponse(status_code=500, content={"error": job["error"]})
-
-    result = job["result"]
-    _job_store.pop(job_id, None)
-    if not result:
-        return Response(status_code=204)
-    return JSONResponse(content=result)
