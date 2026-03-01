@@ -4,11 +4,8 @@ from pydantic import BaseModel
 from transformers import ElectraTokenizer, ElectraForSequenceClassification
 from jose import JWTError, jwt
 from dotenv import load_dotenv
-import torch
-import os
-import re
+import torch, os, re, base64
 from typing import Tuple, List, Dict
-import base64
 from jose.exceptions import ExpiredSignatureError
 
 load_dotenv()
@@ -77,9 +74,11 @@ def split_sentences(text: str) -> List[str]:
         text = re.sub(rf'({end})(?=\s)', r'\1\n', text)
     return [s.strip() for s in text.split('\n') if s.strip()]
 
+
 def contains_english_profanity(text: str) -> bool:
     lower_text = text.lower()
     return any(bad_word in lower_text for bad_word in ENGLISH_BAD_WORDS)
+
 
 def predict(text: str) -> Tuple[int, str]:
     encoded = tokenizer(
@@ -126,7 +125,7 @@ def analyze_field(field_name: str, text: str, log_file) -> Dict:
 
 
 @router.post("/text_filter_board")
-async def text_filter_board_api(request: Request, payload: TextRequest, username: str = Depends(verify_jwt_token)):
+async def text_filter_board_api(payload: TextRequest, username: str = Depends(verify_jwt_token)):
     try:
         full_text = payload.text.strip()
         try:
@@ -157,7 +156,7 @@ async def text_filter_board_api(request: Request, payload: TextRequest, username
 
 
 @router.post("/text_filter_market")
-async def text_filter_market_api(request: Request, payload: TextRequest, username: str = Depends(verify_jwt_token)):
+async def text_filter_market_api(payload: TextRequest, username: str = Depends(verify_jwt_token)):
     try:
         full_text = payload.text.strip()
         try:

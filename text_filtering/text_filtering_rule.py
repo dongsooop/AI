@@ -3,12 +3,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from transformers import ElectraTokenizer, ElectraForSequenceClassification
 from jose import JWTError, jwt
-import torch
-import os
+import torch, os, re, base64
 from typing import Tuple, List, Dict
-import re
 from dotenv import load_dotenv
-import base64
 from jose.exceptions import ExpiredSignatureError
 
 load_dotenv()
@@ -132,7 +129,6 @@ def analyze_field(field_name: str, text: str, log_file=None) -> Dict:
 
 @router.post("/text_filter_rule")
 async def rule_filter_api(
-    request: Request,
     payload: TextRequest,
     username: str = Depends(verify_jwt_token)
 ):
