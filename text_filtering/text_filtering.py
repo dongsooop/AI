@@ -82,7 +82,7 @@ def contains_english_profanity(text: str) -> bool:
     return any(bad_word in lower_text for bad_word in ENGLISH_BAD_WORDS)
 
 def predict(text: str) -> Tuple[int, str]:
-    encoded = tokenizer.encode_plus(
+    encoded = tokenizer(
         text,
         add_special_tokens=True,
         max_length=64,

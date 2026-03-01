@@ -84,7 +84,7 @@ def contains_english_profanity(text: str) -> bool:
 
 
 def predict(text: str) -> Tuple[int, str]:
-    encoded = tokenizer.encode_plus(
+    encoded = tokenizer(
         text,
         add_special_tokens=True,
         max_length=64,
