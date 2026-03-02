@@ -508,6 +508,7 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
     # 동일 유저 중복 분석 방지
     if user_id in _active_users:
         return JSONResponse(status_code=503, content={"error": "Already processing"})
+    _active_users.add(user_id)
 
     try:
         file_bytes = await file.read()
@@ -515,6 +516,7 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
         if img is None:
+            _active_users.discard(user_id)
             return JSONResponse(status_code=400, content={"error": "Invalid image format"})
 
         token = request.headers.get("Authorization", "").split(" ")[1]
@@ -523,7 +525,6 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
             "status":     JobStatus.PENDING,
             "created_at": datetime.now(timezone.utc),
         }
-        _active_users.add(user_id)
 
         try:
             await asyncio.wait_for(_job_queue.put((job_id, user_id, img, token)), timeout=10.0)
