@@ -532,8 +532,8 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
             _active_users.discard(user_id)
             return JSONResponse(status_code=504, content={"error": "Server is busy"})
 
-        return JSONResponse(status_code=204, content={"job_id": job_id})
+        return JSONResponse(status_code=202, content={"job_id": job_id})
 
-    except Exception as e:
+    except Exception:
         _active_users.discard(user_id)
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return JSONResponse(status_code=500, content={"error": "Internal server error"})
