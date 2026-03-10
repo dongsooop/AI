@@ -73,7 +73,7 @@ def _cleanup_old_jobs():
         _job_store.pop(job_id, None)
 
 
-async def _post_to_spring(user_id: str, job_id: str, schedules: List[dict], token: str):
+async def _post_to_spring(user_id: str, job_id: str, schedules: List[dict], token: str, appcheck_token: str = ""):
     now = datetime.now(timezone.utc)
     month = now.month
     year = now.year
@@ -93,7 +93,7 @@ async def _post_to_spring(user_id: str, job_id: str, schedules: List[dict], toke
         for item in schedules
     ]
 
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "X-Firebase-AppCheck": appcheck_token}
     async with httpx.AsyncClient(timeout=10.0) as client:
         await client.post(SPRING_TIMETABLE_URL, json=payload, headers=headers)
 
@@ -101,7 +101,7 @@ async def _post_to_spring(user_id: str, job_id: str, schedules: List[dict], toke
 async def _queue_worker():
     loop = asyncio.get_running_loop()
     while True:
-        job_id, user_id, img, token = await _job_queue.get()
+        job_id, user_id, img, token, appcheck_token = await _job_queue.get()
         job = _job_store.get(job_id)
         if job is None:
             _active_users.discard(user_id)
@@ -115,7 +115,7 @@ async def _queue_worker():
             job["status"] = JobStatus.DONE
             print(f"[Worker DONE] job_id={job_id}, user_id={user_id}, result_count={len(result) if result else 0}")
             if result:
-                await _post_to_spring(user_id, job_id, result, token)
+                await _post_to_spring(user_id, job_id, result, token, appcheck_token)
             else:
                 print(f"[Worker] OCR result is empty, skipping Spring POST")
         except Exception as exc:
@@ -524,6 +524,7 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
             return JSONResponse(status_code=400, content={"error": "Invalid image format"})
 
         token = request.headers.get("Authorization", "").split(" ")[1]
+        appcheck_token = request.headers.get("X-Firebase-AppCheck", "")
         job_id = str(uuid.uuid4())
         _job_store[job_id] = {
             "status":     JobStatus.PENDING,
@@ -531,7 +532,7 @@ async def upload_timetable(request: Request, file: UploadFile = File(...)):
         }
 
         try:
-            await asyncio.wait_for(_job_queue.put((job_id, user_id, img, token)), timeout=10.0)
+            await asyncio.wait_for(_job_queue.put((job_id, user_id, img, token, appcheck_token)), timeout=10.0)
         except asyncio.TimeoutError:
             _job_store.pop(job_id, None)
             _active_users.discard(user_id)
