@@ -95,7 +95,8 @@ async def _post_to_spring(user_id: str, job_id: str, schedules: List[dict], toke
 
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "X-Firebase-AppCheck": appcheck_token}
     async with httpx.AsyncClient(timeout=10.0) as client:
-        await client.post(SPRING_TIMETABLE_URL, json=payload, headers=headers)
+        response = await client.post(SPRING_TIMETABLE_URL, json=payload, headers=headers)
+        response.raise_for_status()
 
 
 async def _queue_worker():
@@ -118,7 +119,7 @@ async def _queue_worker():
                 print(f"[Worker DONE] job_id={job_id}, result_count={len(result) if result else 0}")
             else:
                 job["status"] = JobStatus.DONE
-                print(f"[Worker] OCR result is empty, skipping Spring POST")
+                print(f"[Worker DONE] job_id={job_id}, result_count=0, spring_post=skipped")
         except Exception as exc:
             job["status"] = JobStatus.ERROR
             job["error"]  = str(exc)
