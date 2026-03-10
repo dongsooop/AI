@@ -112,16 +112,17 @@ async def _queue_worker():
             result = await loop.run_in_executor(
                 _THREAD_EXECUTOR, extract_schedule_fixed_scaled, img
             )
-            job["status"] = JobStatus.DONE
-            print(f"[Worker DONE] job_id={job_id}, user_id={user_id}, result_count={len(result) if result else 0}")
             if result:
                 await _post_to_spring(user_id, job_id, result, token, appcheck_token)
+                job["status"] = JobStatus.DONE
+                print(f"[Worker DONE] job_id={job_id}, result_count={len(result) if result else 0}")
             else:
+                job["status"] = JobStatus.DONE
                 print(f"[Worker] OCR result is empty, skipping Spring POST")
         except Exception as exc:
             job["status"] = JobStatus.ERROR
             job["error"]  = str(exc)
-            print(f"[Worker ERROR] job_id={job_id}, user_id={user_id}, error={exc}")
+            print(f"[Worker ERROR] job_id={job_id}, error={exc}")
         finally:
             _active_users.discard(user_id)
             _job_store.pop(job_id, None)
