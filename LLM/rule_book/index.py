@@ -2,6 +2,7 @@ import os
 import re
 from pathlib import Path
 from typing import List, Dict
+import threading
 
 import fitz
 from rank_bm25 import BM25Okapi
@@ -64,8 +65,12 @@ class RuleBookIndex:
         self.chunks: List[Dict] = []
         self.bm25: BM25Okapi | None = None
         self._built = False
+        self._lock = threading.Lock()
 
     def build(self) -> None:
+        with self._lock:
+            if self._built:
+                return
         rule_dir = _rule_book_dir()
         if not rule_dir.exists():
             raise FileNotFoundError(f"규정집 디렉토리 없음: {rule_dir}")
