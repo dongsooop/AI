@@ -1,10 +1,12 @@
 import os
+import time
 from typing import TypedDict, List, Dict, Optional
 
 from langgraph.graph import StateGraph, END
 from openai import AsyncOpenAI
 
 from LLM.rule_book.index import get_index
+from LLM.rule_book.logger import log_rule_book
 
 _async_client = AsyncOpenAI(
     base_url=os.getenv("OSS_BASE_URL"),
@@ -92,5 +94,16 @@ async def run_rule_book(query: str) -> str:
         "answer": "",
         "error": None,
     }
+    start = time.time()
     result = await _graph.ainvoke(initial)
+    elapsed_ms = int((time.time() - start) * 1000)
+
+    await log_rule_book(
+        query=query,
+        chunks=result.get("chunks", []),
+        answer=result.get("answer", ""),
+        error=result.get("error"),
+        elapsed_ms=elapsed_ms,
+    )
+
     return result.get("answer", "답변을 생성하지 못했습니다.")
