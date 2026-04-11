@@ -2,11 +2,12 @@ import asyncio
 import json
 import os
 from datetime import datetime, timezone
-
 import aiofiles
+import logging
 
 LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "logs")
 MAX_BYTES = 5 * 1024 * 1024  # 5MB
+_logger = logging.getLogger(__name__)
 
 
 def _log_path() -> str:
@@ -42,4 +43,4 @@ async def log_rule_book(query: str, chunks: list, answer: str, error: str | None
     try:
         await _write_log(record)
     except Exception:
-        pass  # 로그 실패가 서비스에 영향을 주지 않도록
+        _logger.warning("rule_book 로그 기록 실패: %s, e, exc_info=True")

@@ -1,5 +1,6 @@
 import os
 import time
+import logging
 from typing import TypedDict, List, Dict, Optional
 
 from langgraph.graph import StateGraph, END
@@ -7,6 +8,8 @@ from openai import AsyncOpenAI
 
 from LLM.rule_book.index import get_index
 from LLM.rule_book.logger import log_rule_book
+
+logger = logging.getLogger(__name__)
 
 _async_client = AsyncOpenAI(
     base_url=os.getenv("OSS_BASE_URL"),
@@ -31,12 +34,13 @@ async def retrieve(state: RuleState) -> RuleState:
         chunks = index.search(state["query"], top_k=TOP_K)
         return {**state, "chunks": chunks, "error": None}
     except Exception as e:
-        return {**state, "chunks": [], "error": str(e)}
+        logger.exception("규정집 검색 중 오류 발생: %s", e)
+        return {**state, "chunks": [], "error": "규정집 검색 중 오류가 발생했습니다."}
 
 
 async def generate(state: RuleState) -> RuleState:
     if state.get("error") and not state.get("chunks"):
-        return {**state, "answer": f"규정집 검색 중 오류가 발생했습니다: {state['error']}"}
+        return {**state, "answer": "규정집 검색 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."}
 
     chunks = state.get("chunks", [])
     if not chunks:
@@ -71,7 +75,8 @@ async def generate(state: RuleState) -> RuleState:
             answer = "답변을 생성하지 못했습니다. 다시 시도해 주세요."
         return {**state, "answer": answer}
     except Exception as e:
-        return {**state, "answer": f"답변 생성 중 오류가 발생했습니다: {e}"}
+        logger.exception("LLM 답변 생성 중 오류 발생: %s", e)
+        return {**state, "answer": "답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."}
 
 
 def _build_graph():
