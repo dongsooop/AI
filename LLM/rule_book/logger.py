@@ -42,5 +42,5 @@ async def log_rule_book(query: str, chunks: list, answer: str, error: str | None
     }
     try:
         await _write_log(record)
-    except Exception:
-        _logger.warning("rule_book 로그 기록 실패: %s, e, exc_info=True")
+    except Exception as e:
+        _logger.warning("rule_book 로그 기록 실패: %s", e, exc_info=True)
