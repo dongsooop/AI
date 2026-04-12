@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 import logging
@@ -31,7 +32,8 @@ async def retrieve(state: RuleState) -> RuleState:
     if not index._built:
         return {**state, "chunks": [], "error": "인덱스가 아직 준비되지 않았습니다."}
     try:
-        chunks = index.search(state["query"], top_k=TOP_K)
+        loop = asyncio.get_event_loop()
+        chunks = await loop.run_in_executor(None, lambda: index.search(state["query"], top_k=TOP_K))
         return {**state, "chunks": chunks, "error": None}
     except Exception as e:
         logger.exception("규정집 검색 중 오류 발생: %s", e)
