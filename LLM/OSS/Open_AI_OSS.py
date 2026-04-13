@@ -1,4 +1,4 @@
-import os, sys, re
+import os, sys, re, asyncio
 from pathlib import Path
 from typing import List, Dict, Optional
 from jose import JWTError, jwt
@@ -12,6 +12,7 @@ import datetime as dt
 
 from LLM.sub_model.query_index import build_answer
 from LLM.sub_model.schedule_index import schedule_search
+from LLM.rule_book.graph import run_rule_book
 
 oss_router = APIRouter()
 load_dotenv()
@@ -813,7 +814,7 @@ def ensure_messages(req: ChatReq, user_text: str) -> List[Dict[str, str]]:
 
 
 @oss_router.post("/chatbot")
-def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
+async def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
     user_text = extract_user_text(req)
     messages_for_oss = ensure_messages(req, user_text)
 
@@ -821,6 +822,10 @@ def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
         return {"engine": "guard", "text": "해당 요청은 도움을 드리기 어려워요; 공식 절차나 문의는 학생자치기구 페이지의 연락처를 이용해 주세요."}
 
     mode = req.engine or decide_mode(user_text)
+
+    if mode == "rule_book":
+        answer = await run_rule_book(user_text)
+        return {"engine": "rule_book", "text": answer}
 
     if mode == "greet":
         return {"engine":"greet", "text":"안녕하세요, 무엇을 도와드릴까요?"}
@@ -913,6 +918,8 @@ def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
     return {"engine": f"{mode}", "text": fused}
 
 
+RULE_BOOK_KWS = ("규정", "규정집", "학칙", "준칙", "회칙", "규약", "세칙", "강령", "운영규칙", "선발 규칙", "선발규칙")
+
 def decide_mode(user_text: str) -> str:
     text = (user_text or "").strip()
     compact = re.sub(r"\s+", "", text)
@@ -924,6 +931,8 @@ def decide_mode(user_text: str) -> str:
         return "whoami"
     if is_relation(text):
         return "relation"
+    if any(k in text for k in RULE_BOOK_KWS):
+        return "rule_book"
     if CEREMONY_RE.search(text):
         return "fast"
     if "학사일정" in text or "학사 일정" in text or "학사일정" in compact or looks_like_schedule(text):
