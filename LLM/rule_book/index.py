@@ -40,7 +40,7 @@ def _chunk_pdf(path: Path) -> List[Dict]:
                 chunks.append({
                     "source": source,
                     "article": article_id,
-                    "text": article_id + " " + content,
+                    "text": source + " " + source + " " + article_id + " " + article_id + " " + content,
                 })
             i += 2
         header = parts[0].strip()

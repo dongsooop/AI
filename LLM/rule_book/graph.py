@@ -50,15 +50,17 @@ async def generate(state: RuleState) -> RuleState:
 
     context_parts = []
     for c in chunks:
-        context_parts.append(f"[출처: {c['source']} {c['article']}]\n{c['text']}")
+        text = c['text'][:300]
+        context_parts.append(f"[출처: {c['source']} {c['article']}]\n{text}")
     context = "\n\n".join(context_parts)
 
     system_prompt = (
         "당신은 동양미래대학교 규정집 전문 안내 챗봇입니다.\n"
-        "아래 <규정집 내용>만을 근거로 질문에 답하세요.\n"
+        "반드시 아래 <규정집 내용> 안의 텍스트만을 근거로 질문에 답하세요.\n"
+        "<규정집 내용> 외의 정보는 절대 사용하지 마세요.\n"
         "답변은 간결하고 명확하게, 관련 조문 번호와 출처를 함께 안내하세요.\n"
-        "규정집에 없는 내용은 '해당 규정을 찾을 수 없습니다'라고 답하세요.\n"
-        "임의로 정보를 만들지 마세요."
+        "<규정집 내용>에 질문과 관련된 내용이 없으면 '해당 규정을 찾을 수 없습니다'라고만 답하세요.\n"
+        "추측하거나 임의로 정보를 만들지 마세요."
     )
     user_prompt = f"질문: {state['query']}\n\n<규정집 내용>\n{context}\n</규정집 내용>"
 
@@ -70,10 +72,14 @@ async def generate(state: RuleState) -> RuleState:
                 {"role": "user",   "content": user_prompt},
             ],
             temperature=0.2,
-            max_tokens=512,
+            max_tokens=1024,
         )
-        answer = (resp.choices[0].message.content or "").strip()
+        choice = resp.choices[0]
+        finish_reason = choice.finish_reason
+        answer = (choice.message.content or "").strip()
+        logger.info("LLM finish_reason=%s, answer_len=%d", finish_reason, len(answer))
         if not answer:
+            logger.warning("LLM 빈 응답 반환 finish_reason=%s", finish_reason)
             answer = "답변을 생성하지 못했습니다. 다시 시도해 주세요."
         return {**state, "answer": answer}
     except Exception as e:
