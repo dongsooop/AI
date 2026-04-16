@@ -40,7 +40,8 @@ def _chunk_pdf(path: Path) -> List[Dict]:
                 chunks.append({
                     "source": source,
                     "article": article_id,
-                    "text": source + " " + source + " " + article_id + " " + article_id + " " + content,
+                    "text": article_id + " " + content,
+                    "index_text": source + " " + source + " " + article_id + " " + article_id + " " + content,
                 })
             i += 2
         header = parts[0].strip()
@@ -86,7 +87,7 @@ class RuleBookIndex:
             raise ValueError("규정집 청크가 0개 — PDF 파싱 실패")
 
         self.chunks = all_chunks
-        tokenized = [_tokenize(c["text"]) for c in all_chunks]
+        tokenized = [_tokenize(c.get("index_text", c["text"])) for c in all_chunks]
         self.bm25 = BM25Okapi(tokenized)
         self._built = True
         print(f"[RuleBook] 인덱스 빌드 완료: {len(self.chunks)}개 청크")

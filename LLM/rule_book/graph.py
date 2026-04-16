@@ -46,7 +46,7 @@ async def generate(state: RuleState) -> RuleState:
 
     chunks = state.get("chunks", [])
     if not chunks:
-        return {**state, "answer": "관련 규정을 찾지 못했습니다. 더 구체적인 키워드로 질문해 주세요."}
+        return {**state, "answer": "해당 규정을 찾을 수 없습니다."}
 
     context_parts = []
     for c in chunks:
