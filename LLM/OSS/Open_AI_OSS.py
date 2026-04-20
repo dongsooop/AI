@@ -23,6 +23,9 @@ load_dotenv()
 _CACHE_RULE_BOOK: TTLCache = TTLCache(maxsize=200, ttl=86400)
 _CACHE_GENERAL:   TTLCache = TTLCache(maxsize=500, ttl=3600)
 _cache_lock = threading.Lock()
+# oss 모드는 대화 히스토리 의존 → 캐시 제외
+# greet/whoami/relation 은 고정 문자열 → 캐시 불필요
+_CACHE_SKIP = frozenset({"oss", "greet", "whoami", "relation", "guard"})
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
@@ -830,16 +833,14 @@ async def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
 
     mode = req.engine or decide_mode(user_text)
 
-    # oss 모드는 대화 히스토리 의존 → 캐시 제외
-    # greet/whoami/relation 은 고정 문자열 → 캐시 불필요
-    _CACHE_SKIP = {"oss", "greet", "whoami", "relation", "guard"}
+    _normalized = re.sub(r"\s+", " ", user_text.strip())
+    _cache_key = f"{mode}:{_normalized}"
     if mode not in _CACHE_SKIP:
         _cache = _CACHE_RULE_BOOK if mode == "rule_book" else _CACHE_GENERAL
-        _cache_key = f"{mode}:{user_text}"
         with _cache_lock:
             _cached = _cache.get(_cache_key)
         if _cached is not None:
-            return _cached
+            return dict(_cached)
 
     def _cache_and_return(resp: dict) -> dict:
         if mode not in _CACHE_SKIP:
