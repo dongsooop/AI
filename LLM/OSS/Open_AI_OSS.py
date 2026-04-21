@@ -1,4 +1,4 @@
-import os, sys, re, asyncio, hashlib
+import os, sys, re, asyncio, hashlib, time
 import threading
 from pathlib import Path
 from typing import List, Dict, Optional
@@ -11,6 +11,8 @@ import base64
 from jose.exceptions import ExpiredSignatureError
 import datetime as dt
 from cachetools import TTLCache
+import psycopg2
+from sshtunnel import SSHTunnelForwarder
 
 from LLM.sub_model.query_index import build_answer
 from LLM.sub_model.schedule_index import schedule_search
@@ -23,10 +25,57 @@ load_dotenv()
 _CACHE_RULE_BOOK: TTLCache = TTLCache(maxsize=200, ttl=86400)
 _CACHE_GENERAL:   TTLCache = TTLCache(maxsize=500, ttl=3600)
 _cache_lock = threading.Lock()
+
 # oss 모드는 대화 히스토리 의존 → 캐시 제외
 # greet/whoami/relation 은 고정 문자열 → 캐시 불필요
 _CACHE_SKIP = frozenset({"oss", "greet", "whoami", "relation", "guard"})
 _RELATIVE_DATE_KEYWORDS = frozenset({"오늘", "내일", "이번주", "다음주", "이번달", "다음달"})
+
+def _log_chatbot(query: str, mode: str, response: str, url: Optional[str], cache_hit: bool, latency_ms: int):
+    tunnel = None
+    conn = None
+    try:
+        ssh_host = os.getenv("SSH_HOST")
+        if ssh_host:
+            tunnel = SSHTunnelForwarder(
+                (ssh_host, 22),
+                ssh_username=os.getenv("SSH_USER"),
+                ssh_pkey=os.getenv("SSH_KEY_PATH"),
+                remote_bind_address=("localhost", 5433),
+            )
+            tunnel.start()
+            conn = psycopg2.connect(
+                host="localhost",
+                port=tunnel.local_bind_port,
+                dbname=os.getenv("DB_NAME"),
+                user=os.getenv("DB_USER"),
+                password=os.getenv("DB_PASSWORD"),
+                connect_timeout=3,
+            )
+        else:
+            conn = psycopg2.connect(
+                host="localhost",
+                dbname=os.getenv("DB_NAME"),
+                user=os.getenv("DB_USER"),
+                password=os.getenv("DB_PASSWORD"),
+                connect_timeout=3,
+            )
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO chatbot_logs (query, mode, response, url, cache_hit, latency_ms)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (query, mode, response, url, cache_hit, latency_ms),
+                )
+    except Exception as e:
+        print(f"[chatbot_log ERROR] {e}")
+    finally:
+        if conn:
+            conn.close()
+        if tunnel:
+            tunnel.stop()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
@@ -826,6 +875,7 @@ def ensure_messages(req: ChatReq, user_text: str) -> List[Dict[str, str]]:
 
 @oss_router.post("/chatbot")
 async def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
+    _start = time.monotonic()
     user_text = extract_user_text(req)
     messages_for_oss = ensure_messages(req, user_text)
 
@@ -849,13 +899,26 @@ async def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
         with _cache_lock:
             _cached = _cache.get(_cache_key)
         if _cached is not None:
-            return dict(_cached)
+            _latency = int((time.monotonic() - _start) * 1000)
+            _r = dict(_cached)
+            threading.Thread(
+                target=_log_chatbot,
+                args=(user_text, mode, _r.get("text", ""), _r.get("url"), True, _latency),
+                daemon=True,
+            ).start()
+            return _r
 
     def _cache_and_return(resp: dict) -> dict:
         if mode not in _CACHE_SKIP:
             _c = _CACHE_RULE_BOOK if mode == "rule_book" else _CACHE_GENERAL
             with _cache_lock:
                 _c[_cache_key] = resp
+        _latency = int((time.monotonic() - _start) * 1000)
+        threading.Thread(
+            target=_log_chatbot,
+            args=(user_text, mode, resp.get("text", ""), resp.get("url"), False, _latency),
+            daemon=True,
+        ).start()
         return resp
 
     if mode == "rule_book":
@@ -926,14 +989,20 @@ async def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
             if looks_like_schedule(user_text):
                 sched_only = schedule_search(user_text, top_k=8)
                 if sched_only:
-                    return {"engine":"fast", "text": render_chatty_schedule(sched_only, user_text)}
+                    _r = {"engine":"fast", "text": render_chatty_schedule(sched_only, user_text)}
+                    _latency = int((time.monotonic() - _start) * 1000)
+                    threading.Thread(target=_log_chatbot, args=(user_text, "fast", _r["text"], None, False, _latency), daemon=True).start()
+                    return _r
 
             if len(user_text) <= 2 or GREETING_RE.search(user_text):
                 out = "안녕하세요, 무엇을 도와드릴까요?"
             else:
                 sub = call_submodel(user_text)
                 if looks_like_schedule(user_text) and sub:
-                    return {"engine":"fast", "text": render_chatty_schedule(sub, user_text)}
+                    _r = {"engine":"fast", "text": render_chatty_schedule(sub, user_text)}
+                    _latency = int((time.monotonic() - _start) * 1000)
+                    threading.Thread(target=_log_chatbot, args=(user_text, "fast", _r["text"], None, False, _latency), daemon=True).start()
+                    return _r
                 if sub:
                     if looks_like_topic(user_text):
                         text, _ = one_sentence_topic(user_text, sub)
@@ -942,6 +1011,8 @@ async def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
                     out = text
                 else:
                     out = "잘 이해하지 못했어요. 다시 질문해주세요."
+        _latency = int((time.monotonic() - _start) * 1000)
+        threading.Thread(target=_log_chatbot, args=(user_text, "oss", out, None, False, _latency), daemon=True).start()
         return {"engine":"oss", "text": out}
 
     sub = call_submodel(user_text)
@@ -955,6 +1026,8 @@ async def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
     if not fused:
         text, _ = one_sentence_topic(user_text, sub)
         fused = text if looks_like_topic(user_text) else "좋아요, 무엇을 이야기해 볼까요?"
+    _latency = int((time.monotonic() - _start) * 1000)
+    threading.Thread(target=_log_chatbot, args=(user_text, mode, fused, None, False, _latency), daemon=True).start()
     return {"engine": f"{mode}", "text": fused}
 
 
