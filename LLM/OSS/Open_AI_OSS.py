@@ -1,4 +1,5 @@
-import os, sys, re, asyncio
+import os, sys, re, asyncio, hashlib
+import threading
 from pathlib import Path
 from typing import List, Dict, Optional
 from jose import JWTError, jwt
@@ -9,6 +10,7 @@ from openai import OpenAI
 import base64
 from jose.exceptions import ExpiredSignatureError
 import datetime as dt
+from cachetools import TTLCache
 
 from LLM.sub_model.query_index import build_answer
 from LLM.sub_model.schedule_index import schedule_search
@@ -16,6 +18,15 @@ from LLM.rule_book.graph import run_rule_book
 
 oss_router = APIRouter()
 load_dotenv()
+
+# rule_book: 24시간 / 그 외 모드: 1시간
+_CACHE_RULE_BOOK: TTLCache = TTLCache(maxsize=200, ttl=86400)
+_CACHE_GENERAL:   TTLCache = TTLCache(maxsize=500, ttl=3600)
+_cache_lock = threading.Lock()
+# oss 모드는 대화 히스토리 의존 → 캐시 제외
+# greet/whoami/relation 은 고정 문자열 → 캐시 불필요
+_CACHE_SKIP = frozenset({"oss", "greet", "whoami", "relation", "guard"})
+_RELATIVE_DATE_KEYWORDS = frozenset({"오늘", "내일", "이번주", "다음주", "이번달", "다음달"})
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
@@ -823,9 +834,33 @@ async def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
 
     mode = req.engine or decide_mode(user_text)
 
+    _normalized = re.sub(r"\s+", " ", user_text.strip())
+    _relative_date_scope = ""
+    if looks_like_schedule(user_text) and any(
+        k in user_text for k in _RELATIVE_DATE_KEYWORDS
+    ):
+        _relative_date_scope = f":{dt.date.today().isoformat()}"
+    _cache_key = (
+        f"{mode}{_relative_date_scope}:"
+        f"{hashlib.sha256(_normalized.encode('utf-8')).hexdigest()}"
+    )
+    if mode not in _CACHE_SKIP:
+        _cache = _CACHE_RULE_BOOK if mode == "rule_book" else _CACHE_GENERAL
+        with _cache_lock:
+            _cached = _cache.get(_cache_key)
+        if _cached is not None:
+            return dict(_cached)
+
+    def _cache_and_return(resp: dict) -> dict:
+        if mode not in _CACHE_SKIP:
+            _c = _CACHE_RULE_BOOK if mode == "rule_book" else _CACHE_GENERAL
+            with _cache_lock:
+                _c[_cache_key] = resp
+        return resp
+
     if mode == "rule_book":
         answer = await run_rule_book(user_text)
-        return {"engine": "rule_book", "text": answer}
+        return _cache_and_return({"engine": "rule_book", "text": answer})
 
     if mode == "greet":
         return {"engine":"greet", "text":"안녕하세요, 무엇을 도와드릴까요?"}
@@ -837,45 +872,50 @@ async def chat(req: ChatReq, username: str = Depends(verify_jwt_token)):
     if mode == "fast":
         sched_only = schedule_search(user_text, top_k=8)
         if sched_only:
-            return {"engine":"fast", "text": render_chatty_schedule(sched_only, user_text)}
-        
+            return _cache_and_return({"engine":"fast", "text": render_chatty_schedule(sched_only, user_text)})
+
         clarify = dept_clarification_message(user_text)
         if clarify:
-            return {"engine":"fast", "text": clarify}
+            return _cache_and_return({"engine":"fast", "text": clarify})
 
         sub = call_submodel(user_text)
         text, url = one_sentence_from_sub_answer(user_text, sub)
         resp = {"engine":"fast", "text": text}
-        if url: resp["url"] = url
-        return resp
+        if url:
+            resp["url"] = url
+        return _cache_and_return(resp)
 
     if mode == "policy":
         sub = call_submodel(user_text)
         text, url = one_sentence_policy(user_text, sub)
         resp = {"engine":"policy", "text": text}
-        if url: resp["url"] = url
-        return resp
+        if url:
+            resp["url"] = url
+        return _cache_and_return(resp)
 
     if mode == "dorm":
         sub = call_submodel(user_text)
         text, url = one_sentence_dorm(user_text, sub)
         resp = {"engine":"dorm", "text": text}
-        if url: resp["url"] = url
-        return resp
+        if url:
+            resp["url"] = url
+        return _cache_and_return(resp)
 
     if mode == "grad":
         sub = call_submodel(user_text)
         text, url = one_sentence_grad(user_text, sub)
         resp = {"engine":"grad", "text": text}
-        if url: resp["url"] = url
-        return resp
+        if url:
+            resp["url"] = url
+        return _cache_and_return(resp)
 
     if mode == "topic":
         sub = call_submodel(user_text)
         text, url = one_sentence_topic(user_text, sub)
         resp = {"engine":"topic", "text": text}
-        if url: resp["url"] = url
-        return resp
+        if url:
+            resp["url"] = url
+        return _cache_and_return(resp)
 
     if mode == "oss":
         out = call_oss(messages_for_oss)
