@@ -3,25 +3,23 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Dict, Optional
-from jose import JWTError, jwt
 from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel
-from dotenv import load_dotenv
 from openai import OpenAI
-import base64
-from jose.exceptions import ExpiredSignatureError
 import datetime as dt
 from cachetools import TTLCache
 import psycopg2
 from psycopg2 import pool as pg_pool
 from sshtunnel import SSHTunnelForwarder
 
+from core.auth import verify_jwt_token
+from core.settings import get_settings
 from LLM.sub_model.query_index import build_answer
 from LLM.sub_model.schedule_index import schedule_search
 from LLM.rule_book.graph import run_rule_book
 
 oss_router = APIRouter()
-load_dotenv()
+settings = get_settings()
 
 # rule_book: 24시간 / 그 외 모드: 1시간
 _CACHE_RULE_BOOK: TTLCache = TTLCache(maxsize=200, ttl=86400)
@@ -39,19 +37,19 @@ _log_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="chatbot_lo
 
 def init_db_pool() -> None:
     global _ssh_tunnel, _db_pool
-    ssh_host = os.getenv("SSH_HOST")
+    ssh_host = settings.ssh_host
     db_kwargs = dict(
-        dbname=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
+        dbname=settings.db_name,
+        user=settings.db_user,
+        password=settings.db_password,
         connect_timeout=3,
         options="-c statement_timeout=5000",
     )
     if ssh_host:
         _ssh_tunnel = SSHTunnelForwarder(
             (ssh_host, 22),
-            ssh_username=os.getenv("SSH_USER"),
-            ssh_pkey=os.getenv("SSH_KEY_PATH"),
+            ssh_username=settings.ssh_user,
+            ssh_pkey=settings.ssh_key_path,
             remote_bind_address=("localhost", 5433),
         )
         _ssh_tunnel.start()
@@ -87,23 +85,23 @@ def _log_chatbot(query: str, mode: str, response: str, url: Optional[str], cache
         if conn and _db_pool:
             _db_pool.putconn(conn)
 
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("ALGORITHM")
+ORG_NAME = settings.org_name
+BOT_NAME = settings.bot_name
+SERVICE_NAME = settings.service_name
+ORG_HOMEPAGE_LABEL = settings.org_homepage_label
+ORG_HOMEPAGE_URL = settings.org_homepage_url
+GRAD_PAGE_URL = settings.grad_page_url
+STAFF_URL_PATTERN = settings.staff_url_pattern
 
-ORG_NAME = os.getenv("ORG_NAME", "해당 기관")
-BOT_NAME = os.getenv("BOT_NAME", "챗봇")
-SERVICE_NAME = os.getenv("SERVICE_NAME", "챗봇 서비스")
-ORG_HOMEPAGE_LABEL = os.getenv("ORG_HOMEPAGE_LABEL", "공식 홈페이지")
-ORG_HOMEPAGE_URL = os.getenv("ORG_HOMEPAGE_URL", "https://example.com")
-GRAD_PAGE_URL = os.getenv("GRAD_PAGE_URL", ORG_HOMEPAGE_URL)
-STAFF_URL_PATTERN = os.getenv("STAFF_URL_PATTERN", r"/staff|/contact")
+BOT_ALIASES = settings.bot_aliases
 
-BOT_ALIASES = tuple(x.strip() for x in os.getenv("BOT_ALIASES", "").split(",") if x.strip())
-
-OSS_BASE_URL = os.getenv("OSS_BASE_URL")
-OSS_API_KEY  = os.getenv("OSS_API_KEY")
-OSS_MODEL    = os.getenv("OSS_MODEL")
-client = OpenAI(base_url=OSS_BASE_URL, api_key=OSS_API_KEY)
+OSS_MODEL = settings.oss_model
+if not settings.oss_api_key or not OSS_MODEL:
+    raise RuntimeError("OSS_API_KEY and OSS_MODEL are required")
+client_kwargs = {"api_key": settings.oss_api_key}
+if settings.oss_base_url:
+    client_kwargs["base_url"] = settings.oss_base_url
+client = OpenAI(**client_kwargs)
 
 PHONE_GUARD_PAT = re.compile(r"(?:\+?\d[\d\s\--–—−]{6,}\d)")
 URL_PAT         = re.compile(r"https?://\S+")
@@ -169,41 +167,11 @@ STOP_TOKENS = {"담당","담당부","전화","전화번호","연락처","문의"
 CONTACT_INTENT_RE = re.compile(r"(연락처|전화|전화번호|문의|상담|담당자)")
 GOVERNANCE_REMOVE_RE = re.compile(r"(없애|폐지|해체)\s*(시키|하는\s*법)?")
 GOVERNANCE_TARGET_RE = re.compile(r"(총학생회|대의원회)")
-JSON_ONLY_MODE = os.getenv("JSON_ONLY_MODE", "0").strip() == "1"
-
-
-def verify_jwt_token(request: Request):
-    if not SECRET_KEY or not ALGORITHM:
-        raise HTTPException(status_code=500, detail="Server auth configuration missing")
-
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Authorization header missing or malformed")
-
-    token = auth_header.split(" ")[1]
-    try:
-        padded_key = SECRET_KEY + '=' * (-len(SECRET_KEY) % 4)
-        sc = base64.urlsafe_b64decode(padded_key)
-        payload = jwt.decode(token, sc, algorithms=[ALGORITHM])
-
-        username = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=401, detail="Invalid token: no subject")
-        return username
-
-    except ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+JSON_ONLY_MODE = settings.json_only_mode
 
 
 def _resolve_repo_root() -> Path:
-    env_root = os.getenv("ROOT_BASE_PATH")
-    if env_root:
-        p = Path(os.path.expanduser(env_root)).resolve()
-    else:
-        p = Path(__file__).resolve().parents[2]
-    return p
+    return settings.repo_root
 
 REPO_ROOT = _resolve_repo_root()
 if REPO_ROOT.exists() and str(REPO_ROOT) not in sys.path:
@@ -271,10 +239,7 @@ def _canon_unit(s: str) -> str:
 
 
 def _dept_map_path() -> Path:
-    env_p = os.getenv("DEPT_MAP_PATH")
-    if env_p:
-        return Path(os.path.expanduser(env_p)).resolve()
-    return (REPO_ROOT / "data" / "department.txt").resolve()
+    return settings.resolved_dept_map_path
 
 
 def _make_aliases(name: str) -> set[str]:

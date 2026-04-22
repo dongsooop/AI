@@ -1,18 +1,13 @@
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from transformers import ElectraTokenizer, ElectraForSequenceClassification
-from jose import JWTError, jwt
-from dotenv import load_dotenv
-import torch, os, re, base64
+import torch, re
 from typing import Tuple, List, Dict
-from jose.exceptions import ExpiredSignatureError
 
-load_dotenv()
+from core.auth import verify_jwt_token
+
 router = APIRouter()
-
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("ALGORITHM")
 
 
 ENGLISH_BAD_WORDS_PATH = "data/eng_bad_text.txt"
@@ -30,28 +25,6 @@ def load_english_bad_words(file_path: str) -> set:
     return bad_words
 
 ENGLISH_BAD_WORDS = load_english_bad_words(ENGLISH_BAD_WORDS_PATH)
-
-
-def verify_jwt_token(request: Request):
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Authorization header missing or malformed")
-
-    token = auth_header.split(" ")[1]
-    try:
-        padded_key = SECRET_KEY + '=' * (-len(SECRET_KEY) % 4)
-        sc = base64.urlsafe_b64decode(padded_key)
-        payload = jwt.decode(token, sc, algorithms=[ALGORITHM])
-
-        username = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=401, detail="Invalid token: no subject")
-        return username
-
-    except ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
 
 
 class TextRequest(BaseModel):

@@ -1,23 +1,23 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Request
+from fastapi import APIRouter, UploadFile, File, Request
 from fastapi.responses import Response, JSONResponse
 import cv2, re, numpy as np
 from PIL import Image
-import os, asyncio, uuid, pytesseract, base64, httpx
+import os, asyncio, uuid, pytesseract, httpx
 from concurrent.futures import ThreadPoolExecutor
-from jose import JWTError, jwt
-from dotenv import load_dotenv
-from jose.exceptions import ExpiredSignatureError
 from typing import List, Optional, Dict, Any
 from datetime import time, datetime, timedelta, timezone
 from multiprocessing import Pool, cpu_count
 from enum import Enum
 
-router = APIRouter()
-load_dotenv()
+from core.auth import verify_jwt_token
+from core.settings import get_settings
 
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("ALGORITHM")
-SPRING_TIMETABLE_URL = os.getenv("SPRING_TIMETABLE_URL")
+router = APIRouter()
+settings = get_settings()
+
+if not settings.spring_timetable_url:
+    raise RuntimeError("SPRING_TIMETABLE_URL is required")
+SPRING_TIMETABLE_URL = settings.spring_timetable_url
 
 WEEKDAYS_FILE = "data/weekdays.txt"
 TIME_SLOTS_FILE = "data/time_slots.txt"
@@ -482,31 +482,6 @@ def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
     del hmask
 
     return merged
-
-
-def verify_jwt_token(request: Request):
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Authorization header missing or malformed")
-
-    token = auth_header.split(" ")[1]
-    try:
-        padded_key = SECRET_KEY + '=' * (-len(SECRET_KEY) % 4)
-        sc = base64.urlsafe_b64decode(padded_key)
-        payload = jwt.decode(token, sc, algorithms=[ALGORITHM])
-
-        username = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=401, detail="Invalid token: no subject")
-        return username
-
-    except ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
-
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-
 @router.post("/timetable_analysis")
 async def upload_timetable(request: Request, file: UploadFile = File(...)):
     user_id = verify_jwt_token(request)
