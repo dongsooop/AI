@@ -1,102 +1,15 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from transformers import ElectraTokenizer, ElectraForSequenceClassification
-import torch, re
-from typing import Tuple, List, Dict
 
 from core.auth import verify_jwt_token
+from services.text_filtering import analyze_fields
 
 router = APIRouter()
-
-MODEL_PATH = "model/my_electra_finetuned"
-LOG_PATH = "data/bad_text_sample.txt"
-ENGLISH_BAD_WORDS_PATH = "data/eng_bad_text.txt"
-
-
-def load_english_bad_words(file_path: str) -> set:
-    bad_words = set()
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            for line in f:
-                word = line.strip().lower()
-                if word:
-                    bad_words.add(word)
-    except FileNotFoundError:
-        print(f"[ERROR] 영어 비속어 사전 파일을 찾을 수 없습니다: {file_path}")
-    return bad_words
-
-ENGLISH_BAD_WORDS = load_english_bad_words(ENGLISH_BAD_WORDS_PATH)
 
 
 class TextRequest(BaseModel):
     text: str
-
-tokenizer = ElectraTokenizer.from_pretrained(MODEL_PATH, local_files_only=True)
-model = ElectraForSequenceClassification.from_pretrained(MODEL_PATH, local_files_only=True)
-device = torch.device("mps" if torch.cuda.is_available() else "cpu")
-model.to(device)
-model.eval()
-
-
-def split_sentences(text: str) -> List[str]:
-    text = re.sub(r'([.!?])\s+', r'\1\n', text)
-    endings = ['다', '요', '죠', '네', '습니다', '습니까', '해요', '했어요', '하였습니다', '하네요', '해봐요']
-    for end in endings:
-        text = re.sub(rf'({end})(?=\s)', r'\1\n', text)
-    return [s.strip() for s in text.split('\n') if s.strip()]
-
-
-def contains_english_profanity(text: str) -> bool:
-    lower_text = text.lower()
-    return any(bad_word in lower_text for bad_word in ENGLISH_BAD_WORDS)
-
-
-def predict(text: str) -> Tuple[int, str]:
-    encoded = tokenizer(
-        text,
-        add_special_tokens=True,
-        max_length=64,
-        padding="max_length",
-        truncation=True,
-        return_tensors="pt"
-    )
-    input_ids = encoded["input_ids"].to(device)
-    attention_mask = encoded["attention_mask"].to(device)
-
-    with torch.no_grad():
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-        logits = outputs.logits
-        pred_label = torch.argmax(logits, dim=-1).item()
-
-    return pred_label, "비속어" if pred_label == 1 else "정상"
-
-
-def analyze_field(field_name: str, text: str, log_file=None) -> Dict:
-    sentences = split_sentences(text)
-    results = []
-    has_bad = False
-
-    for sent in sentences:
-        label_num, label_text = predict(sent)
-
-        if label_text == "정상" and contains_english_profanity(sent):
-            label_text = "비속어"
-            label_num = 1
-
-        results.append({"sentence": sent, "label": label_text})
-
-        if field_name in ['제목', '본문'] and log_file:
-            log_file.write(f"{sent}|{label_num}\n")
-
-        if label_text == "비속어":
-            has_bad = True
-
-    return {
-        "field": field_name,
-        "has_profanity": has_bad,
-        "results": results
-    }
 
 
 @router.post("/text_filter_rule")
@@ -115,11 +28,14 @@ async def rule_filter_api(
                 status_code=422
             )
 
-        with open(LOG_PATH, "a", encoding="utf-8") as f:
-            title_result = analyze_field("제목", title, f)
-            content_result = analyze_field("본문", content, f)
-
-        tags_result = analyze_field("태그", tags)
+        analyzed = analyze_fields([
+            ("제목", title, True),
+            ("태그", tags, False),
+            ("본문", content, True),
+        ])
+        title_result = analyzed["제목"]
+        tags_result = analyzed["태그"]
+        content_result = analyzed["본문"]
 
         response = {
             "username": username,
@@ -144,34 +60,17 @@ async def text_filter_content_api(
     payload: TextRequest):
     try:
         text = payload.text.strip()
-        sentences = split_sentences(text)
-        results = []
-        has_profanity = False
-
-        with open(LOG_PATH, "a", encoding="utf-8") as f:
-            for sent in sentences:
-                label_num, label_text = predict(sent)
-
-                if label_text == "정상" and contains_english_profanity(sent):
-                    label_text = "비속어"
-                    label_num = 1
-
-                results.append({"sentence": sent, "label": label_text})
-                f.write(f"{sent}|{label_num}\n")
-
-                if label_text == "비속어":
-                    has_profanity = True
+        analyzed = analyze_fields([
+            ("content", text, True),
+        ])
+        content_result = analyzed["content"]
 
         response = {
-            "content": {
-                "field": "content",
-                "has_profanity": has_profanity,
-                "results": results
-            }
+            "content": content_result
         }
 
         return JSONResponse(
-            status_code=400 if has_profanity else 200,
+            status_code=400 if content_result["has_profanity"] else 200,
             content=response
         )
 
