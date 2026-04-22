@@ -14,6 +14,9 @@ from core.settings import get_settings
 
 router = APIRouter()
 settings = get_settings()
+
+if not settings.spring_timetable_url:
+    raise RuntimeError("SPRING_TIMETABLE_URL is required")
 SPRING_TIMETABLE_URL = settings.spring_timetable_url
 
 WEEKDAYS_FILE = "data/weekdays.txt"

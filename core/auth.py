@@ -1,4 +1,4 @@
-import base64
+import base64, binascii
 
 from fastapi import HTTPException, Request
 from jose import JWTError, jwt
@@ -29,6 +29,8 @@ def verify_jwt_token(request: Request) -> str:
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid token: no subject")
         return username
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=500, detail="Server auth configuration invalid") from exc
     except ExpiredSignatureError as exc:
         raise HTTPException(status_code=401, detail="Token has expired") from exc
     except JWTError as exc:

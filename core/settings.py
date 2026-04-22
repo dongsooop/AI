@@ -37,14 +37,21 @@ class Settings:
 
     @property
     def repo_root(self) -> Path:
+        default_root = Path(__file__).resolve().parents[1]
         if self.root_base_path:
-            return Path(os.path.expanduser(self.root_base_path)).resolve()
-        return Path(__file__).resolve().parents[1]
+            path = Path(os.path.expanduser(self.root_base_path))
+            if not path.is_absolute():
+                path = default_root / path
+            return path.resolve()
+        return default_root
 
     @property
     def resolved_dept_map_path(self) -> Path:
         if self.dept_map_path:
-            return Path(os.path.expanduser(self.dept_map_path)).resolve()
+            path = Path(os.path.expanduser(self.dept_map_path))
+            if not path.is_absolute():
+                path = self.repo_root / path
+            return path.resolve()
         return (self.repo_root / "data" / "department.txt").resolve()
 
 

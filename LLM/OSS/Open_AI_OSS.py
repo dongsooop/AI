@@ -96,7 +96,12 @@ STAFF_URL_PATTERN = settings.staff_url_pattern
 BOT_ALIASES = settings.bot_aliases
 
 OSS_MODEL = settings.oss_model
-client = OpenAI(base_url=settings.oss_base_url, api_key=settings.oss_api_key)
+if not settings.oss_api_key or not OSS_MODEL:
+    raise RuntimeError("OSS_API_KEY and OSS_MODEL are required")
+client_kwargs = {"api_key": settings.oss_api_key}
+if settings.oss_base_url:
+    client_kwargs["base_url"] = settings.oss_base_url
+client = OpenAI(**client_kwargs)
 
 PHONE_GUARD_PAT = re.compile(r"(?:\+?\d[\d\s\--–—−]{6,}\d)")
 URL_PAT         = re.compile(r"https?://\S+")
