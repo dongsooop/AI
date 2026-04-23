@@ -10,7 +10,13 @@ RELATIVE_DATE_KEYWORDS = frozenset({"오늘", "내일", "이번주", "다음주"
 GREETING_RE = re.compile(r"^\s*(안녕|안녕하세요|하이|hello|hi)\b", re.I)
 WHOAMI_EN = re.compile(r"\b(who\s+are\s+you|what\s+are\s+you|your\s+name)\b", re.I)
 WHOAMI_KO = re.compile(r"(무슨\s*(챗봇|봇)|뭐\s*하는\s*(챗봇|봇)|역할|무엇을\s*할\s*수|기능|소개해\s*줘)")
-RELATION_RE = re.compile(r"(우리\s*관계|우린\s*무슨\s*관계|너와\s*나|무슨\s*사이|사이(?:야|냐)?|관계(?:야|냐)?)")
+RELATION_RE = re.compile(
+    r"(?:우리\s*(?:무슨\s*)?(?:관계|사이)"
+    r"|우린\s*무슨\s*(?:관계|사이)"
+    r"|너와\s*나"
+    r"|무슨\s*사이"
+    r"|(?:사이|관계)\s*(?:야|냐)(?:\?|$))"
+    )
 
 UNIT_SUFFIX_RE = re.compile(r"(학부|학과|과|전공|대학|대학원|본부|센터|팀|처|단|부|원)$")
 CEREMONY_RE = re.compile(r"(졸업식|학위수여식)")
