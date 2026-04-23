@@ -1,100 +1,15 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from transformers import ElectraTokenizer, ElectraForSequenceClassification
-import torch, re
-from typing import Tuple, List, Dict
 
 from core.auth import verify_jwt_token
+from services.text_filtering import analyze_fields, analyze_text_labels
 
 router = APIRouter()
 
 
-ENGLISH_BAD_WORDS_PATH = "data/eng_bad_text.txt"
-
-def load_english_bad_words(file_path: str) -> set:
-    bad_words = set()
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            for line in f:
-                word = line.strip().lower()
-                if word:
-                    bad_words.add(word)
-    except FileNotFoundError:
-        print(f"[ERROR] 영어 비속어 사전 파일을 찾을 수 없습니다: {file_path}")
-    return bad_words
-
-ENGLISH_BAD_WORDS = load_english_bad_words(ENGLISH_BAD_WORDS_PATH)
-
-
 class TextRequest(BaseModel):
     text: str
-
-MODEL_PATH = "model/my_electra_finetuned"
-LOG_PATH = "data/bad_text_sample.txt"
-
-tokenizer = ElectraTokenizer.from_pretrained(MODEL_PATH, local_files_only=True)
-model = ElectraForSequenceClassification.from_pretrained(MODEL_PATH, local_files_only=True)
-device = torch.device("mps" if torch.cuda.is_available() else "cpu")
-model.to(device)
-model.eval()
-
-
-def split_sentences(text: str) -> List[str]:
-    text = re.sub(r'([.!?])\s+', r'\1\n', text)
-    endings = ['다', '요', '죠', '네', '습니다', '습니까', '해요', '했어요', '하였습니다', '하네요', '해봐요']
-    for end in endings:
-        text = re.sub(rf'({end})(?=\s)', r'\1\n', text)
-    return [s.strip() for s in text.split('\n') if s.strip()]
-
-
-def contains_english_profanity(text: str) -> bool:
-    lower_text = text.lower()
-    return any(bad_word in lower_text for bad_word in ENGLISH_BAD_WORDS)
-
-
-def predict(text: str) -> Tuple[int, str]:
-    encoded = tokenizer(
-        text,
-        add_special_tokens=True,
-        max_length=64,
-        padding="max_length",
-        truncation=True,
-        return_tensors="pt"
-    )
-    input_ids = encoded["input_ids"].to(device)
-    attention_mask = encoded["attention_mask"].to(device)
-
-    with torch.no_grad():
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-        logits = outputs.logits
-        pred_label = torch.argmax(logits, dim=-1).item()
-
-    return pred_label, "비속어" if pred_label == 1 else "정상"
-
-
-def analyze_field(field_name: str, text: str, log_file) -> Dict:
-    sentences = split_sentences(text)
-    results = []
-    has_profanity = False
-
-    for sent in sentences:
-        label_num, label_text = predict(sent)
-        if label_text == "정상" and contains_english_profanity(sent):
-            label_text = "비속어"
-            label_num = 1
-
-        results.append({"sentence": sent, "label": label_text})
-        log_file.write(f"{sent}|{label_num}\n")
-
-        if label_text == "비속어":
-            has_profanity = True
-
-    return {
-        "field": field_name,
-        "has_profanity": has_profanity,
-        "results": results
-    }
 
 
 @router.post("/text_filter_board")
@@ -109,9 +24,12 @@ async def text_filter_board_api(payload: TextRequest, username: str = Depends(ve
                 status_code=422
             )
 
-        with open(LOG_PATH, "a", encoding="utf-8") as f:
-            intro_result = analyze_field("자기소개", intro, f)
-            motive_result = analyze_field("지원동기", motive, f)
+        analyzed = analyze_fields([
+            ("자기소개", intro, True),
+            ("지원동기", motive, True),
+        ])
+        intro_result = analyzed["자기소개"]
+        motive_result = analyzed["지원동기"]
 
         response = {
             "username": username,
@@ -140,9 +58,12 @@ async def text_filter_market_api(payload: TextRequest, username: str = Depends(v
                 status_code=422
             )
 
-        with open(LOG_PATH, "a", encoding="utf-8") as f:
-            title_result = analyze_field("제목", title, f)
-            content_result = analyze_field("내용", content, f)
+        analyzed = analyze_fields([
+            ("제목", title, True),
+            ("내용", content, True),
+        ])
+        title_result = analyzed["제목"]
+        content_result = analyzed["내용"]
 
         response = {
             "username": username,
@@ -163,13 +84,7 @@ async def text_filter_market_api(payload: TextRequest, username: str = Depends(v
 async def text_filter_single_api(payload: TextRequest):
     try:
         text = payload.text.strip()
-        sentence_list = split_sentences(text)
-        results = []
-        for sent in sentence_list:
-            label_num, label_text = predict(sent)
-            if label_text == "정상" and contains_english_profanity(sent):
-                label_text = "비속어"
-            results.append(label_text)
+        results = analyze_text_labels(text)
 
         return JSONResponse(
             status_code=200,
