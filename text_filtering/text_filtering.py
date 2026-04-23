@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from core.auth import verify_jwt_token
-from services.text_filtering import analyze_fields, analyze_text_labels
+from text_filtering.service import analyze_fields, analyze_text_labels
 
 router = APIRouter()
 
