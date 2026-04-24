@@ -1,9 +1,8 @@
 from datetime import time
-from multiprocessing import Pool, cpu_count
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional
 import re
-
 import cv2
 import numpy as np
 import pytesseract
@@ -30,15 +29,7 @@ H_MIN_LEN_RATIO = 0.60
 HOUGH_THRESH, HOUGH_MINLINE, HOUGH_MAXGAP = 120, 80, 10
 NEAR_EPS, BAND_MERGE = 6, 8
 TRIM_OUTER, TRIM_X_GAP, TRIM_Y_GAP = True, 20, 15
-
-_POOL: Optional[Pool] = None
-
-
-def get_pool() -> Pool:
-    global _POOL
-    if _POOL is None:
-        _POOL = Pool(processes=cpu_count() or 8)
-    return _POOL
+OCR_THREAD_WORKERS = 8
 
 
 def _ocr_task(roi_bytes: bytes) -> List[str]:
@@ -301,9 +292,9 @@ def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
 
     lines_list: List[List[str]] = []
     if tasks:
-        pool = get_pool()
-        chunk = max(16, len(tasks) // (cpu_count() or 1))
-        lines_list = pool.map(_ocr_task, tasks, chunksize=chunk)
+        max_workers = min(OCR_THREAD_WORKERS, len(tasks)) or 1
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ocr_cell") as executor:
+            lines_list = list(executor.map(_ocr_task, tasks))
 
     raw_cells: List[dict] = []
     for (row, col), lines in zip(meta_map, lines_list):

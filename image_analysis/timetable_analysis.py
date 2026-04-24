@@ -1,7 +1,7 @@
 from fastapi import APIRouter, File, Request, UploadFile
 
 from core.auth import verify_jwt_token
-from image_analysis.service import enqueue_timetable_analysis, start_queue_workers
+from image_analysis.service import enqueue_timetable_analysis
 
 
 router = APIRouter()

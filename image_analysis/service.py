@@ -1,9 +1,10 @@
 import asyncio
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
+import multiprocessing as mp
 
 import cv2
 import httpx
@@ -12,7 +13,7 @@ from fastapi import Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from core.settings import get_settings
-from image_analysis.ocr_engine import extract_schedule_fixed_scaled, get_pool
+from image_analysis.ocr_engine import extract_schedule_fixed_scaled
 
 
 settings = get_settings()
@@ -22,7 +23,12 @@ if not settings.spring_timetable_url:
 SPRING_TIMETABLE_URL = settings.spring_timetable_url
 JOB_TTL = timedelta(minutes=10)
 _WORKER_CONCURRENCY = 2
-_THREAD_EXECUTOR = ThreadPoolExecutor(max_workers=2)
+_PROCESS_CONTEXT = mp.get_context("spawn")
+_PROCESS_EXECUTOR = ProcessPoolExecutor(
+    max_workers=_WORKER_CONCURRENCY,
+    mp_context=_PROCESS_CONTEXT,
+)
+_WORKER_TASKS: set[asyncio.Task] = set()
 
 
 class JobStatus(str, Enum):
@@ -87,7 +93,7 @@ async def _queue_worker() -> None:
 
         job["status"] = JobStatus.RUNNING
         try:
-            result = await loop.run_in_executor(_THREAD_EXECUTOR, extract_schedule_fixed_scaled, img)
+            result = await loop.run_in_executor(_PROCESS_EXECUTOR, extract_schedule_fixed_scaled, img)
             if result:
                 await _post_to_spring(result, token, appcheck_token)
                 job["status"] = JobStatus.DONE
@@ -107,9 +113,10 @@ async def _queue_worker() -> None:
 
 
 async def start_queue_workers() -> None:
-    get_pool()
     for _ in range(_WORKER_CONCURRENCY):
-        asyncio.create_task(_queue_worker())
+        task = asyncio.create_task(_queue_worker())
+        _WORKER_TASKS.add(task)
+        task.add_done_callback(_WORKER_TASKS.discard)
 
 
 async def enqueue_timetable_analysis(request: Request, file: UploadFile, user_id: str):
@@ -125,7 +132,12 @@ async def enqueue_timetable_analysis(request: Request, file: UploadFile, user_id
             _active_users.discard(user_id)
             return JSONResponse(status_code=400, content={"error": "Invalid image format"})
 
-        token = request.headers.get("Authorization", "").split(" ")[1]
+        auth_header = request.headers.get("Authorization", "")
+        parts = auth_header.split(" ", 1)
+        if len(parts) != 2 or parts[0] != "Bearer" or not parts[1]:
+            _active_users.discard(user_id)
+            return JSONResponse(status_code=401, content={"error": "Invalid Authorization header"})
+        token = parts[1]
         appcheck_token = request.headers.get("X-Firebase-AppCheck", "")
         job_id = str(uuid.uuid4())
         _job_store[job_id] = {
