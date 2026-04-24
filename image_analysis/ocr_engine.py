@@ -355,7 +355,7 @@ def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
         if not next_slot:
             continue
         start_time, end_time = next_slot
-        schedule_rows.append({
+        schedule_rows.append({                                                                                                                                                             
             "week": weekdays[week_idx],
             "period": period0 + 1,
             "name": cell["name"],

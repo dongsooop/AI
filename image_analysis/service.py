@@ -154,5 +154,8 @@ async def enqueue_timetable_analysis(request: Request, file: UploadFile, user_id
 
         return JSONResponse(status_code=202, content={"job_id": job_id})
     except Exception:
+        jid = locals().get("job_id")
+        if jid:
+            _job_store.pop(jid, None)
         _active_users.discard(user_id)
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
