@@ -2,7 +2,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from text_filtering.text_filtering import router as text_filter_router
 from text_filtering.text_filtering_rule import router as text_filter_rule_router
-from image_analysis.timetable_analysis import router as timetable, start_queue_workers
+from image_analysis.timetable_analysis import router as timetable
+from image_analysis.service import start_queue_workers
 
 
 @asynccontextmanager
