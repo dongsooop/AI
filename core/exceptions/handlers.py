@@ -16,8 +16,17 @@ def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", "-")
 
 
-def _error_response(request: Request, status_code: int, code: str, message: str) -> JSONResponse:
+def _error_response(
+        request: Request, 
+        status_code: int, 
+        code: str, 
+        message: str,
+        extra_headers: dict[str, str] | None = None
+        ) -> JSONResponse:
     request_id = _request_id(request)
+    headers = {"X-Request-ID": request_id}
+    if extra_headers:
+        headers.update(extra_headers)
     return JSONResponse(
         status_code=status_code,
         content={
@@ -25,7 +34,7 @@ def _error_response(request: Request, status_code: int, code: str, message: str)
             "code": code,
             "request_id": request_id,
         },
-        headers={"X-Request-ID": request_id},
+        headers = headers,
     )
 
 
@@ -54,7 +63,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             request.url.path,
             message,
         )
-        return _error_response(request, exc.status_code, "http_error", message)
+        return _error_response(request, exc.status_code, "http_error", message, extra_headers=exc.headers)
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_handler(

@@ -140,6 +140,10 @@ def call_oss(messages: list[dict[str, str]], **kwargs) -> str:
             ),
         }] + messages
     try:
+        client = _get_oss_client()
+    except ConfigurationError:
+        raise
+    try:
         response = _get_oss_client().chat.completions.create(
             model=settings.oss_model,
             messages=messages,
@@ -148,6 +152,7 @@ def call_oss(messages: list[dict[str, str]], **kwargs) -> str:
         )
         return (response.choices[0].message.content or "").strip()
     except Exception:
+        logger.warning("oss_call_failed", exc_info=True)
         return ""
 
 
