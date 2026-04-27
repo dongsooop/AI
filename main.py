@@ -1,5 +1,11 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
+
+from core.exceptions import register_exception_handlers
+from core.logging import configure_logging, register_request_logging
+
+configure_logging("main-api")
+
 from text_filtering.text_filtering import router as text_filter_router
 from text_filtering.text_filtering_rule import router as text_filter_rule_router
 from image_analysis.timetable_analysis import router as timetable
@@ -23,6 +29,10 @@ async def limit_upload_size(request: Request, call_next):
         raise HTTPException(status_code=413, detail="File too large")
 
     return await call_next(request)
+
+
+register_request_logging(app)
+register_exception_handlers(app)
 
 # 헬스체크
 @app.get("/health")

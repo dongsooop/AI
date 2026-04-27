@@ -18,13 +18,12 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY core/ ./core/
+COPY text_filtering/ ./text_filtering/
+COPY image_analysis/ ./image_analysis/
 COPY model/my_electra_finetuned ./model/my_electra_finetuned
 COPY data/bad_text_sample.txt ./data/bad_text_sample.txt
 COPY data/eng_bad_text.txt ./data/eng_bad_text.txt
-
-COPY text_filtering/text_filtering_rule.py ./text_filtering/text_filtering_rule.py
-COPY text_filtering/text_filtering.py ./text_filtering/text_filtering.py
-COPY image_analysis/timetable_analysis.py ./image_analysis/timetable_analysis.py
 COPY main.py ./main.py
 COPY .env ./.env
 
