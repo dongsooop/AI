@@ -14,11 +14,6 @@ from sshtunnel import SSHTunnelForwarder
 from core.settings import get_settings
 from LLM.OSS.formatter import (
     dept_clarification_message,
-    one_sentence_dorm,
-    one_sentence_from_sub_answer,
-    one_sentence_grad,
-    one_sentence_policy,
-    one_sentence_topic,
     render_chatty_schedule,
     scrub_non_contact,
 )
@@ -32,6 +27,7 @@ from LLM.OSS.modes import (
     looks_like_schedule,
     looks_like_topic,
 )
+from LLM.OSS.postprocess import run_postprocess
 from LLM.rule_book.graph import run_rule_book
 from LLM.sub_model.query_index import build_answer
 from LLM.sub_model.schedule_index import schedule_search
@@ -249,7 +245,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
             return cache_and_return({"engine": "fast", "text": clarification})
 
         sub_answer = call_submodel(user_text)
-        text, url = one_sentence_from_sub_answer(user_text, sub_answer)
+        text, url = run_postprocess("fast", user_text, sub_answer)
         response = {"engine": "fast", "text": text}
         if url:
             response["url"] = url
@@ -257,7 +253,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
 
     if mode == "policy":
         sub_answer = call_submodel(user_text)
-        text, url = one_sentence_policy(user_text, sub_answer)
+        text, url = run_postprocess("policy", user_text, sub_answer)
         response = {"engine": "policy", "text": text}
         if url:
             response["url"] = url
@@ -265,7 +261,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
 
     if mode == "dorm":
         sub_answer = call_submodel(user_text)
-        text, url = one_sentence_dorm(user_text, sub_answer)
+        text, url = run_postprocess("dorm", user_text, sub_answer)
         response = {"engine": "dorm", "text": text}
         if url:
             response["url"] = url
@@ -273,7 +269,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
 
     if mode == "grad":
         sub_answer = call_submodel(user_text)
-        text, url = one_sentence_grad(user_text, sub_answer)
+        text, url = run_postprocess("grad", user_text, sub_answer)
         response = {"engine": "grad", "text": text}
         if url:
             response["url"] = url
@@ -281,7 +277,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
 
     if mode == "topic":
         sub_answer = call_submodel(user_text)
-        text, url = one_sentence_topic(user_text, sub_answer)
+        text, url = run_postprocess("topic", user_text, sub_answer)
         response = {"engine": "topic", "text": text}
         if url:
             response["url"] = url
@@ -312,9 +308,9 @@ async def chat_with_oss(req: ChatReq) -> dict:
                     return response
                 if sub_answer:
                     if looks_like_topic(user_text):
-                        text, _ = one_sentence_topic(user_text, sub_answer)
+                        text, _ = run_postprocess("topic", user_text, sub_answer)
                     else:
-                        text, _ = one_sentence_from_sub_answer(user_text, sub_answer)
+                        text, _ = run_postprocess("fast", user_text, sub_answer)
                     output = text
                 else:
                     output = "잘 이해하지 못했어요. 다시 질문해주세요."
@@ -336,7 +332,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
         temperature=0.2,
     )
     if not fused:
-        text, _ = one_sentence_topic(user_text, sub_answer)
+        text, _ = run_postprocess("topic", user_text, sub_answer)
         fused = text if looks_like_topic(user_text) else "좋아요, 무엇을 이야기해 볼까요?"
 
     latency = int((time.monotonic() - start) * 1000)

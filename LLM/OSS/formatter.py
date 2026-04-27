@@ -5,6 +5,8 @@ from typing import Optional
 
 from core.settings import get_settings
 from LLM.OSS.modes import CONTACT_INTENT_RE
+from LLM.OSS.postprocess.context import PostProcessContext
+from LLM.OSS.postprocess.synonym_table import DORM_SYNONYM_RULES, POLICY_SYNONYM_RULES
 
 
 settings = get_settings()
@@ -251,22 +253,23 @@ def expand_synonyms(user_text: str) -> list[str]:
 def expand_policy_synonyms(user_text: str) -> list[str]:
     text = user_text or ""
     synonyms: list[str] = []
-    if "복학" in text or "휴복학" in text or "휴·복학" in text or "휴 학" in text:
-        synonyms += ["복학", "휴학", "휴복학", "휴·복학", "휴학/복학"]
-    if "휴학" in text:
-        for word in ["휴학", "복학", "휴복학", "휴·복학", "휴학/복학"]:
-            if word not in synonyms:
-                synonyms.append(word)
-    if "학적" in text:
-        synonyms += ["학적", "학적변동", "휴학", "복학", "재입학", "자퇴", "전과"]
+    for rule in POLICY_SYNONYM_RULES:
+        if any(trigger in text for trigger in rule["triggers"]):
+            for word in rule["synonyms"]:
+                if word not in synonyms:
+                    synonyms.append(word)
     return synonyms
 
 
 def expand_dorm_synonyms(user_text: str) -> list[str]:
     text = user_text or ""
-    if any(keyword in text for keyword in ["기숙사", "생활관", "학생생활관", "사생", "입사", "퇴사", "입실", "퇴실", "생활관비"]):
-        return ["기숙사", "생활관", "학생생활관", "입사", "퇴사", "입사신청", "생활관비", "생활관 안내", "생활관 규정"]
-    return []
+    synonyms: list[str] = []
+    for rule in DORM_SYNONYM_RULES:
+        if any(trigger in text for trigger in rule["triggers"]):
+            for word in rule["synonyms"]:
+                if word not in synonyms:
+                    synonyms.append(word)
+    return synonyms
 
 
 def ensure_layout_unknown(url: str) -> str:
@@ -457,6 +460,31 @@ def _parse_bullets_and_pick(
 def one_sentence_from_sub_answer(user_text: str, sub_answer: str) -> tuple[str, Optional[str]]:
     if not sub_answer:
         return "요청하신 정보를 찾지 못했습니다.", None
+    ctx = build_contact_context(user_text, sub_answer)
+    return render_contact_response(ctx)
+
+
+def matches_hint_label(label: str, hint: Optional[dict[str, object]]) -> bool:
+    return _hint_matches_line(label, "", hint)
+
+
+def extract_contact_fields(
+    user_text: str,
+    sub_answer: str,
+    hint: Optional[dict[str, object]] = None,
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    return _parse_bullets_and_pick(user_text, sub_answer, hint)
+
+
+def extract_fallback_phone(
+    user_text: str,
+    sub_answer: str,
+    hint: Optional[dict[str, object]] = None,
+) -> Optional[str]:
+    return _fallback_phone_from_sub_answer(user_text, sub_answer, hint)
+
+
+def build_contact_context(user_text: str, sub_answer: str, mode: str = "fast") -> PostProcessContext:
     hint = detect_dept_hint(user_text)
     label, phone, url = _parse_bullets_and_pick(user_text, sub_answer, hint)
     contact_intent = bool(CONTACT_INTENT_RE.search(user_text or ""))
@@ -467,148 +495,215 @@ def one_sentence_from_sub_answer(user_text: str, sub_answer: str) -> tuple[str, 
     if contact_intent and hint and label and not _hint_matches_line(label, "", hint):
         label = None
 
-    if label and phone:
-        return f"{label} 전화번호는 {phone}입니다.", url
-    if contact_intent and phone:
-        return f"요청하신 부서 담당자 전화번호는 {phone}입니다.", url
-    if contact_intent and not phone:
-        return "담당자 연락처를 바로 찾지 못했습니다. 학과(또는 부서) 풀네임으로 다시 입력해 주세요.", url
-    if label and url:
-        return f"{label} 정보는 {url}에서 확인할 수 있습니다.", url
+    return PostProcessContext(
+        user_text=user_text,
+        mode=mode,
+        sub_answer=sub_answer,
+        label=label,
+        phone=phone,
+        url=url,
+        hint=hint,
+        first_line=_first_line_or_default(sub_answer, "요청하신 정보를 찾지 못했습니다."),
+        contact_intent=contact_intent,
+    )
 
+
+def render_contact_response(ctx: PostProcessContext) -> tuple[str, Optional[str]]:
+    if ctx.label and ctx.phone:
+        return f"{ctx.label} 전화번호는 {ctx.phone}입니다.", ctx.url
+    if ctx.contact_intent and ctx.phone:
+        return f"요청하신 부서 담당자 전화번호는 {ctx.phone}입니다.", ctx.url
+    if ctx.contact_intent and not ctx.phone:
+        return "담당자 연락처를 바로 찾지 못했습니다. 학과(또는 부서) 풀네임으로 다시 입력해 주세요.", ctx.url
+    if ctx.label and ctx.url:
+        return f"{ctx.label} 정보는 {ctx.url}에서 확인할 수 있습니다.", ctx.url
+    return ctx.first_line, ctx.url
+
+
+def _build_default_info_text(user_text: str, suffix: str = "") -> str:
+    return f"‘{user_text}’ 관련 정보는 {ORG_HOMEPAGE_LABEL}{suffix}에서 확인할 수 있습니다."
+
+
+def _first_line_or_default(sub_answer: str, default_text: str) -> str:
+    if not sub_answer:
+        return default_text
     first = sub_answer.strip().splitlines()[0].lstrip("- ").strip()
-    text = first if first.endswith(("다.", "요.")) else (first + "." if first else "요청하신 정보를 찾지 못했습니다.")
-    return text, url
+    if not first:
+        return default_text
+    return first if first.endswith(("다.", "요.")) else first + "."
+
+
+def _collect_title_url_candidates(
+    user_text: str,
+    sub_answer: str,
+    scorer,
+) -> list[tuple[float, str, str]]:
+    candidates: list[tuple[float, str, str]] = []
+    for item in TITLE_URL_PAT.finditer(sub_answer or ""):
+        title = (item.group("title") or "").strip()
+        url = (item.group("url") or "").strip()
+        if SAFETY_URL_RE.search(url) or SAFETY_TITLE_RE.search(title):
+            continue
+        candidates.append((scorer(user_text, title, url), title, url))
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return candidates
+
+
+def _topic_candidate_score(user_text: str, title: str, url: str) -> float:
+    hint = detect_dept_hint(user_text)
+    compact_query = re.sub(r"\s+", "", user_text)
+    score = 0.0
+    if GOOD_URL_RE.search(url):
+        score += 3.0
+    if BAD_URL_RE.search(url):
+        score -= 4.0
+    if re.sub(r"\s+", "", title) == compact_query:
+        score += 6.0
+    if INTRO_WORD_RE.search(title):
+        score += 3.0
+    if CONTACT_WORD_RE.search(title):
+        score -= 5.0
+    tokens = [token for token in re.findall(r"[가-힣A-Za-z0-9]{2,}", user_text)]
+    if any(token in title for token in tokens):
+        score += 1.0
+    if hint:
+        if hint["path_base"] and hint["path_base"] in url:
+            score += 8.0
+        if any(alias in title for alias in hint["aliases"]):
+            score += 4.0
+    return score
+
+
+def _policy_candidate_score(user_text: str, title: str, url: str) -> float:
+    synonyms = expand_policy_synonyms(user_text)
+    tokens = [token for token in re.findall(r"[가-힣A-Za-z0-9·]{2,}", user_text)]
+    score = 0.0
+    if GOOD_URL_RE.search(url):
+        score += 3.5
+    if BAD_URL_RE.search(url):
+        score -= 8.0
+    if any(keyword in title for keyword in synonyms):
+        score += 7.0
+    if any(keyword in title for keyword in ("휴학", "복학", "휴·복학", "휴복학", "학적", "학사안내")):
+        score += 3.0
+    if any(token in title for token in tokens):
+        score += 1.0
+    if CONTACT_WORD_RE.search(title):
+        score -= 3.0
+    return score
+
+
+def _dorm_candidate_score(user_text: str, title: str, url: str) -> float:
+    synonyms = expand_dorm_synonyms(user_text)
+    tokens = [token for token in re.findall(r"[가-힣A-Za-z0-9·]{2,}", user_text)]
+    score = 0.0
+    if GOOD_URL_RE.search(url):
+        score += 3.5
+    if BAD_URL_RE.search(url):
+        score -= 8.0
+    if any(keyword in title for keyword in synonyms):
+        score += 8.0
+    if any(keyword in title for keyword in ("학생생활관", "생활관", "기숙사", "입사", "생활관비", "생활관 안내")):
+        score += 3.0
+    if any(token in title for token in tokens):
+        score += 1.0
+    if CONTACT_WORD_RE.search(title):
+        score -= 3.0
+    return score
+
+
+def _best_title_url_candidate(
+    user_text: str,
+    sub_answer: str,
+    default_text: str,
+    scorer,
+    prefer_good_url: bool = False,
+    require_positive_score: bool = False,
+) -> tuple[Optional[str], Optional[str], str]:
+    items = list(TITLE_URL_PAT.finditer(sub_answer or ""))
+    if not sub_answer:
+        return None, None, default_text
+    if not items:
+        return None, None, _first_line_or_default(sub_answer, default_text)
+
+    candidates = _collect_title_url_candidates(user_text, sub_answer, scorer)
+    if not candidates:
+        return None, None, default_text
+
+    selected = candidates
+    if prefer_good_url:
+        selected = [candidate for candidate in candidates if GOOD_URL_RE.search(candidate[2])] or candidates
+
+    best_score, best_title, best_url = selected[0]
+    if require_positive_score and best_score <= 0:
+        return None, None, default_text
+    return best_title, best_url, _first_line_or_default(sub_answer, default_text)
 
 
 def one_sentence_topic(user_text: str, sub_answer: str) -> tuple[str, Optional[str]]:
+    title, url, first_line = extract_topic_candidate(user_text, sub_answer)
+    default_text = _build_default_info_text(user_text)
     if not sub_answer:
-        return f"‘{user_text}’ 관련 정보는 {ORG_HOMEPAGE_LABEL}에서 확인할 수 있습니다.", ORG_HOMEPAGE_URL
-    items = list(TITLE_URL_PAT.finditer(sub_answer))
-    if not items:
-        first = sub_answer.strip().splitlines()[0].lstrip("- ").strip()
-        text = first if first.endswith(("다.", "요.")) else (first + "." if first else f"‘{user_text}’ 관련 정보는 {ORG_HOMEPAGE_LABEL}에서 확인할 수 있습니다.")
-        return text, None
+        return default_text, ORG_HOMEPAGE_URL
+    if title and url:
+        best_url = ensure_layout_unknown(url)
+        return f"‘{user_text}’ 관련 정보는 ‘{title}’ 페이지({best_url})에서 확인할 수 있습니다.", best_url
+    return first_line, None
 
-    hint = detect_dept_hint(user_text)
-    compact_query = re.sub(r"\s+", "", user_text)
-    candidates: list[tuple[float, str, str]] = []
-    for item in items:
-        title = (item.group("title") or "").strip()
-        url = (item.group("url") or "").strip()
-        if SAFETY_URL_RE.search(url) or SAFETY_TITLE_RE.search(title):
-            continue
-        score = 0.0
-        if GOOD_URL_RE.search(url):
-            score += 3.0
-        if BAD_URL_RE.search(url):
-            score -= 4.0
-        if re.sub(r"\s+", "", title) == compact_query:
-            score += 6.0
-        if INTRO_WORD_RE.search(title):
-            score += 3.0
-        if CONTACT_WORD_RE.search(title):
-            score -= 5.0
-        tokens = [token for token in re.findall(r"[가-힣A-Za-z0-9]{2,}", user_text)]
-        if any(token in title for token in tokens):
-            score += 1.0
-        if hint:
-            if hint["path_base"] and hint["path_base"] in url:
-                score += 8.0
-            if any(alias in title for alias in hint["aliases"]):
-                score += 4.0
-        candidates.append((score, title, url))
 
-    if not candidates:
-        return f"‘{user_text}’ 관련 정보는 {ORG_HOMEPAGE_LABEL}에서 확인할 수 있습니다.", ORG_HOMEPAGE_URL
-    candidates.sort(key=lambda item: item[0], reverse=True)
-    best_score, best_title, best_url = candidates[0]
-    if best_score <= 0:
-        return f"‘{user_text}’ 관련 정보는 {ORG_HOMEPAGE_LABEL}에서 확인할 수 있습니다.", ORG_HOMEPAGE_URL
-    best_url = ensure_layout_unknown(best_url)
-    return f"‘{user_text}’ 관련 정보는 ‘{best_title}’ 페이지({best_url})에서 확인할 수 있습니다.", best_url
+def extract_topic_candidate(user_text: str, sub_answer: str) -> tuple[Optional[str], Optional[str], str]:
+    default_text = _build_default_info_text(user_text)
+    return _best_title_url_candidate(
+        user_text,
+        sub_answer,
+        default_text,
+        scorer=_topic_candidate_score,
+        require_positive_score=True,
+    )
 
 
 def one_sentence_policy(user_text: str, sub_answer: str) -> tuple[str, Optional[str]]:
+    title, url, first_line = extract_policy_candidate(user_text, sub_answer)
+    default_text = _build_default_info_text(user_text, "의 학사안내")
     if not sub_answer:
-        return f"‘{user_text}’ 관련 정보는 {ORG_HOMEPAGE_LABEL}의 학사안내에서 확인할 수 있습니다.", ORG_HOMEPAGE_URL
-    items = list(TITLE_URL_PAT.finditer(sub_answer))
-    if not items:
-        first = sub_answer.strip().splitlines()[0].lstrip("- ").strip()
-        text = first if first.endswith(("다.", "요.")) else (first + "." if first else f"‘{user_text}’ 관련 정보는 {ORG_HOMEPAGE_LABEL}의 학사안내에서 확인할 수 있습니다.")
-        return text, None
+        return default_text, ORG_HOMEPAGE_URL
+    if title and url:
+        best_url = ensure_layout_unknown(url)
+        return f"‘{user_text}’ 관련 공식 안내는 ‘{title}’ 페이지({best_url})에서 확인할 수 있습니다.", best_url
+    return first_line, None
 
-    synonyms = expand_policy_synonyms(user_text)
-    tokens = [token for token in re.findall(r"[가-힣A-Za-z0-9·]{2,}", user_text)]
-    candidates: list[tuple[float, str, str]] = []
-    for item in items:
-        title = (item.group("title") or "").strip()
-        url = (item.group("url") or "").strip()
-        if SAFETY_URL_RE.search(url) or SAFETY_TITLE_RE.search(title):
-            continue
-        score = 0.0
-        if GOOD_URL_RE.search(url):
-            score += 3.5
-        if BAD_URL_RE.search(url):
-            score -= 8.0
-        if any(keyword in title for keyword in synonyms):
-            score += 7.0
-        if any(keyword in title for keyword in ("휴학", "복학", "휴·복학", "휴복학", "학적", "학사안내")):
-            score += 3.0
-        if any(token in title for token in tokens):
-            score += 1.0
-        if CONTACT_WORD_RE.search(title):
-            score -= 3.0
-        candidates.append((score, title, url))
 
-    if not candidates:
-        return f"‘{user_text}’ 관련 정보는 {ORG_HOMEPAGE_LABEL}의 학사안내에서 확인할 수 있습니다.", ORG_HOMEPAGE_URL
-    candidates.sort(key=lambda item: item[0], reverse=True)
-    preferred = [candidate for candidate in candidates if GOOD_URL_RE.search(candidate[2])] or candidates
-    _, best_title, best_url = preferred[0]
-    best_url = ensure_layout_unknown(best_url)
-    return f"‘{user_text}’ 관련 공식 안내는 ‘{best_title}’ 페이지({best_url})에서 확인할 수 있습니다.", best_url
+def extract_policy_candidate(user_text: str, sub_answer: str) -> tuple[Optional[str], Optional[str], str]:
+    default_text = _build_default_info_text(user_text, "의 학사안내")
+    return _best_title_url_candidate(
+        user_text,
+        sub_answer,
+        default_text,
+        scorer=_policy_candidate_score,
+        prefer_good_url=True,
+    )
 
 
 def one_sentence_dorm(user_text: str, sub_answer: str) -> tuple[str, Optional[str]]:
+    title, url, first_line = extract_dorm_candidate(user_text, sub_answer)
+    default_text = _build_default_info_text(user_text, "의 생활관 안내")
     if not sub_answer:
-        return f"‘{user_text}’ 관련 정보는 {ORG_HOMEPAGE_LABEL}의 생활관 안내에서 확인할 수 있습니다.", ORG_HOMEPAGE_URL
-    items = list(TITLE_URL_PAT.finditer(sub_answer))
-    if not items:
-        first = sub_answer.strip().splitlines()[0].lstrip("- ").strip()
-        text = first if first.endswith(("다.", "요.")) else (first + "." if first else f"‘{user_text}’ 관련 정보는 {ORG_HOMEPAGE_LABEL}의 생활관 안내에서 확인할 수 있습니다.")
-        return text, None
+        return default_text, ORG_HOMEPAGE_URL
+    if title and url:
+        best_url = ensure_layout_unknown(url)
+        return f"‘{user_text}’ 관련 공식 안내는 ‘{title}’ 페이지({best_url})에서 확인할 수 있습니다.", best_url
+    return first_line, None
 
-    synonyms = expand_dorm_synonyms(user_text)
-    tokens = [token for token in re.findall(r"[가-힣A-Za-z0-9·]{2,}", user_text)]
-    candidates: list[tuple[float, str, str]] = []
-    for item in items:
-        title = (item.group("title") or "").strip()
-        url = (item.group("url") or "").strip()
-        if SAFETY_URL_RE.search(url) or SAFETY_TITLE_RE.search(title):
-            continue
-        score = 0.0
-        if GOOD_URL_RE.search(url):
-            score += 3.5
-        if BAD_URL_RE.search(url):
-            score -= 8.0
-        if any(keyword in title for keyword in synonyms):
-            score += 8.0
-        if any(keyword in title for keyword in ("학생생활관", "생활관", "기숙사", "입사", "생활관비", "생활관 안내")):
-            score += 3.0
-        if any(token in title for token in tokens):
-            score += 1.0
-        if CONTACT_WORD_RE.search(title):
-            score -= 3.0
-        candidates.append((score, title, url))
 
-    if not candidates:
-        return f"‘{user_text}’ 관련 정보는 {ORG_HOMEPAGE_LABEL}의 생활관 안내에서 확인할 수 있습니다.", ORG_HOMEPAGE_URL
-    candidates.sort(key=lambda item: item[0], reverse=True)
-    preferred = [candidate for candidate in candidates if GOOD_URL_RE.search(candidate[2])] or candidates
-    _, best_title, best_url = preferred[0]
-    best_url = ensure_layout_unknown(best_url)
-    return f"‘{user_text}’ 관련 공식 안내는 ‘{best_title}’ 페이지({best_url})에서 확인할 수 있습니다.", best_url
+def extract_dorm_candidate(user_text: str, sub_answer: str) -> tuple[Optional[str], Optional[str], str]:
+    default_text = _build_default_info_text(user_text, "의 생활관 안내")
+    return _best_title_url_candidate(
+        user_text,
+        sub_answer,
+        default_text,
+        scorer=_dorm_candidate_score,
+        prefer_good_url=True,
+    )
 
 
 def _extract_url_from_text(text: str) -> Optional[str]:
@@ -626,6 +721,15 @@ def _extract_url_from_text(text: str) -> Optional[str]:
 def one_sentence_grad(user_text: str, sub_answer: str) -> tuple[str, Optional[str]]:
     if not sub_answer:
         return f"졸업 관련 정보는 {GRAD_PAGE_URL}에서 확인할 수 있습니다.", GRAD_PAGE_URL
+    summary, source_url = extract_grad_summary(user_text, sub_answer)
+    if "확인할 수 있습니다." in summary:
+        return summary, source_url
+    return f"{summary} 자세한 내용은 {source_url}에서 확인할 수 있습니다.", source_url
+
+
+def extract_grad_summary(user_text: str, sub_answer: str) -> tuple[str, str]:
+    if not sub_answer:
+        return "졸업 관련 정보를 찾지 못했습니다.", ensure_layout_unknown(GRAD_PAGE_URL)
 
     lines = [re.sub(r"\*\*", "", line.strip().lstrip("- ").strip()) for line in sub_answer.splitlines() if line.strip()]
     ask_two_year = bool(re.search(r"2\s*년제", user_text))
@@ -642,6 +746,4 @@ def one_sentence_grad(user_text: str, sub_answer: str) -> tuple[str, Optional[st
 
     summary = preferred[0] if preferred else (lines[0] if lines else "졸업 관련 정보를 찾지 못했습니다.")
     source_url = _extract_url_from_text(sub_answer) or ensure_layout_unknown(GRAD_PAGE_URL)
-    if "확인할 수 있습니다." in summary:
-        return summary, source_url
-    return f"{summary} 자세한 내용은 {source_url}에서 확인할 수 있습니다.", source_url
+    return summary, source_url
