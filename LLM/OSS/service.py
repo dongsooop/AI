@@ -11,6 +11,8 @@ from psycopg2 import pool as pg_pool
 from pydantic import BaseModel
 from sshtunnel import SSHTunnelForwarder
 
+from core.exceptions import ConfigurationError
+from core.logging import get_logger
 from core.settings import get_settings
 from LLM.OSS.formatter import (
     dept_clarification_message,
@@ -34,6 +36,7 @@ from LLM.sub_model.schedule_index import schedule_search
 
 
 settings = get_settings()
+logger = get_logger(__name__)
 
 _CACHE_RULE_BOOK: TTLCache = TTLCache(maxsize=200, ttl=86400)
 _CACHE_GENERAL: TTLCache = TTLCache(maxsize=500, ttl=3600)
@@ -76,6 +79,7 @@ def init_db_pool() -> None:
     else:
         db_kwargs["host"] = "localhost"
     _db_pool = pg_pool.ThreadedConnectionPool(minconn=1, maxconn=5, **db_kwargs)
+    logger.info("chatbot_db_pool_initialized ssh_tunnel=%s", bool(ssh_host))
 
 
 def shutdown_db_pool() -> None:
@@ -83,6 +87,7 @@ def shutdown_db_pool() -> None:
         _db_pool.closeall()
     if _ssh_tunnel:
         _ssh_tunnel.stop()
+    logger.info("chatbot_db_pool_shutdown")
 
 
 def _log_chatbot(query: str, mode: str, response: str, url: Optional[str], cache_hit: bool, latency_ms: int) -> None:
@@ -101,7 +106,7 @@ def _log_chatbot(query: str, mode: str, response: str, url: Optional[str], cache
                     (query, mode, response, url, cache_hit, latency_ms),
                 )
     except Exception as exc:
-        print(f"[chatbot_log ERROR] {exc}")
+        logger.warning("chatbot_log_write_failed: %s", exc, exc_info=True)
     finally:
         if conn and _db_pool:
             _db_pool.putconn(conn)
@@ -115,11 +120,12 @@ def _get_oss_client() -> OpenAI:
     with _client_lock:
         if _client is None:
             if not settings.oss_api_key or not settings.oss_model:
-                raise RuntimeError("OSS_API_KEY and OSS_MODEL are required")
+                raise ConfigurationError("OSS_API_KEY and OSS_MODEL are required")
             client_kwargs = {"api_key": settings.oss_api_key}
             if settings.oss_base_url:
                 client_kwargs["base_url"] = settings.oss_base_url
             _client = OpenAI(**client_kwargs)
+            logger.info("oss_client_initialized base_url=%s", bool(settings.oss_base_url))
     return _client
 
 
@@ -134,6 +140,10 @@ def call_oss(messages: list[dict[str, str]], **kwargs) -> str:
             ),
         }] + messages
     try:
+        client = _get_oss_client()
+    except ConfigurationError:
+        raise
+    try:
         response = _get_oss_client().chat.completions.create(
             model=settings.oss_model,
             messages=messages,
@@ -142,6 +152,7 @@ def call_oss(messages: list[dict[str, str]], **kwargs) -> str:
         )
         return (response.choices[0].message.content or "").strip()
     except Exception:
+        logger.warning("oss_call_failed", exc_info=True)
         return ""
 
 

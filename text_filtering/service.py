@@ -6,10 +6,13 @@ from typing import Any
 import torch
 from transformers import ElectraForSequenceClassification, ElectraTokenizer
 
+from core.logging import get_logger
+
 
 MODEL_PATH = Path("model/my_electra_finetuned")
 LOG_PATH = Path("data/bad_text_sample.txt")
 ENGLISH_BAD_WORDS_PATH = Path("data/eng_bad_text.txt")
+logger = get_logger(__name__)
 
 SENTENCE_ENDINGS = [
     "다",
@@ -35,7 +38,7 @@ def load_english_bad_words(file_path: Path) -> set[str]:
                 if word:
                     bad_words.add(word)
     except FileNotFoundError:
-        print(f"[ERROR] 영어 비속어 사전 파일을 찾을 수 없습니다: {file_path}")
+        logger.warning("영어 비속어 사전 파일을 찾을 수 없습니다: %s", file_path)
     return bad_words
 
 
