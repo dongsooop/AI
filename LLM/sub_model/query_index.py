@@ -1,6 +1,21 @@
 import os, re, json, pickle, numpy as np, pandas as pd
 from pathlib import Path
 from functools import lru_cache
+from LLM.patterns import (
+    BOARD_URL_PATTERN,
+    DASH_CHARS_PATTERN,
+    DEPT_HOME_URL_PATTERN,
+    EMAIL_RE,
+    GENERIC_ORG_LABEL_RE,
+    HANGUL_TOKEN_PATTERN,
+    HOME_LIKE_URL_PATTERN,
+    OTHER_UNIT_TOKEN_RE,
+    PHONE_ANY_AREA_RE,
+    STAFF_TITLE_PATTERN,
+    STAFF_URL_PATTERN,
+    UNIT_QUERY_SUFFIX_PATTERN,
+    UNIT_SUFFIX_RE,
+)
 from sentence_transformers import SentenceTransformer
 from rank_bm25 import BM25Okapi
 from LLM.sub_model.index_utils import get_tokenizer, load_json_gz  # 서버용
@@ -14,20 +29,13 @@ ROOT_DIR = THIS_DIR.parent.parent
 
 # 졸업학점 관련 키워드 복원 (학교 기본 정보 포함)
 GRAD_KWS = ["졸업", "졸업학점", "졸업 학점", "졸업요건", "졸업요구학점", "이수학점", "졸업 이수학점"]
-UNIT_SUFFIX_RE = re.compile(r"(학부|학과|팀|센터|처|단|부|원|본부)$")
-OTHER_UNIT_TOKEN_RE = re.compile(r"([가-힣A-Za-z0-9]{2,}(?:학부|학과|팀|센터|처|단|부|원|본부))")
 FAX_RE = re.compile(r"(?:팩스|FAX)", re.I)
-GENERIC_LABEL_RE = re.compile(r"(?:대표|교무|입학|장학|취업|총무|홍보|학생상담|콜센터)")
-
-# === 추가: 직원/부서 통합 전화안내(교직원검색) 우선 적용용 패턴 ===
-STAFF_TITLE_RE = re.compile(r"(?:교직원\s*검색|전화번호\s*안내)", re.I)
-STAFF_URL_RE   = re.compile(r"/dmu/4408/subview\.do$", re.I)
+GENERIC_LABEL_RE = GENERIC_ORG_LABEL_RE
 
 # 졸업학점 관련 변수들 복원 (학교 기본 정보 포함)
 _OLD_NEW_NUM = r"(\d{2,3})"
 _BYPYO1_RE   = r"\[?\s*별표\s*1\s*\]?"
-PHONE_RE = re.compile(r'(0\d{1,2})[^\d]{0,4}(\d{3,4})[^\d]{0,4}(\d{4})')
-EMAIL_RE = re.compile(r'([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})')
+PHONE_RE = PHONE_ANY_AREA_RE
 _TOTAL_PATS = [
     re.compile(r"(?:총|전체)\s*(?:졸업|이수)\s*(?:요구)?\s*학점\s*[:：]?\s*(\d{3})\s*학점"),
     re.compile(r"졸업\s*(?:이수)?\s*학점\s*[:：]?\s*(\d{3})\s*학점"),
@@ -40,8 +48,23 @@ _PART_PATS = {
 }
 NEAR_NUM_RE = re.compile(r"(\d{3})\s*학점")
 
+CONTACT_SEARCH_POOL_SIZE = 30
+GRAD_SEARCH_POOL_SIZE = 25
+GENERAL_SEARCH_POOL_SIZE = 12
+DEFAULT_DENSE_WEIGHT = 0.6
+CONTACT_DOC_BOOST = 0.18
+PHONE_EMAIL_BONUS_RATIO = 0.5
+UNIT_MATCH_BOOST = 2.2
+STAFF_PAGE_BOOST = 1.6
+CONTACT_DOC_RERANK_BOOST = 1.3
+DEPT_HOME_BOOST = 0.7
+BOARD_PAGE_PENALTY = 0.8
+HOME_PAGE_RERANK_BOOST = 1.2
+PAGE_DOC_RERANK_BOOST = 1.0
+TITLE_UNIT_MATCH_BOOST = 0.6
+
 def _canonical_unit_from_query(q: str) -> str | None:
-    toks = re.findall(r"[가-힣A-Za-z0-9]{2,}", q or "")
+    toks = re.findall(HANGUL_TOKEN_PATTERN, q or "")
     units = [t for t in toks if UNIT_SUFFIX_RE.search(t)]
     return max(units, key=len) if units else None
 
@@ -49,7 +72,7 @@ def _preclean_text(s: str) -> str:
     if not isinstance(s, str):
         return ""
     s = s.replace("\u00A0", " ").replace("\u200B", "")
-    s = re.sub(r"[\u2010\u2011\u2012\u2013\u2014\u2212\uFE58\uFE63\uFF0D]", "-", s)
+    s = re.sub(f"[{DASH_CHARS_PATTERN}]", "-", s)
     return s
 
 def _extract_phones_from_text(text: str):
@@ -210,7 +233,7 @@ row_norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
 row_norms[row_norms == 0] = 1.0
 embeddings = embeddings / row_norms
 
-UNIT_TOK_RE = re.compile(r"[가-힣A-Za-z0-9]{2,}")
+UNIT_TOK_RE = re.compile(HANGUL_TOKEN_PATTERN)
 
 model_name = "intfloat/multilingual-e5-base"
 model = SentenceTransformer(model_name)
@@ -252,7 +275,7 @@ def _minmax(x):
 
 # 최신성 점수 함수 제거됨 (학교 기본 정보만 제공)
 
-def hybrid_search(query, top_k=8, alpha=0.6, contact_boost=0.18):
+def hybrid_search(query, top_k=8, alpha=DEFAULT_DENSE_WEIGHT, contact_boost=CONTACT_DOC_BOOST):
     qv = embed_query(query)
     dense_raw = embeddings @ qv
     bm25_raw  = bm25.get_scores(tokenize_kor(query))
@@ -264,7 +287,7 @@ def hybrid_search(query, top_k=8, alpha=0.6, contact_boost=0.18):
         is_contact = (search_df["doc_type"] == "contact").astype(float).to_numpy()
         has_phone = (search_df["phone"].astype(str) != "").astype(float).to_numpy()
         has_email = (search_df["email"].astype(str) != "").astype(float).to_numpy()
-        bonus = contact_boost * (is_contact + 0.5*has_phone + 0.5*has_email)
+        bonus = contact_boost * (is_contact + PHONE_EMAIL_BONUS_RATIO*has_phone + PHONE_EMAIL_BONUS_RATIO*has_email)
 
     scores = base + bonus
     out = search_df.copy()
@@ -279,16 +302,16 @@ def build_answer(query, top_k=6):
     contact_like = any(k in query for k in CONTACT_KWS)
 
     if contact_like:
-        hits = hybrid_search(query, top_k=max(top_k, 30))
+        hits = hybrid_search(query, top_k=max(top_k, CONTACT_SEARCH_POOL_SIZE))
 
-        toks = re.findall(r"[가-힣A-Za-z0-9]{2,}", query or "")
-        prefer = [t for t in toks if re.search(r"(학부|과|팀|센터|처|단|부|원|본부)$", t)]
+        toks = re.findall(HANGUL_TOKEN_PATTERN, query or "")
+        prefer = [t for t in toks if re.search(UNIT_QUERY_SUFFIX_PATTERN, t)]
         terms = prefer if prefer else toks[:3]
         target_unit = _canonical_unit_from_query(query)
 
         # 교직원검색(4408) 페이지를 후보에 반드시 포함
-        staff_mask = (search_df["url"].astype(str).str.contains(STAFF_URL_RE) |
-                    search_df["title"].astype(str).str.contains(STAFF_TITLE_RE))
+        staff_mask = (search_df["url"].astype(str).str.contains(STAFF_URL_PATTERN, case=False, regex=True) |
+                    search_df["title"].astype(str).str.contains(STAFF_TITLE_PATTERN, case=False, regex=True))
         staff_rows = search_df.loc[staff_mask, ["doc_type","title","text","unit","url","phone","email"]].copy()
         if not staff_rows.empty:
             hits = pd.concat([hits, staff_rows], ignore_index=True)
@@ -304,12 +327,21 @@ def build_answer(query, top_k=6):
             unit_match = (units.str.contains(re.escape(target_unit))) | (titles.str.contains(re.escape(target_unit)))
         unit_match = unit_match.astype(int)
 
-        is_staff    = (urls.str.contains(STAFF_URL_RE) | titles.str.contains(STAFF_TITLE_RE)).astype(int)
+        is_staff    = (
+            urls.str.contains(STAFF_URL_PATTERN, case=False, regex=True)
+            | titles.str.contains(STAFF_TITLE_PATTERN, case=False, regex=True)
+        ).astype(int)
         is_contact  = hits["doc_type"].eq("contact").astype(int)
-        is_dept_home= urls.str.contains(r"/dmu/\d{4}/subview\.do$", case=False, regex=True).astype(int)
-        is_board    = urls.str.contains(r"/bbs/|artclView\.do", case=False, regex=True).astype(int)
+        is_dept_home= urls.str.contains(DEPT_HOME_URL_PATTERN, case=False, regex=True).astype(int)
+        is_board    = urls.str.contains(BOARD_URL_PATTERN, case=False, regex=True).astype(int)
 
-        _prio = 2.2*unit_match + 1.6*is_staff + 1.3*is_contact + 0.7*is_dept_home - 0.8*is_board
+        _prio = (
+            UNIT_MATCH_BOOST * unit_match
+            + STAFF_PAGE_BOOST * is_staff
+            + CONTACT_DOC_RERANK_BOOST * is_contact
+            + DEPT_HOME_BOOST * is_dept_home
+            - BOARD_PAGE_PENALTY * is_board
+        )
         hits = hits.assign(_prio=_prio).sort_values(["_prio","score"], ascending=[False, False])
 
         # 번호 추출
@@ -337,12 +369,16 @@ def build_answer(query, top_k=6):
     if _looks_like_grad_query(query):
         three_year_like = bool(re.search(r"\b3\s*년제\b", query))
 
-        hits = hybrid_search(query, top_k=max(top_k, 25))
+        hits = hybrid_search(query, top_k=max(top_k, GRAD_SEARCH_POOL_SIZE))
         urls = hits["url"].fillna("")
-        home_like = urls.str.contains(r"/subview\.do|/intro|/dmu/\d+/subview", case=False, regex=True)
-        bbs_like  = urls.str.contains(r"/bbs/|artclView\.do", case=False, regex=True)
+        home_like = urls.str.contains(HOME_LIKE_URL_PATTERN, case=False, regex=True)
+        bbs_like  = urls.str.contains(BOARD_URL_PATTERN, case=False, regex=True)
         is_page   = hits["doc_type"].eq("page")
-        rr = (1.20 * home_like.astype(int) + 1.00 * is_page.astype(int) - 0.80 * bbs_like.astype(int))
+        rr = (
+            HOME_PAGE_RERANK_BOOST * home_like.astype(int)
+            + PAGE_DOC_RERANK_BOOST * is_page.astype(int)
+            - BOARD_PAGE_PENALTY * bbs_like.astype(int)
+        )
         hits = hits.assign(_rr=rr).sort_values(["_rr", "score"], ascending=[False, False])
 
         if three_year_like:
@@ -392,22 +428,22 @@ def build_answer(query, top_k=6):
         return {"answer": "\n".join(lines)}
 
     # 일반 검색 (연락처가 아닌 경우)
-    hits = hybrid_search(query, top_k=max(top_k, 12))
+    hits = hybrid_search(query, top_k=max(top_k, GENERAL_SEARCH_POOL_SIZE))
 
     if not hits.empty:
         urls = hits["url"].fillna("")
-        home_like = urls.str.contains(r"/subview\.do|/intro|/dmu/\d+/subview", case=False, regex=True)
-        bbs_like  = urls.str.contains(r"/bbs/|artclView\.do", case=False, regex=True)
+        home_like = urls.str.contains(HOME_LIKE_URL_PATTERN, case=False, regex=True)
+        bbs_like  = urls.str.contains(BOARD_URL_PATTERN, case=False, regex=True)
         is_page   = hits["doc_type"].eq("page")
         def _n(s: str) -> str: return re.sub(r"\s+", "", (s or "").lower())
         qn = _n(query)
         title_match = hits["title"].fillna("").map(lambda s: qn in _n(s))
         unit_match  = hits.get("unit", pd.Series([""]*len(hits))).fillna("").map(lambda s: qn in _n(s))
         rr = (
-            1.20 * home_like.astype(int)
-          + 1.00 * is_page.astype(int)
-          + 0.60 * (title_match.astype(int) | unit_match.astype(int))
-          - 0.80 * bbs_like.astype(int)
+            HOME_PAGE_RERANK_BOOST * home_like.astype(int)
+          + PAGE_DOC_RERANK_BOOST * is_page.astype(int)
+          + TITLE_UNIT_MATCH_BOOST * (title_match.astype(int) | unit_match.astype(int))
+          - BOARD_PAGE_PENALTY * bbs_like.astype(int)
         )
         hits = hits.assign(_rr=rr).sort_values(["_rr", "score"], ascending=[False, False])
 

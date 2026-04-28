@@ -5,6 +5,32 @@ from typing import Optional
 
 from core.settings import get_settings
 from LLM.OSS.modes import CONTACT_INTENT_RE
+from LLM.patterns import (
+    BAD_URL_RE,
+    CONTACT_WORD_RE,
+    DEPT_CONTACT_INTENT_RE,
+    DEPT_ROOT_SUFFIX_RE,
+    GENERIC_CONTACT_LABEL_RE,
+    GOOD_URL_RE,
+    HANGUL_DOT_TOKEN_PATTERN,
+    HANGUL_TOKEN_PATTERN,
+    INTRO_WORD_RE,
+    LINE_RE,
+    NON_DEPT_LABEL_RE,
+    NON_TARGET_TEAM_RE,
+    PHONE_GUARD_RE,
+    PHONE_KR_RE,
+    SAFETY_TITLE_RE,
+    SAFETY_URL_RE,
+    SCHED_LINE_RE,
+    SRC_URL_DOT_RE,
+    SRC_URL_RE,
+    STAFF_URL_RE,
+    TEL_FIRST_RE,
+    TITLE_URL_RE,
+    UNIT_LIKE_LABEL_RE,
+    URL_RE,
+)
 from LLM.OSS.postprocess.context import PostProcessContext
 from LLM.OSS.postprocess.synonym_table import DORM_SYNONYM_RULES, POLICY_SYNONYM_RULES
 
@@ -15,37 +41,16 @@ ORG_HOMEPAGE_LABEL = settings.org_homepage_label
 ORG_HOMEPAGE_URL = settings.org_homepage_url
 GRAD_PAGE_URL = settings.grad_page_url
 
-PHONE_GUARD_PAT = re.compile(r"(?:\+?\d[\d\s\--–—−]{6,}\d)")
-URL_PAT = re.compile(r"https?://\S+")
-PHONE_PAT_KR = re.compile(r"(0(?:2|[3-9]\d))\D{0,2}(\d{3,4})\D{0,2}(\d{4})")
-TEL_FIRST_PAT = re.compile(
-    r"(?:TEL\.?|Tel\.?|T\.?|전화(?:번호)?|연락처)\s*[:.\-]?\s*"
-    r"(0(?:2|[3-9]\d))\D{0,2}(\d{3,4})\D{0,2}(\d{4})"
-)
-
-LINE_PAT = re.compile(r"^\s*-\s*(?P<label>[^:：]+)[:：]\s*(?P<body>.+)$", re.MULTILINE)
-SRC_URL_PAT = re.compile(r"\(출처:\s*(?P<url>https?://[^)]+)\)")
-SRC_URL_DOT_PAT = re.compile(r"\(출처:\s*[^·\)]*·\s*(?P<url>https?://[^)]+)\)")
-TITLE_URL_PAT = re.compile(r"^\s*-\s*(?P<title>[^:]+):\s*(?P<url>\S+)", re.MULTILINE)
-
-GOOD_URL_RE = re.compile(r"/subview\.do($|\?)", re.I)
-STAFF_URL_RE = re.compile(settings.staff_url_pattern, re.I)
-BAD_URL_RE = re.compile(r"(?:/bbs/|artclView\.do|combBbs)", re.I)
-
-SAFETY_URL_RE = re.compile(r"(safety|lab|ehs|env|환경|안전)", re.I)
-SAFETY_TITLE_RE = re.compile(r"(연구실|실험실|실습실|안전|환경안전|EHS)", re.I)
-CONTACT_WORD_RE = re.compile(r"(연락처|전화|전화번호|문의)", re.I)
-INTRO_WORD_RE = re.compile(r"(학부\s*소개|학과\s*소개|소개|안내|개요)", re.I)
-SCHED_LINE_RE = re.compile(
-    r"^\s*-\s*(?P<title>[^:]+):\s*(?P<s>\d{4}-\d{2}-\d{2})(?:\s*~\s*(?P<e>\d{4}-\d{2}-\d{2}))?$",
-    re.MULTILINE,
-)
-
-DEPT_ROOT_SUFFIX_RE = re.compile(r"(공학부|공학과|학부|학과|과)$")
-UNIT_LIKE_LABEL_RE = re.compile(r"(학과|학부)")
-NON_DEPT_LABEL_RE = re.compile(r"(팀|지원팀|실|센터|본부)$")
-GENERIC_LABEL_RE = re.compile(r"(담당부|연락처|대표|대표번호)")
-NON_TARGET_TEAM_PAT = re.compile(r"(정보지원팀|전산실|시설관리팀|재무팀|홍보팀|홍보대사단)")
+PHONE_GUARD_PAT = PHONE_GUARD_RE
+URL_PAT = URL_RE
+PHONE_PAT_KR = PHONE_KR_RE
+TEL_FIRST_PAT = TEL_FIRST_RE
+LINE_PAT = LINE_RE
+SRC_URL_PAT = SRC_URL_RE
+SRC_URL_DOT_PAT = SRC_URL_DOT_RE
+TITLE_URL_PAT = TITLE_URL_RE
+GENERIC_LABEL_RE = GENERIC_CONTACT_LABEL_RE
+NON_TARGET_TEAM_PAT = NON_TARGET_TEAM_RE
 
 STOP_TOKENS = {"담당", "담당부", "전화", "전화번호", "연락처", "문의", "상담", "번호"}
 
@@ -147,7 +152,7 @@ for alias_set in DEPT_ALIAS.values():
 
 def extract_roots(user_text: str) -> set[str]:
     roots: set[str] = set()
-    for token in re.findall(r"[가-힣A-Za-z0-9·]{2,}", user_text or ""):
+    for token in re.findall(HANGUL_DOT_TOKEN_PATTERN, user_text or ""):
         base = re.sub(r"공$", "", _canon_unit(token))
         if len(base) >= 2:
             roots.add(base)
@@ -158,7 +163,7 @@ def extract_roots(user_text: str) -> set[str]:
 
 
 def detect_dept_hint(text: str) -> Optional[dict[str, object]]:
-    tokens = re.findall(r"[가-힣A-Za-z0-9·]{2,}", text or "")
+    tokens = re.findall(HANGUL_DOT_TOKEN_PATTERN, text or "")
     for token in tokens:
         canon = _canon_unit(token)
         if canon in DEPT_MAP:
@@ -191,7 +196,7 @@ def _extract_dept_query_core(text: str) -> str:
 def _find_dept_candidates(core: str, limit: int = 5) -> list[str]:
     if not core:
         return []
-    tokens = [token for token in re.findall(r"[가-힣A-Za-z0-9·]{2,}", core) if token not in STOP_TOKENS]
+    tokens = [token for token in re.findall(HANGUL_DOT_TOKEN_PATTERN, core) if token not in STOP_TOKENS]
     if not tokens:
         return []
 
@@ -347,10 +352,10 @@ def _parse_bullets_and_pick(
     sub_answer: str,
     hint: Optional[dict[str, object]] = None,
 ) -> tuple[Optional[str], Optional[str], Optional[str]]:
-    tokens_raw = re.findall(r"[가-힣A-Za-z0-9]{2,}", user_text or "")
+    tokens_raw = re.findall(HANGUL_TOKEN_PATTERN, user_text or "")
     tokens = [token for token in tokens_raw if token not in STOP_TOKENS]
     synonyms = expand_synonyms(user_text)
-    dept_intent = bool(re.search(r"(학과|학부|과|담당자\s*연락처)", user_text or "")) or (hint is not None)
+    dept_intent = bool(DEPT_CONTACT_INTENT_RE.search(user_text or "")) or (hint is not None)
     candidates: list[tuple[float, str, Optional[str], str, str]] = []
 
     for match in LINE_PAT.finditer(sub_answer or ""):
@@ -563,7 +568,7 @@ def _topic_candidate_score(user_text: str, title: str, url: str) -> float:
         score += 3.0
     if CONTACT_WORD_RE.search(title):
         score -= 5.0
-    tokens = [token for token in re.findall(r"[가-힣A-Za-z0-9]{2,}", user_text)]
+    tokens = [token for token in re.findall(HANGUL_TOKEN_PATTERN, user_text)]
     if any(token in title for token in tokens):
         score += 1.0
     if hint:
@@ -576,7 +581,7 @@ def _topic_candidate_score(user_text: str, title: str, url: str) -> float:
 
 def _policy_candidate_score(user_text: str, title: str, url: str) -> float:
     synonyms = expand_policy_synonyms(user_text)
-    tokens = [token for token in re.findall(r"[가-힣A-Za-z0-9·]{2,}", user_text)]
+    tokens = [token for token in re.findall(HANGUL_DOT_TOKEN_PATTERN, user_text)]
     score = 0.0
     if GOOD_URL_RE.search(url):
         score += 3.5
@@ -595,7 +600,7 @@ def _policy_candidate_score(user_text: str, title: str, url: str) -> float:
 
 def _dorm_candidate_score(user_text: str, title: str, url: str) -> float:
     synonyms = expand_dorm_synonyms(user_text)
-    tokens = [token for token in re.findall(r"[가-힣A-Za-z0-9·]{2,}", user_text)]
+    tokens = [token for token in re.findall(HANGUL_DOT_TOKEN_PATTERN, user_text)]
     score = 0.0
     if GOOD_URL_RE.search(url):
         score += 3.5

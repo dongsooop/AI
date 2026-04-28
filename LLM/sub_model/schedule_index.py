@@ -2,27 +2,9 @@ import os, re, calendar, datetime as dt
 import pandas as pd
 from pathlib import Path
 
+from LLM.sub_model.schedule_rules import SCHEDULE_INTENT_HINTS, tags_for_query, tags_for_title
+
 CSV_PATH = os.getenv("SCHEDULE_CSV_PATH")
-
-TAG_RULES = [
-    (re.compile(r"중간"), "MIDTERM"),
-    (re.compile(r"기말"), "FINAL"),
-    (re.compile(r"수강\s*신청|예비\s*수강"), "REGISTRATION"),
-    (re.compile(r"수강\s*정정|정정"), "ADD_DROP"),
-    (re.compile(r"성적|성적공시|성적입력|성적열람|성적정정"), "GRADE"),
-    (re.compile(r"등록금|등록\s*기간|등록"), "TUITION"),
-    (re.compile(r"보강"), "MAKEUP"),
-    (re.compile(r"개강"), "SEMESTER_START"),
-    (re.compile(r"종강"), "SEMESTER_END"),
-    (re.compile(r"휴일|공휴일|추석|설날|현충일|한글날|크리스마스"), "HOLIDAY"),
-    (re.compile(r"수업일수|수업"), "CLASSDAY"),
-    (re.compile(r"졸업식|학위수여식"), "COMMENCEMENT"),
-]
-
-INTENT_HINTS = (
-    "학사일정","중간","기말","수강","정정","성적",
-    "등록","보강","개강","종강","휴일","언제","졸업식","학위수여식"
-)
 
 def _academic_year(today=None):
     today = today or dt.date.today()
@@ -80,12 +62,7 @@ def _daterange_from_parts(y, m, day_str):
     return start, end
 
 def _tag_title(title):
-    tags = set()
-    t = str(title)
-    for rx, tag in TAG_RULES:
-        if rx.search(t):
-            tags.add(tag)
-    return tags
+    return tags_for_title(title)
 
 def _week_range(date_obj):
     start = date_obj - dt.timedelta(days=date_obj.weekday())
@@ -155,7 +132,7 @@ def _load_df():
 _DF = _load_df()
 
 def _looks_like_schedule_query(q):
-    return any(k in (q or "") for k in INTENT_HINTS)
+    return any(k in (q or "") for k in SCHEDULE_INTENT_HINTS)
 
 YEAR_RE = re.compile(r"(?:(\d{4})|(\d{2}))\s*년")
 ACAYEAR_RE = re.compile(r"(?:(\d{4})|(\d{2}))\s*학년도")
@@ -215,21 +192,7 @@ def schedule_search(query: str, top_k=8, today=None):
         s, e = tr
         df1 = df1[(df1["start_date"] <= pd.Timestamp(e)) & (df1["end_date"] >= pd.Timestamp(s))]
 
-    ql = (query or "").lower()
-    tag_need = set()
-
-    if "중간" in ql: tag_need.add("MIDTERM")
-    if "기말" in ql: tag_need.add("FINAL")
-    if "수강" in ql and "정정" in ql: tag_need.add("ADD_DROP")
-    elif "수강" in ql: tag_need.add("REGISTRATION")
-    if "정정" in ql: tag_need.add("ADD_DROP")
-    if "성적" in ql: tag_need.add("GRADE")
-    if "등록" in ql or "등록금" in ql: tag_need.add("TUITION")
-    if "보강" in ql: tag_need.add("MAKEUP")
-    if "개강" in ql: tag_need.add("SEMESTER_START")
-    if "종강" in ql: tag_need.add("SEMESTER_END")
-    if "휴일" in ql or "공휴" in ql: tag_need.add("HOLIDAY")
-    if ("졸업식" in ql) or ("학위수여식" in ql): tag_need.add("COMMENCEMENT")
+    tag_need = tags_for_query(query)
 
     if tag_need:
         df1 = df1[df1["tags"].apply(lambda s: bool(s & tag_need))]
