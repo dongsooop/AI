@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from core.exceptions.base import AppError
 from core.logging.config import get_logger
@@ -52,8 +53,8 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
         return _error_response(request, exc.status_code, exc.code, exc.message)
 
-    @app.exception_handler(HTTPException)
-    async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         set_request_id(_request_id(request))
         message = str(exc.detail)
         log_method = logger.error if exc.status_code >= 500 else logger.warning
