@@ -5,6 +5,17 @@ from core.settings import get_settings
 
 settings = get_settings()
 
+
+def _valid_or_fallback_regex_pattern(candidate: str | None, fallback: str) -> str:
+    if not candidate:
+        return fallback
+    try:
+        re.compile(candidate)
+    except re.error:
+        return fallback
+    return candidate
+
+
 DASH_CHARS_PATTERN = r"\-\u2010\u2011\u2012\u2013\u2014\u2212\uFE58\uFE63\uFF0D"
 HANGUL_TOKEN_PATTERN = r"[가-힣A-Za-z0-9]{2,}"
 HANGUL_DOT_TOKEN_PATTERN = r"[가-힣A-Za-z0-9·]{2,}"
@@ -25,7 +36,11 @@ BAD_URL_PATTERN = r"(?:/bbs/|artclView\.do|combBbs)"
 DEPT_HOME_URL_PATTERN = r"/dmu/\d{4}/subview\.do$"
 HOME_LIKE_URL_PATTERN = r"/subview\.do|/intro|/dmu/\d+/subview"
 STAFF_DEFAULT_URL_PATTERN = r"/dmu/4408/subview\.do$"
-STAFF_URL_PATTERN = rf"(?:{settings.staff_url_pattern})|(?:{STAFF_DEFAULT_URL_PATTERN})"
+STAFF_CONFIG_URL_PATTERN = _valid_or_fallback_regex_pattern(
+    settings.staff_url_pattern,
+    STAFF_DEFAULT_URL_PATTERN,
+)
+STAFF_URL_PATTERN = rf"(?:{STAFF_CONFIG_URL_PATTERN})|(?:{STAFF_DEFAULT_URL_PATTERN})"
 STAFF_TITLE_PATTERN = r"(?:교직원\s*검색|전화번호\s*안내)"
 
 UNIT_SUFFIX_PATTERN = r"(학부|학과|팀|센터|처|단|부|원|본부)$"
@@ -42,7 +57,9 @@ SAFETY_URL_PATTERN = r"(safety|lab|ehs|env|환경|안전)"
 SAFETY_TITLE_PATTERN = r"(연구실|실험실|실습실|안전|환경안전|EHS)"
 CONTACT_WORD_PATTERN = r"(연락처|전화|전화번호|문의)"
 INTRO_WORD_PATTERN = r"(학부\s*소개|학과\s*소개|소개|안내|개요)"
-DEPT_CONTACT_INTENT_PATTERN = r"(학과|학부|과|담당자\s*연락처)"
+DEPT_CONTACT_INTENT_PATTERN = (
+    r"(?:[가-힣A-Za-z0-9·]{2,}(?:학과|학부|공학과|공학부|전공)|담당자\s*연락처)"
+)
 
 SCHED_LINE_PATTERN = (
     r"^\s*-\s*(?P<title>[^:]+):\s*(?P<s>\d{4}-\d{2}-\d{2})"
