@@ -325,13 +325,15 @@ def hybrid_search(query, top_k=8, alpha=DEFAULT_DENSE_WEIGHT, contact_boost=CONT
 
     if any(k in query_text for k in CONTACT_KWS):
         is_contact = (doc_type == "contact").astype(float).to_numpy()
+        phone_text = search_df["phone"].astype(str).str.strip()
+        email_text = search_df["email"].astype(str).str.strip()
         has_phone = (
             search_df["has_phone"].astype(bool)
-            | search_df["phone"].astype(str).ne("")
+            | (phone_text.ne("") & phone_text.ne("없음"))
         ).astype(float).to_numpy()
         has_email = (
             search_df["has_email"].astype(bool)
-            | search_df["email"].astype(str).ne("")
+            | (email_text.ne("") & email_text.ne("없음"))
         ).astype(float).to_numpy()
         bonus = contact_boost * (is_contact + PHONE_EMAIL_BONUS_RATIO*has_phone + PHONE_EMAIL_BONUS_RATIO*has_email)
 
