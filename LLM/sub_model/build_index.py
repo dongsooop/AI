@@ -7,12 +7,12 @@ from rank_bm25 import BM25Okapi
 from dotenv import load_dotenv
 
 # from LLM.sub_model.index_utils import (
-#     normalize_text, chunk_text, get_tokenizer,
+#     normalize_text, chunk_document, get_tokenizer,
 #     extract_units_and_contacts, clean_name, compose_contact_passage,
 #     dump_json_gz
 # )
 from index_utils import (
-    normalize_text, chunk_text, get_tokenizer,
+    normalize_text, chunk_document, get_tokenizer,
     extract_units_and_contacts, clean_name, compose_contact_passage,
     dump_json_gz
 )
@@ -127,16 +127,30 @@ print(f"   - 중복 제거(병합) 후: {len(df)}개 문서")
 print("✂️ 문서 청킹 중...")
 rows = []
 for i, r in df.iterrows():
-    parts = chunk_text(r["fulltext"], max_tokens=400, overlap=0.15)
+    parts = chunk_document(r)
     for j, ch in enumerate(parts):
         rows.append({
             "doc_id": i,
             "chunk_id": f"{i}-{j}",
-            "title": r["title"],
-            "url": r["url"],
+            "parent_id": i,
+            "title": ch.get("title") or r["title"],
+            "url": ch.get("url") or r["url"],
             "source": r["source"],
-            "text": ch,
-            "doc_type": "page",
+            "text": ch.get("text", ""),
+            "text_for_embedding": ch.get("text_for_embedding", ch.get("text", "")),
+            "text_for_bm25": ch.get("text_for_bm25", ch.get("text", "")),
+            "text_for_answer": ch.get("text_for_answer", ch.get("text", "")),
+            "doc_type": ch.get("doc_type", "page"),
+            "chunk_type": ch.get("chunk_type", ch.get("doc_type", "page")),
+            "breadcrumb": ch.get("breadcrumb", ""),
+            "leaf_title": ch.get("leaf_title", ""),
+            "section_title": ch.get("section_title", ""),
+            "has_phone": ch.get("has_phone", False),
+            "has_email": ch.get("has_email", False),
+            "has_date": ch.get("has_date", False),
+            "has_credit": ch.get("has_credit", False),
+            "has_policy_keyword": ch.get("has_policy_keyword", False),
+            "is_privacy_old": ch.get("is_privacy_old", False),
             "unit": "", "phone": "", "email": ""
         })
 
@@ -221,11 +235,25 @@ else:
         contact_rows.append({
             "doc_id": -1,
             "chunk_id": f"c-{idx}",
+            "parent_id": -1,
             "title": f"{r.get('unit_canonical', r.get('unit',''))} 연락처",
             "url": r.get("url", ""),
             "source": r.get("source", ""),
             "text": txt,
+            "text_for_embedding": txt,
+            "text_for_bm25": txt,
+            "text_for_answer": txt,
             "doc_type": "contact",
+            "chunk_type": "contact",
+            "breadcrumb": f"{r.get('unit_canonical', r.get('unit',''))} 연락처",
+            "leaf_title": f"{r.get('unit_canonical', r.get('unit',''))} 연락처",
+            "section_title": "연락처",
+            "has_phone": bool(r.get("phone", "")) and r.get("phone", "") != "없음",
+            "has_email": bool(r.get("email", "")) and r.get("email", "") != "없음",
+            "has_date": False,
+            "has_credit": False,
+            "has_policy_keyword": False,
+            "is_privacy_old": False,
             "unit": r.get("unit_canonical", r.get("unit","")),
             "phone": r.get("phone", ""),
             "email": r.get("email", "")
@@ -237,8 +265,11 @@ else:
 
 print("🔗 최종 데이터 통합 중...")
 ALL_COLS = [
-    "doc_id","chunk_id","title","url","source",
-    "text","doc_type","unit","phone","email"
+    "doc_id","chunk_id","parent_id","title","url","source",
+    "text","text_for_embedding","text_for_bm25","text_for_answer",
+    "doc_type","chunk_type","breadcrumb","leaf_title","section_title",
+    "has_phone","has_email","has_date","has_credit","has_policy_keyword","is_privacy_old",
+    "unit","phone","email"
 ]
 
 def _ensure_columns(df_in: pd.DataFrame) -> pd.DataFrame:
@@ -248,8 +279,16 @@ def _ensure_columns(df_in: pd.DataFrame) -> pd.DataFrame:
             df[c] = None
     df = df[ALL_COLS]
     df["doc_id"]      = pd.to_numeric(df["doc_id"], errors="coerce").fillna(-1).astype("int64")
-    for c in ["chunk_id","title","url","source","text","doc_type","unit","phone","email"]:
+    df["parent_id"]   = pd.to_numeric(df["parent_id"], errors="coerce").fillna(-1).astype("int64")
+    for c in [
+        "chunk_id","title","url","source",
+        "text","text_for_embedding","text_for_bm25","text_for_answer",
+        "doc_type","chunk_type","breadcrumb","leaf_title","section_title",
+        "unit","phone","email"
+    ]:
         df[c] = df[c].astype("object")
+    for c in ["has_phone","has_email","has_date","has_credit","has_policy_keyword","is_privacy_old"]:
+        df[c] = df[c].fillna(False).astype(bool)
     return df
 
 page_chunks  = _ensure_columns(page_chunks)
@@ -263,7 +302,9 @@ print(f"   - 총 검색 문서: {len(search_df)}개")
 
 print("🧠 BM25 및 임베딩 생성 중...")
 tokenize_kor = get_tokenizer()
-tokenized_corpus = [tokenize_kor(t) for t in search_df["text"].tolist()]
+bm25_texts = search_df["text_for_bm25"].fillna(search_df["text"]).astype(str).tolist()
+embedding_texts = search_df["text_for_embedding"].fillna(search_df["text"]).astype(str).tolist()
+tokenized_corpus = [tokenize_kor(t) for t in bm25_texts]
 bm25 = BM25Okapi(tokenized_corpus)
 
 model_name = "intfloat/multilingual-e5-base"
@@ -276,7 +317,7 @@ def embed_passages(texts):
         show_progress_bar=True
     ).astype(np.float32)
 
-embeddings = embed_passages(search_df["text"].tolist())
+embeddings = embed_passages(embedding_texts)
 
 
 print("💾 아티팩트 저장 중...")
@@ -300,6 +341,7 @@ meta = {
     "n_entries": int(search_df.shape[0]),
     "n_pages": int(page_chunks.shape[0]),
     "n_contacts": int(contact_docs.shape[0]),
+    "doc_type_counts": search_df["doc_type"].value_counts().to_dict(),
     "emb_dim": int(embeddings.shape[1]),
     "art_dir": str(ART_DIR),
     "paths": {

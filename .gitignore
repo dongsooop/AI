@@ -10,8 +10,12 @@ requirements.txt
 requirements_oss.txt
 setting.txt
 __pycache__
+hs_err_pid*.log
 crawling
-debug
+debug/*
+!debug/regression/
+debug/regression/*
+!debug/regression/chatbot_regression_cases.json
 finetuning
 test
 CLAUDE.md
