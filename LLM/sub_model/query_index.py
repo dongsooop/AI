@@ -47,6 +47,8 @@ _PART_PATS = {
     "자유선택": re.compile(r"(?:자유선택|자율선택)[^0-9]{0,8}(\d{2,3})\s*학점"),
 }
 NEAR_NUM_RE = re.compile(r"(\d{3})\s*학점")
+GRAD_TABLE_TOTAL_RE = re.compile(r"구분\s*졸업\s*학점(?P<body>.{0,350})")
+YEAR_PROGRAM_CREDIT_RE = re.compile(r"([23])\s*년제\s*(\d{2,3})")
 
 CONTACT_SEARCH_POOL_SIZE = 30
 GRAD_SEARCH_POOL_SIZE = 25
@@ -62,6 +64,10 @@ BOARD_PAGE_PENALTY = 0.8
 HOME_PAGE_RERANK_BOOST = 1.2
 PAGE_DOC_RERANK_BOOST = 1.0
 TITLE_UNIT_MATCH_BOOST = 0.6
+ANSWER_TEXT_COL = "text_for_answer"
+PRIVACY_QUERY_RE = re.compile(r"(개인정보|영상정보|처리방침|이메일\s*무단|이전방침|이용안내)")
+POLICY_QUERY_RE = re.compile(r"(휴학|복학|등록|장학|졸업|수강|학칙|규정|절차|신청|자격|요건)")
+INTRO_QUERY_RE = re.compile(r"(소개|비전|상징|로고|캐릭터|연혁|학과|학부|전공)")
 
 def _canonical_unit_from_query(q: str) -> str | None:
     toks = re.findall(HANGUL_TOKEN_PATTERN, q or "")
@@ -75,6 +81,13 @@ def _preclean_text(s: str) -> str:
     s = re.sub(f"[{DASH_CHARS_PATTERN}]", "-", s)
     return s
 
+def _answer_text_from_row(row) -> str:
+    return (row.get(ANSWER_TEXT_COL) or row.get("text") or row.get("content") or "")
+
+def _answer_text_series(mask) -> pd.Series:
+    col = ANSWER_TEXT_COL if ANSWER_TEXT_COL in search_df.columns else "text"
+    return search_df.loc[mask, col].dropna().astype(str)
+
 def _extract_phones_from_text(text: str):
     if not isinstance(text, str) or not text:
         return []
@@ -87,14 +100,14 @@ def _extract_contact_from_row(row, prefer_terms=None, target_unit=None):
     e = (row.get("email") or "").strip()
 
     texts = []
-    base_text = (row.get("text") or row.get("content") or "")
+    base_text = _answer_text_from_row(row)
     if base_text:
         texts.append(base_text)
 
     if (not p) or (not e):
         mask = (search_df["url"].eq(row.get("url","")) &
                 search_df["doc_type"].eq(row.get("doc_type","")))
-        sibs = search_df.loc[mask, "text"].dropna().astype(str)
+        sibs = _answer_text_series(mask)
         if not sibs.empty:
             texts.append("\n".join(sibs.tolist()))
 
@@ -153,6 +166,17 @@ def _extract_grad_credits_from_text(text: str):
                 parts[name] = int(m.group(m.lastindex or 1))
             except Exception:
                 pass
+
+    if total is None:
+        m = GRAD_TABLE_TOTAL_RE.search(t)
+        if m:
+            vals = [
+                int(val)
+                for _, val in YEAR_PROGRAM_CREDIT_RE.findall(m.group("body"))
+                if 60 <= int(val) <= 200
+            ]
+            if vals:
+                total = max(vals)
 
     if total is None:
         candidates = []
@@ -239,13 +263,27 @@ model_name = "intfloat/multilingual-e5-base"
 model = SentenceTransformer(model_name)
 
 search_df = pd.read_parquet(SEARCH_DF_PATH)
-for c in ["doc_type", "title", "text", "unit", "phone", "email", "url"]:
+TEXT_FALLBACK_COLS = ["text_for_embedding", "text_for_bm25", "text_for_answer"]
+METADATA_TEXT_COLS = ["chunk_type", "breadcrumb", "leaf_title", "section_title"]
+METADATA_BOOL_COLS = ["has_phone", "has_email", "has_date", "has_credit", "has_policy_keyword", "is_privacy_old"]
+
+for c in ["doc_type", "title", "text", "unit", "phone", "email", "url", *TEXT_FALLBACK_COLS, *METADATA_TEXT_COLS]:
     if c not in search_df.columns:
         search_df[c] = np.nan
+for c in METADATA_BOOL_COLS:
+    if c not in search_df.columns:
+        search_df[c] = False
 
 search_df["doc_type"]   = search_df["doc_type"].fillna("").astype(str).str.strip().str.lower()
 search_df["title"]      = search_df["title"].fillna("").astype(str).str.strip()
 search_df["text"]       = search_df["text"].fillna("").astype(str)
+for c in TEXT_FALLBACK_COLS:
+    search_df[c] = search_df[c].fillna(search_df["text"]).astype(str)
+    search_df.loc[search_df[c].str.strip().eq(""), c] = search_df.loc[search_df[c].str.strip().eq(""), "text"]
+for c in METADATA_TEXT_COLS:
+    search_df[c] = search_df[c].fillna("").astype(str)
+for c in METADATA_BOOL_COLS:
+    search_df[c] = search_df[c].fillna(False).astype(bool)
 search_df["unit"]       = search_df["unit"].fillna("").astype(str)
 search_df["phone"]      = search_df["phone"].fillna("").astype(str).str.replace(r"\s+", "", regex=True)
 search_df["email"]      = search_df["email"].fillna("").astype(str).str.strip()
@@ -259,7 +297,7 @@ else:
     if TOK_PATH.exists():
         tokenized_courpus = load_json_gz(str(TOK_PATH))
     else:
-        tokenized_courpus = [tokenize_kor(t) for t in search_df["text"].astype(str).tolist()]
+        tokenized_courpus = [tokenize_kor(t) for t in search_df["text_for_bm25"].astype(str).tolist()]
     bm25 = BM25Okapi(tokenized_courpus)
 
 
@@ -282,12 +320,35 @@ def hybrid_search(query, top_k=8, alpha=DEFAULT_DENSE_WEIGHT, contact_boost=CONT
     base = alpha * _minmax(dense_raw) + (1 - alpha) * _minmax(bm25_raw)
 
     bonus = np.zeros(len(search_df))
+    doc_type = search_df["doc_type"].astype(str)
+    query_text = query or ""
 
-    if any(k in query for k in CONTACT_KWS):
-        is_contact = (search_df["doc_type"] == "contact").astype(float).to_numpy()
-        has_phone = (search_df["phone"].astype(str) != "").astype(float).to_numpy()
-        has_email = (search_df["email"].astype(str) != "").astype(float).to_numpy()
+    if any(k in query_text for k in CONTACT_KWS):
+        is_contact = (doc_type == "contact").astype(float).to_numpy()
+        has_phone = (
+            search_df["has_phone"].astype(bool)
+            | search_df["phone"].astype(str).ne("")
+        ).astype(float).to_numpy()
+        has_email = (
+            search_df["has_email"].astype(bool)
+            | search_df["email"].astype(str).ne("")
+        ).astype(float).to_numpy()
         bonus = contact_boost * (is_contact + PHONE_EMAIL_BONUS_RATIO*has_phone + PHONE_EMAIL_BONUS_RATIO*has_email)
+
+    if _looks_like_grad_query(query_text) or POLICY_QUERY_RE.search(query_text):
+        is_policy = doc_type.isin(["policy", "table_like"]).astype(float).to_numpy()
+        has_policy = search_df["has_policy_keyword"].astype(float).to_numpy()
+        has_credit = search_df["has_credit"].astype(float).to_numpy()
+        bonus += 0.08 * is_policy + 0.05 * has_policy + 0.12 * has_credit
+
+    if INTRO_QUERY_RE.search(query_text):
+        is_intro = doc_type.isin(["intro", "department", "history"]).astype(float).to_numpy()
+        bonus += 0.05 * is_intro
+
+    if not PRIVACY_QUERY_RE.search(query_text):
+        is_privacy = doc_type.eq("privacy").astype(float).to_numpy()
+        is_old_privacy = search_df["is_privacy_old"].astype(float).to_numpy()
+        bonus -= 0.12 * is_privacy + 0.18 * is_old_privacy
 
     scores = base + bonus
     out = search_df.copy()
@@ -312,7 +373,7 @@ def build_answer(query, top_k=6):
         # 교직원검색(4408) 페이지를 후보에 반드시 포함
         staff_mask = (search_df["url"].astype(str).str.contains(STAFF_URL_PATTERN, case=False, regex=True) |
                     search_df["title"].astype(str).str.contains(STAFF_TITLE_PATTERN, case=False, regex=True))
-        staff_rows = search_df.loc[staff_mask, ["doc_type","title","text","unit","url","phone","email"]].copy()
+        staff_rows = search_df.loc[staff_mask].copy()
         if not staff_rows.empty:
             hits = pd.concat([hits, staff_rows], ignore_index=True)
             hits = hits.drop_duplicates(subset=["url","doc_type"], keep="first")
@@ -373,7 +434,7 @@ def build_answer(query, top_k=6):
         urls = hits["url"].fillna("")
         home_like = urls.str.contains(HOME_LIKE_URL_PATTERN, case=False, regex=True)
         bbs_like  = urls.str.contains(BOARD_URL_PATTERN, case=False, regex=True)
-        is_page   = hits["doc_type"].eq("page")
+        is_page   = hits["doc_type"].isin(["page", "policy", "table_like", "department"])
         rr = (
             HOME_PAGE_RERANK_BOOST * home_like.astype(int)
             + PAGE_DOC_RERANK_BOOST * is_page.astype(int)
@@ -383,7 +444,7 @@ def build_answer(query, top_k=6):
 
         if three_year_like:
             for _, r in hits.iterrows():
-                text = (r.get("text") or r.get("content") or "")
+                text = _answer_text_from_row(r)
                 tab = _extract_3yr_from_tables(text)
                 if tab.get("grad_total") or tab.get("major_min"):
                     lines = []
@@ -398,7 +459,7 @@ def build_answer(query, top_k=6):
                     return {"answer": "\n".join(lines)}
 
         for _, r in hits.iterrows():
-            text = (r.get("text") or r.get("content") or "")
+            text = _answer_text_from_row(r)
             total, parts = _extract_grad_credits_from_text(text)
 
             if not (total or parts):
@@ -406,7 +467,7 @@ def build_answer(query, top_k=6):
                     mask = search_df["doc_id"].eq(r["doc_id"])
                 else:
                     mask = search_df["url"].eq(r.get("url","")) & search_df["doc_type"].eq(r.get("doc_type",""))
-                sibs = search_df.loc[mask, "text"].dropna().astype(str)
+                sibs = _answer_text_series(mask)
                 if not sibs.empty:
                     blob = "\n".join(sibs.tolist())
                     total, parts = _extract_grad_credits_from_text(blob)
@@ -434,7 +495,7 @@ def build_answer(query, top_k=6):
         urls = hits["url"].fillna("")
         home_like = urls.str.contains(HOME_LIKE_URL_PATTERN, case=False, regex=True)
         bbs_like  = urls.str.contains(BOARD_URL_PATTERN, case=False, regex=True)
-        is_page   = hits["doc_type"].eq("page")
+        is_page   = hits["doc_type"].isin(["page", "intro", "department", "policy", "table_like", "history"])
         def _n(s: str) -> str: return re.sub(r"\s+", "", (s or "").lower())
         qn = _n(query)
         title_match = hits["title"].fillna("").map(lambda s: qn in _n(s))

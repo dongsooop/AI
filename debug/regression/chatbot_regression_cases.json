@@ -1,0 +1,104 @@
+[
+  {
+    "id": "schedule_tuition",
+    "text": "등록금납부",
+    "engine_in": ["fast"],
+    "all_of_text_contains": ["일정", "+"]
+  },
+  {
+    "id": "schedule_commencement",
+    "text": "학위수여식",
+    "engine_in": ["fast"],
+    "all_of_text_contains": ["일정", "+"]
+  },
+  {
+    "id": "contact_cs_fullname",
+    "text": "컴퓨터공학부 담당자 연락처",
+    "engine_in": ["fast"],
+    "any_of_text_contains": ["전화번호", "풀네임으로 다시 입력"]
+  },
+  {
+    "id": "contact_business_fullname",
+    "text": "경영학과 담당자 연락처",
+    "engine_in": ["fast"],
+    "any_of_text_contains": ["전화번호", "풀네임으로 다시 입력"]
+  },
+  {
+    "id": "contact_shortname",
+    "text": "컴공 연락처",
+    "engine_in": ["fast"],
+    "any_of_text_contains": ["풀네임으로 입력", "후보가 여러 개"]
+  },
+  {
+    "id": "policy_leave",
+    "text": "휴복학 안내",
+    "engine_in": ["policy", "oss"],
+    "any_of_text_contains": ["확인할 수 있습니다", "공식 안내"]
+  },
+  {
+    "id": "dorm_info",
+    "text": "기숙사 입사신청 안내",
+    "engine_in": ["dorm", "oss"],
+    "any_of_text_contains": ["확인할 수 있습니다", "공식 안내"]
+  },
+  {
+    "id": "grad_credit",
+    "text": "졸업학점 알려줘",
+    "engine_in": ["grad", "oss"],
+    "any_of_text_contains": ["졸업", "학점"]
+  },
+  {
+    "id": "topic_intro",
+    "text": "컴퓨터소프트웨어공학과 소개",
+    "engine_in": ["topic", "oss"],
+    "any_of_text_contains": ["관련 정보", "확인할 수 있습니다"]
+  },
+  {
+    "id": "topic_computer_engineering_intro",
+    "text": "컴퓨터공학부 소개",
+    "engine_in": ["topic", "oss"],
+    "any_of_text_contains": ["관련 정보", "확인할 수 있습니다", "컴퓨터"]
+  },
+  {
+    "id": "policy_leave_return_info",
+    "text": "휴복학 안내",
+    "engine_in": ["policy", "oss"],
+    "any_of_text_contains": ["확인할 수 있습니다", "공식 안내", "휴학", "복학"]
+  },
+  {
+    "id": "grad_credit_requirement",
+    "text": "졸업학점",
+    "engine_in": ["grad", "oss"],
+    "any_of_text_contains": ["졸업", "학점"]
+  },
+  {
+    "id": "contact_design_pr_center",
+    "text": "디자인홍보센터 전화번호",
+    "engine_in": ["fast"],
+    "any_of_text_contains": ["02-2610-5247", "전화번호", "풀네임으로 다시 입력"]
+  },
+  {
+    "id": "privacy_policy",
+    "text": "개인정보처리방침",
+    "engine_in": ["policy", "topic", "oss"],
+    "any_of_text_contains": ["개인정보", "처리방침", "확인할 수 있습니다", "공식 안내"]
+  },
+  {
+    "id": "greet",
+    "text": "안녕하세요",
+    "engine_in": ["greet"],
+    "all_of_text_contains": ["도와드릴까요"]
+  },
+  {
+    "id": "whoami",
+    "text": "너 누구야?",
+    "engine_in": ["whoami"],
+    "any_of_text_contains": ["챗봇", "입니다"]
+  },
+  {
+    "id": "relation",
+    "text": "우리 무슨 관계야?",
+    "engine_in": ["relation"],
+    "all_of_text_contains": ["대화 파트너"]
+  }
+]
