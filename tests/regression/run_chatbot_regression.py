@@ -5,7 +5,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from urllib import request, error
+from urllib import request, error, urlparse
 
 
 def load_cases(path: Path):
@@ -17,6 +17,9 @@ def load_cases(path: Path):
 
 
 def post_chatbot(url: str, text: str, token: str | None, timeout: float):
+    scheme = urlparse(url).scheme.lower()
+    if scheme not in {"https"}:
+        return 0, {"error": f"unsupported_url_scheme:{scheme or '<empty>'}"}
     body = json.dumps({"text": text}).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     if token:
@@ -25,14 +28,17 @@ def post_chatbot(url: str, text: str, token: str | None, timeout: float):
     try:
         with request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
-            return resp.status, json.loads(raw)
+            try:
+                return resp.status, json.loads(raw)
+            except json.JSONDecodeError:
+                return resp.status, {"error": "invalid_json_response", "raw": raw}
     except error.HTTPError as e:
         raw = e.read().decode("utf-8", errors="ignore")
         try:
             return e.code, json.loads(raw)
         except Exception:
             return e.code, {"error": raw}
-    except Exception as e:
+    except (error.HTTPError, TimeoutError, ValueError) as e:
         return 0, {"error": str(e)}
 
 
@@ -76,10 +82,16 @@ def check_case(case: dict, status_code: int, response: dict):
             result["reasons"].append(f"contains_forbidden:{needle}")
 
     any_regex = case.get("any_of_text_regex", [])
-    if any_regex and not any(re.search(pat, text) for pat in any_regex):
-        result["passed"] = False
-        result["reasons"].append(f"missing_any_regex:{any_regex}")
-
+    if any_regex :
+        try:
+            matched = any(re.search(pat, text) for pat in any_regex)
+        except re.error as e:
+            result["passed"] = False
+            result["reasons"].append(f"missing_any_regex:{e}")
+        else:
+            if not matched:
+                result["passed"] = False
+                result["reasons"].append(f"missing_any_regex:{any_regex}")
     return result
 
 
