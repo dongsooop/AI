@@ -5,7 +5,8 @@ import re
 import sys
 import time
 from pathlib import Path
-from urllib import request, error, urlparse
+from urllib import request, error
+from urllib.parse import urlparse
 
 
 def load_cases(path: Path):
@@ -18,7 +19,7 @@ def load_cases(path: Path):
 
 def post_chatbot(url: str, text: str, token: str | None, timeout: float):
     scheme = urlparse(url).scheme.lower()
-    if scheme not in {"https"}:
+    if scheme not in {"https", "http"}:
         return 0, {"error": f"unsupported_url_scheme:{scheme or '<empty>'}"}
     body = json.dumps({"text": text}).encode("utf-8")
     headers = {"Content-Type": "application/json"}
@@ -36,9 +37,9 @@ def post_chatbot(url: str, text: str, token: str | None, timeout: float):
         raw = e.read().decode("utf-8", errors="ignore")
         try:
             return e.code, json.loads(raw)
-        except Exception:
+        except json.JSONDecodeError:
             return e.code, {"error": raw}
-    except (error.HTTPError, TimeoutError, ValueError) as e:
+    except (error.URLError, TimeoutError, ValueError) as e:
         return 0, {"error": str(e)}
 
 
