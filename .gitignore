@@ -12,10 +12,7 @@ setting.txt
 __pycache__
 hs_err_pid*.log
 crawling
-debug/*
-!debug/regression/
-debug/regression/*
-!debug/regression/chatbot_regression_cases.json
+debug/
 finetuning
 test
 CLAUDE.md
