@@ -1,8 +1,6 @@
 **/__pycache__/
 *.ipynb
 *.png
-*.pdf
-*.csv
 *.log
 *.tmp
 *.pt
