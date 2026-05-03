@@ -94,14 +94,19 @@ def init_db_pool() -> None:
                 tunnel_db_kwargs["port"],
             )
             return
+        except ConfigurationError:
+            raise
         except Exception as exc:
             connection_errors.append(exc)
             if _ssh_tunnel:
                 _ssh_tunnel.stop()
                 _ssh_tunnel = None
+            if settings.db_host is None:
+                raise ConfigurationError(f"SSH database connection failed: {exc}") from exc
             logger.warning("chatbot_ssh_db_connect_failed fallback_to_direct=true error=%s", exc)
 
-    for host in (settings.db_host, "localhost"):
+    hosts = (settings.db_host, ) if settings.db_host else ("localgost",)
+    for host in hosts:
         if not host:
             continue
         direct_db_kwargs = dict(db_kwargs, host=host, port=settings.db_port)
