@@ -32,7 +32,7 @@ from LLM.OSS.modes import (
 )
 from LLM.OSS.postprocess import run_postprocess
 from LLM.rule_book.graph import run_rule_book
-from LLM.sub_model.query_index import build_answer
+from LLM.sub_model.query_index import build_answer, confident_search_answer, metadata_direct_answer
 from LLM.sub_model.schedule_index import schedule_search
 
 
@@ -198,6 +198,7 @@ def call_oss(messages: list[dict[str, str]], **kwargs) -> str:
             messages=messages,
             temperature=kwargs.get("temperature", 0.3),
             max_tokens=kwargs.get("max_tokens", 64),
+            timeout=kwargs.get("timeout", 45),
         )
         return (response.choices[0].message.content or "").strip()
     except Exception:
@@ -296,6 +297,13 @@ async def chat_with_oss(req: ChatReq) -> dict:
         }
 
     if mode == "fast":
+        direct = metadata_direct_answer(user_text)
+        if direct:
+            response = {"engine": "fast", "text": direct["answer"]}
+            if direct.get("url"):
+                response["url"] = direct["url"]
+            return cache_and_return(response)
+
         schedule_only = schedule_search(user_text, top_k=8)
         if schedule_only:
             return cache_and_return({"engine": "fast", "text": render_chatty_schedule(schedule_only, user_text)})
@@ -312,6 +320,13 @@ async def chat_with_oss(req: ChatReq) -> dict:
         return cache_and_return(response)
 
     if mode == "policy":
+        direct = metadata_direct_answer(user_text)
+        if direct:
+            response = {"engine": "policy", "text": direct["answer"]}
+            if direct.get("url"):
+                response["url"] = direct["url"]
+            return cache_and_return(response)
+
         sub_answer = call_submodel(user_text)
         text, url = run_postprocess("policy", user_text, sub_answer)
         response = {"engine": "policy", "text": text}
@@ -328,6 +343,13 @@ async def chat_with_oss(req: ChatReq) -> dict:
         return cache_and_return(response)
 
     if mode == "grad":
+        direct = metadata_direct_answer(user_text)
+        if direct:
+            response = {"engine": "grad", "text": direct["answer"]}
+            if direct.get("url"):
+                response["url"] = direct["url"]
+            return cache_and_return(response)
+
         sub_answer = call_submodel(user_text)
         text, url = run_postprocess("grad", user_text, sub_answer)
         response = {"engine": "grad", "text": text}
@@ -344,6 +366,20 @@ async def chat_with_oss(req: ChatReq) -> dict:
         return cache_and_return(response)
 
     if mode == "oss":
+        direct = metadata_direct_answer(user_text)
+        if direct:
+            response = {"engine": "fast", "text": direct["answer"]}
+            if direct.get("url"):
+                response["url"] = direct["url"]
+            return cache_and_return(response)
+
+        confident = confident_search_answer(user_text, top_k=2)
+        if confident:
+            response = {"engine": "fast", "text": confident["answer"]}
+            if confident.get("url"):
+                response["url"] = confident["url"]
+            return cache_and_return(response)
+
         output = call_oss(messages_for_oss)
         if not any(keyword in user_text for keyword in ("연락처", "전화", "번호", "문의")) and not any(keyword in user_text for keyword in COUNCIL_KWS):
             output = scrub_non_contact(output)
@@ -379,6 +415,20 @@ async def chat_with_oss(req: ChatReq) -> dict:
         _log_executor.submit(_log_chatbot, user_text, "oss", output, None, False, latency)
         return {"engine": "oss", "text": output}
 
+    direct = metadata_direct_answer(user_text)
+    if direct:
+        response = {"engine": "fast", "text": direct["answer"]}
+        if direct.get("url"):
+            response["url"] = direct["url"]
+        return cache_and_return(response)
+
+    confident = confident_search_answer(user_text, top_k=2)
+    if confident:
+        response = {"engine": "fast", "text": confident["answer"]}
+        if confident.get("url"):
+            response["url"] = confident["url"]
+        return cache_and_return(response)
+
     sub_answer = call_submodel(user_text)
     fused = call_oss(
         [
@@ -388,8 +438,9 @@ async def chat_with_oss(req: ChatReq) -> dict:
             },
             {"role": "user", "content": user_text + "\n\n<context>\n" + (sub_answer or "") + "\n</context>"},
         ],
-        max_tokens=64,
+        max_tokens=96,
         temperature=0.2,
+        timeout=45,
     )
     if not fused:
         text, _ = run_postprocess("topic", user_text, sub_answer)
