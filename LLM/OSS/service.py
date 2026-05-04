@@ -105,7 +105,7 @@ def init_db_pool() -> None:
                 raise ConfigurationError(f"SSH database connection failed: {exc}") from exc
             logger.warning("chatbot_ssh_db_connect_failed fallback_to_direct=true error=%s", exc)
 
-    hosts = (settings.db_host, ) if settings.db_host else ("localgost",)
+    hosts = (settings.db_host, ) if settings.db_host else ("localhost",)
     for host in hosts:
         if not host:
             continue
