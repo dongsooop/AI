@@ -97,8 +97,11 @@ def init_db_pool() -> None:
                 tunnel_db_kwargs["port"],
             )
             return
-        except ConfigurationError:
-            raise
+        except ConfigurationError as exc:
+            connection_errors.append(exc)
+            if settings.db_host is None:
+                raise
+            logger.warning("chatbot_ssh_db_config_invalid fallback_to_direct=true error=%s", exc)
         except Exception as exc:
             connection_errors.append(exc)
             if _ssh_tunnel:
