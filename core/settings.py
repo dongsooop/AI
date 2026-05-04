@@ -31,6 +31,10 @@ class Settings:
     ssh_host: str | None
     ssh_user: str | None
     ssh_key_path: str | None
+    ssh_db_host: str
+    ssh_db_port: int
+    db_host: str | None
+    db_port: int
     db_name: str | None
     db_user: str | None
     db_password: str | None
@@ -85,6 +89,10 @@ def get_settings() -> Settings:
         ssh_host=os.getenv("SSH_HOST"),
         ssh_user=os.getenv("SSH_USER"),
         ssh_key_path=os.getenv("SSH_KEY_PATH"),
+        ssh_db_host=os.getenv("SSH_DB_HOST", "localhost"),
+        ssh_db_port=int(os.getenv("SSH_DB_PORT", "5433")),
+        db_host=os.getenv("DB_HOST"),
+        db_port=int(os.getenv("DB_PORT", "5432")),
         db_name=os.getenv("DB_NAME"),
         db_user=os.getenv("DB_USER"),
         db_password=os.getenv("DB_PASSWORD"),

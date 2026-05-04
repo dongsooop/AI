@@ -19,6 +19,7 @@ from LLM.patterns import (
 from sentence_transformers import SentenceTransformer
 from rank_bm25 import BM25Okapi
 from LLM.sub_model.index_utils import get_tokenizer, load_json_gz  # 서버용
+from LLM.sub_model.query_index_schema import normalize_search_df_schema
 # from index_utils import get_tokenizer, load_json_gz
 from dotenv import load_dotenv
 
@@ -262,31 +263,7 @@ UNIT_TOK_RE = re.compile(HANGUL_TOKEN_PATTERN)
 model_name = "intfloat/multilingual-e5-base"
 model = SentenceTransformer(model_name)
 
-search_df = pd.read_parquet(SEARCH_DF_PATH)
-TEXT_FALLBACK_COLS = ["text_for_embedding", "text_for_bm25", "text_for_answer"]
-METADATA_TEXT_COLS = ["chunk_type", "breadcrumb", "leaf_title", "section_title"]
-METADATA_BOOL_COLS = ["has_phone", "has_email", "has_date", "has_credit", "has_policy_keyword", "is_privacy_old"]
-
-for c in ["doc_type", "title", "text", "unit", "phone", "email", "url", *TEXT_FALLBACK_COLS, *METADATA_TEXT_COLS]:
-    if c not in search_df.columns:
-        search_df[c] = np.nan
-for c in METADATA_BOOL_COLS:
-    if c not in search_df.columns:
-        search_df[c] = False
-
-search_df["doc_type"]   = search_df["doc_type"].fillna("").astype(str).str.strip().str.lower()
-search_df["title"]      = search_df["title"].fillna("").astype(str).str.strip()
-search_df["text"]       = search_df["text"].fillna("").astype(str)
-for c in TEXT_FALLBACK_COLS:
-    search_df[c] = search_df[c].fillna(search_df["text"]).astype(str)
-    search_df.loc[search_df[c].str.strip().eq(""), c] = search_df.loc[search_df[c].str.strip().eq(""), "text"]
-for c in METADATA_TEXT_COLS:
-    search_df[c] = search_df[c].fillna("").astype(str)
-for c in METADATA_BOOL_COLS:
-    search_df[c] = search_df[c].fillna(False).astype(bool)
-search_df["unit"]       = search_df["unit"].fillna("").astype(str)
-search_df["phone"]      = search_df["phone"].fillna("").astype(str).str.replace(r"\s+", "", regex=True)
-search_df["email"]      = search_df["email"].fillna("").astype(str).str.strip()
+search_df = normalize_search_df_schema(pd.read_parquet(SEARCH_DF_PATH))
 
 tokenize_kor = get_tokenizer()
 

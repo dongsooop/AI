@@ -3,6 +3,7 @@ import hashlib
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Optional
 
 from cachetools import TTLCache
@@ -67,19 +68,67 @@ def init_db_pool() -> None:
         connect_timeout=3,
         options="-c statement_timeout=5000",
     )
+    connection_errors: list[Exception] = []
     if ssh_host:
-        _ssh_tunnel = SSHTunnelForwarder(
-            (ssh_host, 22),
-            ssh_username=settings.ssh_user,
-            ssh_pkey=settings.ssh_key_path,
-            remote_bind_address=("localhost", 5433),
-        )
-        _ssh_tunnel.start()
-        db_kwargs.update(host="localhost", port=_ssh_tunnel.local_bind_port)
-    else:
-        db_kwargs["host"] = "localhost"
-    _db_pool = pg_pool.ThreadedConnectionPool(minconn=1, maxconn=5, **db_kwargs)
-    logger.info("chatbot_db_pool_initialized ssh_tunnel=%s", bool(ssh_host))
+        try:
+            if not settings.ssh_user:
+                raise ConfigurationError("SSH_USER is required when SSH_HOST is set")
+            if not settings.ssh_key_path:
+                raise ConfigurationError("SSH_KEY_PATH is required when SSH_HOST is set")
+            ssh_key_path = Path(settings.ssh_key_path).expanduser()
+            if not ssh_key_path.exists():
+                raise ConfigurationError(f"SSH key file does not exist: {ssh_key_path}")
+            _ssh_tunnel = SSHTunnelForwarder(
+                (ssh_host, 22),
+                ssh_username=settings.ssh_user,
+                ssh_pkey=str(ssh_key_path),
+                remote_bind_address=(settings.ssh_db_host, settings.ssh_db_port),
+            )
+            _ssh_tunnel.start()
+            tunnel_db_kwargs = dict(db_kwargs, host="localhost", port=_ssh_tunnel.local_bind_port)
+            _db_pool = pg_pool.ThreadedConnectionPool(minconn=1, maxconn=5, **tunnel_db_kwargs)
+            logger.info(
+                "chatbot_db_pool_initialized ssh_tunnel=%s db_host=%s db_port=%s",
+                True,
+                tunnel_db_kwargs["host"],
+                tunnel_db_kwargs["port"],
+            )
+            return
+        except ConfigurationError:
+            raise
+        except Exception as exc:
+            connection_errors.append(exc)
+            if _ssh_tunnel:
+                _ssh_tunnel.stop()
+                _ssh_tunnel = None
+            if settings.db_host is None:
+                raise ConfigurationError(f"SSH database connection failed: {exc}") from exc
+            logger.warning("chatbot_ssh_db_connect_failed fallback_to_direct=true error=%s", exc)
+
+    hosts = (settings.db_host, ) if settings.db_host else ("localhost",)
+    for host in hosts:
+        if not host:
+            continue
+        direct_db_kwargs = dict(db_kwargs, host=host, port=settings.db_port)
+        try:
+            _db_pool = pg_pool.ThreadedConnectionPool(minconn=1, maxconn=5, **direct_db_kwargs)
+            logger.info(
+                "chatbot_db_pool_initialized ssh_tunnel=%s db_host=%s db_port=%s",
+                False,
+                direct_db_kwargs["host"],
+                direct_db_kwargs["port"],
+            )
+            return
+        except Exception as exc:
+            connection_errors.append(exc)
+            logger.warning(
+                "chatbot_direct_db_connect_failed db_host=%s db_port=%s error=%s",
+                host,
+                settings.db_port,
+                exc,
+            )
+
+    raise ConfigurationError(f"Database connection failed: {connection_errors[-1]}")
 
 
 def shutdown_db_pool() -> None:

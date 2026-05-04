@@ -91,6 +91,14 @@ async def _post_to_spring(schedules: List[dict], token: str, appcheck_token: str
     }
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.post(spring_url, json=payload, headers=headers)
+        if response.is_error:
+            response_body = response.text.replace("\n", " ")[:500]
+            logger.error(
+                "spring_timetable_post_failed status_code=%d url=%s response_body=%s",
+                response.status_code,
+                spring_url,
+                response_body,
+            )
         response.raise_for_status()
 
 
