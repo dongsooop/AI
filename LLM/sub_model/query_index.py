@@ -54,6 +54,9 @@ YEAR_PROGRAM_CREDIT_RE = re.compile(r"([23])\s*년제\s*(\d{2,3})")
 CONTACT_SEARCH_POOL_SIZE = 30
 GRAD_SEARCH_POOL_SIZE = 25
 GENERAL_SEARCH_POOL_SIZE = 12
+DIRECT_SNIPPET_MAX_CHARS = 220
+CONFIDENT_SCORE_THRESHOLD = 0.72
+CONFIDENT_SCORE_GAP = 0.08
 DEFAULT_DENSE_WEIGHT = 0.6
 CONTACT_DOC_BOOST = 0.18
 PHONE_EMAIL_BONUS_RATIO = 0.5
@@ -195,6 +198,158 @@ def _extract_grad_credits_from_text(text: str):
 def _looks_like_grad_query(q: str) -> bool:
     ql = (q or "").lower()
     return any(k in q or k in ql for k in GRAD_KWS)
+
+def _compact(s: str) -> str:
+    return re.sub(r"\s+", "", (s or "").lower())
+
+def _query_terms(query: str):
+    stop = set(CONTACT_KWS) | {
+        "알려줘", "찾아줘", "뭐야", "무엇", "어디", "어떻게", "관련", "정보", "안내",
+        "전화번호", "전화", "번호", "연락처", "문의", "상담", "담당자",
+    }
+    terms = []
+    for token in re.findall(HANGUL_TOKEN_PATTERN, query or ""):
+        if len(token) < 2 or token in stop:
+            continue
+        terms.append(token)
+    return list(dict.fromkeys(terms))
+
+def _source_suffix(row) -> str:
+    title = (row.get("title") or "").strip()
+    url = (row.get("url") or "").strip()
+    if title and url:
+        return f" (출처: {title} · {url})"
+    if url:
+        return f" (출처: {url})"
+    if title:
+        return f" (출처: {title})"
+    return ""
+
+def _clean_snippet(text: str, max_chars: int = DIRECT_SNIPPET_MAX_CHARS) -> str:
+    text = re.sub(r"\s+", " ", _preclean_text(text)).strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "..."
+
+def _metadata_contact_answer(query: str) -> dict | None:
+    if not any(k in query for k in CONTACT_KWS):
+        return None
+
+    terms = _query_terms(query)
+    target_unit = _canonical_unit_from_query(query)
+    match_terms = [target_unit] if target_unit else terms[:3]
+    if not match_terms:
+        return None
+
+    rows = search_df[search_df["doc_type"].eq("contact")].copy()
+    if rows.empty:
+        return None
+
+    compact_terms = [_compact(term) for term in match_terms if term]
+    if not compact_terms:
+        return None
+
+    def score_row(row) -> int:
+        unit = _compact(row.get("unit", ""))
+        title = _compact(row.get("title", ""))
+        text = _compact(_answer_text_from_row(row))
+        score = 0
+        for term in compact_terms:
+            if term and term in unit:
+                score += 5
+            if term and term in title:
+                score += 3
+            if term and term in text:
+                score += 1
+        if (row.get("phone") or "").strip():
+            score += 2
+        if (row.get("email") or "").strip():
+            score += 1
+        return score
+
+    rows["_direct_score"] = rows.apply(score_row, axis=1)
+    rows = rows[rows["_direct_score"] >= 5].sort_values("_direct_score", ascending=False)
+    if rows.empty:
+        return None
+
+    lines, seen = [], set()
+    for _, row in rows.head(3).iterrows():
+        label = (row.get("unit") or row.get("title") or "요청하신 부서").strip()
+        phone = (row.get("phone") or "").strip()
+        email = (row.get("email") or "").strip()
+        key = (label, phone, email)
+        if key in seen:
+            continue
+        seen.add(key)
+        if phone:
+            lines.append(f"{label} 전화번호는 {phone}입니다{_source_suffix(row)}")
+        elif email:
+            lines.append(f"{label} 이메일은 {email}입니다{_source_suffix(row)}")
+        if lines:
+            break
+
+    if not lines:
+        return None
+    return {"answer": "\n".join(lines), "url": rows.iloc[0].get("url", "")}
+
+def _metadata_grad_answer(query: str) -> dict | None:
+    if not _looks_like_grad_query(query):
+        return None
+
+    rows = search_df[
+        search_df["has_credit"].astype(bool)
+        & search_df["doc_type"].isin(["policy", "table_like", "page", "department"])
+    ].copy()
+    if rows.empty:
+        return None
+
+    rows["_direct_score"] = (
+        rows["title"].astype(str).str.contains("졸업|학점|이수", regex=True).astype(int) * 3
+        + rows[ANSWER_TEXT_COL].astype(str).str.contains("졸업|이수|학점", regex=True).astype(int)
+    )
+    rows = rows[rows["_direct_score"] > 0].sort_values("_direct_score", ascending=False)
+
+    for _, row in rows.head(20).iterrows():
+        text = _answer_text_from_row(row)
+        total, parts = _extract_grad_credits_from_text(text)
+        if not total and not parts:
+            continue
+        lines = []
+        if total:
+            lines.append(f"총 졸업학점은 {total}학점입니다.")
+        if parts:
+            lines.append("세부 기준은 " + " / ".join(f"{k} {v}학점" for k, v in parts.items()) + "입니다.")
+        lines.append(_source_suffix(row).strip())
+        return {"answer": "\n".join(part for part in lines if part), "url": row.get("url", "")}
+    return None
+
+def metadata_direct_answer(query: str) -> dict | None:
+    """Answer high-confidence lookup questions without embedding or LLM calls."""
+    for resolver in (_metadata_contact_answer, _metadata_grad_answer):
+        answer = resolver(query)
+        if answer:
+            return answer
+    return None
+
+def confident_search_answer(query: str, top_k: int = 3) -> dict | None:
+    """Return a compact source-grounded answer when retrieval confidence is strong enough."""
+    hits = hybrid_search(query, top_k=max(top_k, 3))
+    if hits.empty or "score" not in hits.columns:
+        return None
+
+    top = hits.iloc[0]
+    top_score = float(top.get("score", 0.0) or 0.0)
+    second_score = float(hits.iloc[1].get("score", 0.0) or 0.0) if len(hits) > 1 else 0.0
+    if top_score < CONFIDENT_SCORE_THRESHOLD or (top_score - second_score) < CONFIDENT_SCORE_GAP:
+        return None
+
+    text = _clean_snippet(_answer_text_from_row(top))
+    if not text:
+        return None
+
+    title = (top.get("title") or "확인된 자료").strip()
+    answer = f"확인된 자료 기준으로는 {title}에 다음 내용이 있습니다: {text}{_source_suffix(top)}"
+    return {"answer": answer, "url": top.get("url", "")}
 
 def _extract_3yr_from_tables(text: str):
     t = _preclean_text(text)

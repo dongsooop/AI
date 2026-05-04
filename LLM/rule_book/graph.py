@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import time
 import logging
 from typing import TypedDict, List, Dict, Optional
@@ -19,6 +20,12 @@ _async_client = AsyncOpenAI(
 OSS_MODEL = os.getenv("OSS_MODEL")
 
 TOP_K = int(os.getenv("RULE_BOOK_TOP_K", "5"))
+LLM_TOP_K = int(os.getenv("RULE_BOOK_LLM_TOP_K", "2"))
+LLM_MAX_TOKENS = int(os.getenv("RULE_BOOK_LLM_MAX_TOKENS", "192"))
+LLM_TIMEOUT_SECONDS = float(os.getenv("RULE_BOOK_LLM_TIMEOUT_SECONDS", "45"))
+DIRECT_RULE_TERMS_RE = re.compile(r"(임기|기간|자격|권한|의무|선출|선임|구성|정족수|징계|사퇴|해임|소집)")
+RULE_BOOK_NOISE_RE = re.compile(r"(규정집|규정|학칙|준칙|회칙|규약|세칙|강령|운영규칙|찾아줘|알려줘|에서)")
+ARTICLE_HEADING_RE = re.compile(r"^제\s*\d+\s*조(?:의\d+)?(?:\([^)]*\))?$")
 
 class RuleState(TypedDict):
     query: str
@@ -40,6 +47,86 @@ async def retrieve(state: RuleState) -> RuleState:
         return {**state, "chunks": [], "error": "규정집 검색 중 오류가 발생했습니다."}
 
 
+def _query_terms(query: str) -> list[str]:
+    cleaned = RULE_BOOK_NOISE_RE.sub(" ", query or "")
+    terms = [t for t in re.findall(r"[가-힣A-Za-z0-9]{2,}", cleaned) if len(t) >= 2]
+    return list(dict.fromkeys(terms))
+
+
+def _clean_text(text: str, max_chars: int = 360) -> str:
+    text = re.sub(r"\s+", " ", text or "").strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "..."
+
+
+def _split_rule_sentences(text: str) -> list[str]:
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    candidates = []
+    for line in lines:
+        candidates.extend(part.strip() for part in re.split(r"(?<=[다요함음)])\s+", line) if part.strip())
+    if not candidates:
+        candidates = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text or "") if part.strip()]
+    return candidates
+
+
+def _source_label(chunk: Dict) -> str:
+    source = (chunk.get("source") or "").strip()
+    article = (chunk.get("article") or "").strip()
+    return f"{source} {article}".strip()
+
+
+def _direct_answer_from_chunks(query: str, chunks: List[Dict]) -> Optional[str]:
+    if not chunks or not DIRECT_RULE_TERMS_RE.search(query or ""):
+        return None
+
+    terms = _query_terms(query)
+    if not terms:
+        return None
+
+    def chunk_score(chunk: Dict) -> int:
+        haystack = f"{chunk.get('source', '')} {chunk.get('article', '')} {chunk.get('text', '')}"
+        return sum(1 for term in terms if term in haystack)
+
+    ranked = sorted(chunks, key=chunk_score, reverse=True)
+    for chunk in ranked[:3]:
+        text = chunk.get("text", "")
+        label = _source_label(chunk)
+        sentences = _split_rule_sentences(text)
+
+        scored_sentences = []
+        for idx, sentence in enumerate(sentences):
+            if ARTICLE_HEADING_RE.match(sentence) and idx + 1 < len(sentences):
+                sentence = f"{sentence} {sentences[idx + 1]}"
+            score = sum(1 for term in terms if term in sentence)
+            if DIRECT_RULE_TERMS_RE.search(sentence):
+                score += 2
+            if score > 0:
+                scored_sentences.append((score, sentence))
+
+        if scored_sentences:
+            scored_sentences.sort(key=lambda item: item[0], reverse=True)
+            snippet = _clean_text(scored_sentences[0][1])
+            return f"{label}에 따르면, {snippet} (출처: {label})"
+
+        if chunk_score(chunk) >= max(1, min(2, len(terms))):
+            snippet = _clean_text(text)
+            return f"관련 조문은 {label}입니다. 확인된 내용: {snippet} (출처: {label})"
+
+    return None
+
+
+def _fallback_answer_from_chunks(chunks: List[Dict]) -> str:
+    if not chunks:
+        return "해당 규정을 찾을 수 없습니다."
+    lines = []
+    for chunk in chunks[:2]:
+        label = _source_label(chunk)
+        snippet = _clean_text(chunk.get("text", ""), max_chars=220)
+        lines.append(f"- {label}: {snippet}")
+    return "확인된 규정집 자료 기준으로 관련 조문은 다음과 같습니다.\n" + "\n".join(lines)
+
+
 async def generate(state: RuleState) -> RuleState:
     if state.get("error") and not state.get("chunks"):
         return {**state, "answer": "규정집 검색 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."}
@@ -48,9 +135,13 @@ async def generate(state: RuleState) -> RuleState:
     if not chunks:
         return {**state, "answer": "해당 규정을 찾을 수 없습니다."}
 
+    direct_answer = _direct_answer_from_chunks(state["query"], chunks)
+    if direct_answer:
+        return {**state, "answer": direct_answer}
+
     context_parts = []
-    for c in chunks:
-        text = c['text'][:300]
+    for c in chunks[:LLM_TOP_K]:
+        text = c['text'][:450]
         context_parts.append(f"[출처: {c['source']} {c['article']}]\n{text}")
     context = "\n\n".join(context_parts)
 
@@ -65,14 +156,17 @@ async def generate(state: RuleState) -> RuleState:
     user_prompt = f"질문: {state['query']}\n\n<규정집 내용>\n{context}\n</규정집 내용>"
 
     try:
-        resp = await _async_client.chat.completions.create(
-            model=OSS_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_prompt},
-            ],
-            temperature=0.2,
-            max_tokens=1024,
+        resp = await asyncio.wait_for(
+            _async_client.chat.completions.create(
+                model=OSS_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user",   "content": user_prompt},
+                ],
+                temperature=0.2,
+                max_tokens=LLM_MAX_TOKENS,
+            ),
+            timeout=LLM_TIMEOUT_SECONDS,
         )
         choice = resp.choices[0]
         finish_reason = choice.finish_reason
@@ -84,7 +178,7 @@ async def generate(state: RuleState) -> RuleState:
         return {**state, "answer": answer}
     except Exception as e:
         logger.exception("LLM 답변 생성 중 오류 발생: %s", e)
-        return {**state, "answer": "답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."}
+        return {**state, "answer": _fallback_answer_from_chunks(chunks)}
 
 
 def _build_graph():
