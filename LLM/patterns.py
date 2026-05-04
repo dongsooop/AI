@@ -62,7 +62,7 @@ DEPT_CONTACT_INTENT_PATTERN = (
 )
 
 SCHED_LINE_PATTERN = (
-    r"^\s*-\s*(?P<title>[^:]+):\s*(?P<s>\d{4}-\d{2}-\d{2})"
+    r"^\s*-\s*(?P<title>.+?):\s*(?P<s>\d{4}-\d{2}-\d{2})"
     r"(?:\s*~\s*(?P<e>\d{4}-\d{2}-\d{2}))?$"
 )
 LINE_PATTERN = r"^\s*-\s*(?P<label>[^:：]+)[:：]\s*(?P<body>.+)$"

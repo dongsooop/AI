@@ -12,6 +12,12 @@
     "all_of_text_contains": ["일정", "+"]
   },
   {
+    "id": "schedule_commencement_25_calendar_year",
+    "text": "25년도 졸업식 알려줘",
+    "engine_in": ["fast"],
+    "all_of_text_contains": ["2025-02-21"]
+  },
+  {
     "id": "contact_cs_fullname",
     "text": "컴퓨터공학부 담당자 연락처",
     "engine_in": ["fast"],

@@ -193,6 +193,11 @@ def schedule_search(query: str, top_k=8, today=None):
         df1 = df1[(df1["start_date"] <= pd.Timestamp(e)) & (df1["end_date"] >= pd.Timestamp(s))]
 
     tag_need = tags_for_query(query)
+    commencement_query = "COMMENCEMENT" in tag_need
+    semester_end_query = "SEMESTER_END" in tag_need
+    if semester_end_query:
+        tag_need.discard("SEMESTER_END")
+        tag_need.add("FINAL")
 
     if tag_need:
         df1 = df1[df1["tags"].apply(lambda s: bool(s & tag_need))]
@@ -216,16 +221,39 @@ def schedule_search(query: str, top_k=8, today=None):
     today_ts = pd.Timestamp(today)
 
     if sort_mode == "chronological":
-        df1 = df1.sort_values(by=["start_date", "end_date", "일정명"], ascending=[True, True, True])
+        if commencement_query:
+            df1["_is_late_commencement"] = df1["일정명"].astype(str).str.contains("후기")
+            df1 = df1.sort_values(
+                by=["_is_late_commencement", "start_date", "end_date", "일정명"],
+                ascending=[True, True, True, True],
+            )
+        else:
+            df1 = df1.sort_values(by=["start_date", "end_date", "일정명"], ascending=[True, True, True])
     elif sort_mode in ("reverse", "reverse_chronological", "desc"):
-        df1 = df1.sort_values(by=["start_date", "end_date", "일정명"], ascending=[False, False, True])
+        if commencement_query:
+            df1["_is_late_commencement"] = df1["일정명"].astype(str).str.contains("후기")
+            df1 = df1.sort_values(
+                by=["_is_late_commencement", "start_date", "end_date", "일정명"],
+                ascending=[True, False, False, True],
+            )
+        else:
+            df1 = df1.sort_values(by=["start_date", "end_date", "일정명"], ascending=[False, False, True])
     else:
         df1["_is_future"] = (df1["start_date"] >= today_ts)
-        df1 = df1.sort_values(by=["_is_future", "start_date"], ascending=[False, True])
+        if commencement_query:
+            df1["_is_late_commencement"] = df1["일정명"].astype(str).str.contains("후기")
+            df1 = df1.sort_values(
+                by=["_is_late_commencement", "_is_future", "start_date"],
+                ascending=[True, False, True],
+            )
+        else:
+            df1 = df1.sort_values(by=["_is_future", "start_date"], ascending=[False, True])
 
     def _fmt(r):
         s = r["start_date"].date().isoformat()
         e = r["end_date"].date().isoformat()
+        if semester_end_query and "FINAL" in r["tags"]:
+            return f"- 종강(기말고사 종료일): {e}"
         when = s if s == e else f"{s} ~ {e}"
         return f"- {r['일정명']}: {when}"
 

@@ -19,7 +19,7 @@ RELATION_RE = re.compile(
     )
 
 UNIT_SUFFIX_RE = re.compile(r"(학부|학과|과|전공|대학|대학원|본부|센터|팀|처|단|부|원)$")
-CEREMONY_RE = re.compile(r"(졸업식|학위수여식)")
+CEREMONY_RE = re.compile(r"(졸업식|종업식|학위수여식)")
 GRAD_POLICY_RE = re.compile(r"(졸업학점|이수학점|졸업요건|전공최저|최저이수|학위수여(?!식)|졸업(?!식))")
 CONTACT_INTENT_RE = re.compile(r"(연락처|전화|전화번호|문의|상담|담당자)")
 GOVERNANCE_REMOVE_RE = re.compile(r"(없애|폐지|해체)\s*(시키|하는\s*법)?")
@@ -34,7 +34,7 @@ SCHEDULE_HINTS_BASE = (
     "학사일정", "학사 일정", "중간", "중간고사", "기말", "기말고사",
     "수강", "정정", "성적", "등록", "보강", "개강", "종강",
     "휴일", "공휴", "시험", "고사", "이번주", "다음주", "이번달", "다음달",
-    "졸업식", "학위수여식",
+    "졸업식", "종업식", "학위수여식",
 )
 RULE_BOOK_KWS = ("규정", "규정집", "학칙", "준칙", "회칙", "규약", "세칙", "강령", "운영규칙", "선발 규칙", "선발규칙")
 
@@ -73,7 +73,7 @@ def looks_like_schedule(text: str) -> bool:
         return True
     return "언제" in source and any(
         keyword in source
-        for keyword in ("중간", "기말", "시험", "고사", "수강", "등록", "성적", "개강", "종강", "졸업식", "학위수여식")
+        for keyword in ("중간", "기말", "시험", "고사", "수강", "등록", "성적", "개강", "종강", "졸업식", "종업식", "학위수여식")
     )
 
 

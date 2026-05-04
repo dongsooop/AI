@@ -1,8 +1,10 @@
 import datetime as dt
+import asyncio
 import hashlib
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from typing import Optional
 
@@ -47,6 +49,7 @@ _cache_lock = threading.Lock()
 _ssh_tunnel: Optional[SSHTunnelForwarder] = None
 _db_pool: Optional[pg_pool.ThreadedConnectionPool] = None
 _log_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="chatbot_log")
+_oss_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="chatbot_oss")
 
 _client: Optional[OpenAI] = None
 _client_lock = threading.Lock()
@@ -206,6 +209,11 @@ def call_oss(messages: list[dict[str, str]], **kwargs) -> str:
         return ""
 
 
+async def call_oss_async(messages: list[dict[str, str]], **kwargs) -> str:
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_oss_executor, partial(call_oss, messages, **kwargs))
+
+
 def call_submodel(user_text: str) -> str:
     base = ""
     try:
@@ -250,6 +258,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
     start = time.monotonic()
     user_text = extract_user_text(req)
     messages_for_oss = ensure_messages(req, user_text)
+    compact_user_text = "".join(user_text.split())
 
     if GOVERNANCE_REMOVE_RE.search(user_text) and GOVERNANCE_TARGET_RE.search(user_text):
         return {
@@ -258,6 +267,8 @@ async def chat_with_oss(req: ChatReq) -> dict:
         }
 
     mode = req.engine or decide_mode(user_text)
+    if mode == "oss" and len(compact_user_text) <= 2:
+        return {"engine": "greet", "text": "네, 무엇을 도와드릴까요?"}
     normalized = " ".join(user_text.strip().split())
     relative_date_scope = ""
     if looks_like_schedule(user_text) and any(keyword in user_text for keyword in RELATIVE_DATE_KEYWORDS):
@@ -297,6 +308,11 @@ async def chat_with_oss(req: ChatReq) -> dict:
         }
 
     if mode == "fast":
+        if any(keyword in user_text for keyword in ("종강", "졸업식", "종업식", "학위수여식")):
+            schedule_only = schedule_search(user_text, top_k=8)
+            if schedule_only:
+                return cache_and_return({"engine": "fast", "text": render_chatty_schedule(schedule_only, user_text)})
+
         direct = metadata_direct_answer(user_text)
         if direct:
             response = {"engine": "fast", "text": direct["answer"]}
@@ -380,7 +396,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
                 response["url"] = confident["url"]
             return cache_and_return(response)
 
-        output = call_oss(messages_for_oss)
+        output = await call_oss_async(messages_for_oss)
         if not any(keyword in user_text for keyword in ("연락처", "전화", "번호", "문의")) and not any(keyword in user_text for keyword in COUNCIL_KWS):
             output = scrub_non_contact(output)
 
@@ -430,7 +446,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
         return cache_and_return(response)
 
     sub_answer = call_submodel(user_text)
-    fused = call_oss(
+    fused = await call_oss_async(
         [
             {
                 "role": "system",
