@@ -56,7 +56,7 @@ def tags_for_query(query: str) -> set[str]:
     for rule in SCHEDULE_TAG_RULES:
         if any(keyword in source for keyword in rule.query_keywords):
             tags.add(rule.tag)
-    if {"MIDTERM", "FINAL"}.isdisjoint(tags) and any(keyword in source for keyword in ("시험", "고사")):
+    if not tags and any(keyword in source for keyword in ("시험", "고사")):
         tags.update({"MIDTERM", "FINAL"})
     if "수강" in source and "정정" in source:
         tags.discard("REGISTRATION")

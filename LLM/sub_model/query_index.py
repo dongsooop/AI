@@ -340,7 +340,7 @@ def confident_search_answer(query: str, top_k: int = 3) -> dict | None:
     top = hits.iloc[0]
     top_score = float(top.get("score", 0.0) or 0.0)
     second_score = float(hits.iloc[1].get("score", 0.0) or 0.0) if len(hits) > 1 else 0.0
-    if top_score < CONFIDENT_SCORE_THRESHOLD and (top_score - second_score) < CONFIDENT_SCORE_GAP:
+    if top_score < CONFIDENT_SCORE_THRESHOLD or (top_score - second_score) < CONFIDENT_SCORE_GAP:
         return None
 
     text = _clean_snippet(_answer_text_from_row(top))
