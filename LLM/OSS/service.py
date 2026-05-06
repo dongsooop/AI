@@ -8,6 +8,7 @@ from functools import partial
 from pathlib import Path
 from typing import Optional
 
+import httpx
 from cachetools import TTLCache
 from openai import OpenAI
 from psycopg2 import pool as pg_pool
@@ -53,6 +54,8 @@ _oss_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="chatbot_os
 
 _client: Optional[OpenAI] = None
 _client_lock = threading.Lock()
+
+PROFANITY_GUARD_TEXT = "부적절한 표현이 포함되어 답변하기 어려워요. 질문을 순화해서 다시 입력해 주세요."
 
 
 class ChatReq(BaseModel):
@@ -217,6 +220,32 @@ async def call_oss_async(messages: list[dict[str, str]], **kwargs) -> str:
     return await loop.run_in_executor(_oss_executor, partial(call_oss, messages, **kwargs))
 
 
+async def should_block_profanity(user_text: str) -> bool:
+    if not settings.chatbot_profanity_filter_enabled or not settings.text_filter_api_url:
+        return False
+    if not (user_text or "").strip():
+        return False
+
+    try:
+        async with httpx.AsyncClient(timeout=settings.text_filter_api_timeout) as client:
+            response = await client.post(settings.text_filter_api_url, json={"text": user_text})
+            response.raise_for_status()
+            payload = response.json()
+    except Exception as exc:
+        logger.warning("chatbot_profanity_filter_failed fail_open=true error=%s", exc)
+        return False
+
+    if not isinstance(payload, dict):
+        logger.warning("chatbot_profanity_filter_invalid_response fail_open=true")
+        return False
+
+    results = payload.get("results", [])
+    if not isinstance(results, list):
+        logger.warning("chatbot_profanity_filter_invalid_response fail_open=true")
+        return False
+    return any(str(label).strip() == "비속어" for label in results)
+
+
 def call_submodel(user_text: str) -> str:
     base = ""
     try:
@@ -262,6 +291,11 @@ async def chat_with_oss(req: ChatReq) -> dict:
     user_text = extract_user_text(req)
     messages_for_oss = ensure_messages(req, user_text)
     compact_user_text = "".join(user_text.split())
+
+    if await should_block_profanity(user_text):
+        latency = int((time.monotonic() - start) * 1000)
+        _log_executor.submit(_log_chatbot, user_text, "guard", PROFANITY_GUARD_TEXT, None, False, latency)
+        return {"engine": "guard", "text": PROFANITY_GUARD_TEXT}
 
     if GOVERNANCE_REMOVE_RE.search(user_text) and GOVERNANCE_TARGET_RE.search(user_text):
         return {
