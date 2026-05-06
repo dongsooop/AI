@@ -100,7 +100,7 @@ def get_settings() -> Settings:
         json_only_mode=os.getenv("JSON_ONLY_MODE", "0").strip() == "1",
         chatbot_profanity_filter_enabled=os.getenv("CHATBOT_PROFANITY_FILTER_ENABLED", "0").strip() == "1",
         text_filter_api_url=os.getenv("TEXT_FILTER_API_URL"),
-        text_filter_api_timeout=_get_float_env("TEXT_FILTER_API_TIMEOUT", 1.0),
+        text_filter_api_timeout=_get_float_env("TEXT_FILTER_API_TIMEOUT", 10.0),
         root_base_path=os.getenv("ROOT_BASE_PATH"),
         dept_map_path=os.getenv("DEPT_MAP_PATH"),
         ssh_host=os.getenv("SSH_HOST"),
