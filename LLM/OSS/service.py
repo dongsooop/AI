@@ -235,6 +235,10 @@ async def should_block_profanity(user_text: str) -> bool:
         logger.warning("chatbot_profanity_filter_failed fail_open=true error=%s", exc)
         return False
 
+    if not isinstance(payload, dict):
+        logger.warning("chatbot_profanity_filter_invalid_response fail_open=true")
+        return False
+
     results = payload.get("results", [])
     if not isinstance(results, list):
         logger.warning("chatbot_profanity_filter_invalid_response fail_open=true")
