@@ -221,10 +221,13 @@ async def call_oss_async(messages: list[dict[str, str]], **kwargs) -> str:
 
 
 async def should_block_profanity(user_text: str) -> bool:
-    if not settings.chatbot_profanity_filter_enabled or not settings.text_filter_api_url:
+    if not settings.chatbot_profanity_filter_enabled:
         return False
     if not (user_text or "").strip():
         return False
+    if not settings.text_filter_api_url:
+        logger.warning("chatbot_profanity_filter_missing_url fail_closed=true")
+        return True
 
     try:
         async with httpx.AsyncClient(timeout=settings.text_filter_api_timeout) as client:
@@ -232,17 +235,17 @@ async def should_block_profanity(user_text: str) -> bool:
             response.raise_for_status()
             payload = response.json()
     except Exception as exc:
-        logger.warning("chatbot_profanity_filter_failed fail_open=true error=%s", exc)
-        return False
+        logger.warning("chatbot_profanity_filter_failed fail_closed=true error=%s", exc)
+        return True
 
     if not isinstance(payload, dict):
-        logger.warning("chatbot_profanity_filter_invalid_response fail_open=true")
-        return False
+        logger.warning("chatbot_profanity_filter_invalid_response fail_closed=true")
+        return True
 
     results = payload.get("results", [])
     if not isinstance(results, list):
-        logger.warning("chatbot_profanity_filter_invalid_response fail_open=true")
-        return False
+        logger.warning("chatbot_profanity_filter_invalid_response fail_closed=true")
+        return True
     return any(str(label).strip() == "비속어" for label in results)
 
 
