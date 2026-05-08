@@ -1,0 +1,55 @@
+name: RAG Light Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+jobs:
+  rag-light-check:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'run-rag-check')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install lightweight regression dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas pyarrow python-dotenv
+
+      - name: Validate RAG eval case JSON
+        run: python -m json.tool tests/regression/rag_eval_cases.json > /tmp/rag_eval_cases.formatted.json
+
+      - name: Compile RAG regression scripts
+        run: |
+          python -m py_compile \
+            tests/regression/evaluate_rag_retrieval.py \
+            tests/regression/check_query_index_compat.py \
+            tests/regression/check_query_index_metadata_quality.py \
+            LLM/sub_model/query_index.py
+
+      - name: Run lightweight query-index compatibility checks
+        run: |
+          python tests/regression/check_query_index_compat.py
+          python tests/regression/check_query_index_metadata_quality.py
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## RAG Light Check"
+            echo ""
+            echo "- Triggered by: \`${{ github.event_name }}\`"
+            echo "- PR label required: \`run-rag-check\`"
+            echo "- Checks: JSON validation, Python compile, lightweight query-index regressions"
+            echo ""
+            echo "This workflow does not run the full local model-backed 30-case RAG evaluation."
+          } >> "$GITHUB_STEP_SUMMARY"
