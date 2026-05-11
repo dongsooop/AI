@@ -1,0 +1,292 @@
+[
+  {
+    "id": "contact_student_success_phone",
+    "category": "contact",
+    "kind": "search",
+    "query": "학생성공지원팀 전화번호 알려줘",
+    "expected_url_contains": ["4377/subview.do"],
+    "expected_title_contains": ["학생성공지원팀"],
+    "answer_must_contain_any": ["02-", "전화", "연락처"],
+    "requires_source_url": true
+  },
+  {
+    "id": "contact_design_pr_center_phone",
+    "category": "contact",
+    "kind": "search",
+    "query": "디자인홍보센터 전화번호",
+    "expected_url_contains": ["4386/subview.do"],
+    "expected_title_contains": ["디자인홍보센터"],
+    "answer_must_contain_any": ["02-2610-5247", "전화", "연락처"],
+    "requires_source_url": true
+  },
+  {
+    "id": "contact_finance_team_phone",
+    "category": "contact",
+    "kind": "search",
+    "query": "재무팀 연락처",
+    "expected_url_contains": ["4381/subview.do"],
+    "expected_title_contains": ["재무팀"],
+    "answer_must_contain_any": ["전화", "연락처", "02-"],
+    "requires_source_url": true
+  },
+  {
+    "id": "contact_education_support_phone",
+    "category": "contact",
+    "kind": "search",
+    "query": "교육지원팀 담당자 전화번호",
+    "expected_url_contains": ["4365/subview.do"],
+    "expected_title_contains": ["교육지원팀"],
+    "answer_must_contain_any": ["전화", "연락처", "02-"],
+    "requires_source_url": true
+  },
+  {
+    "id": "contact_computer_engineering_phone",
+    "category": "contact",
+    "kind": "search",
+    "query": "컴퓨터공학부 연락처",
+    "expected_url_contains": ["4560/subview.do"],
+    "expected_title_contains": ["컴퓨터공학부"],
+    "answer_must_contain_any": ["02-2610-1842", "전화", "연락처"],
+    "requires_source_url": true
+  },
+  {
+    "id": "contact_software_department_phone",
+    "category": "contact",
+    "kind": "search",
+    "query": "컴퓨터소프트웨어공학과 전화번호",
+    "expected_url_contains": ["4560/subview.do", "4573/subview.do"],
+    "expected_title_contains": ["컴퓨터소프트웨어공학과", "컴퓨터공학부"],
+    "answer_must_contain_any": ["02-2610-1843", "전화", "연락처"],
+    "requires_source_url": true
+  },
+  {
+    "id": "policy_leave_absence",
+    "category": "policy",
+    "kind": "search",
+    "query": "휴학 신청 안내",
+    "expected_url_contains": ["4784/subview.do"],
+    "expected_title_contains": ["휴학"],
+    "answer_must_contain_any": ["휴학", "4784/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "policy_return_to_school",
+    "category": "policy",
+    "kind": "search",
+    "query": "복학 안내",
+    "expected_url_contains": ["4785/subview.do"],
+    "expected_title_contains": ["복학"],
+    "answer_must_contain_any": ["복학", "4785/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "policy_course_registration",
+    "category": "policy",
+    "kind": "search",
+    "query": "수강신청 안내",
+    "expected_url_contains": ["4752/subview.do", "4753/subview.do"],
+    "expected_title_contains": ["수강신청"],
+    "answer_must_contain_any": ["수강신청", "4752/subview.do", "4753/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "policy_registration_tuition",
+    "category": "policy",
+    "kind": "search",
+    "query": "등록금납부 안내",
+    "expected_url_contains": ["4793/subview.do"],
+    "expected_title_contains": ["등록금납부"],
+    "answer_must_contain_any": ["등록금", "4793/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "policy_internal_external_scholarship",
+    "category": "policy",
+    "kind": "search",
+    "query": "교내외장학금 안내",
+    "expected_url_contains": ["4794/subview.do"],
+    "expected_title_contains": ["교내외장학금"],
+    "answer_must_contain_any": ["장학", "4794/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "policy_national_scholarship",
+    "category": "policy",
+    "kind": "search",
+    "query": "국가장학금 안내",
+    "expected_url_contains": ["4795/subview.do"],
+    "expected_title_contains": ["국가장학금"],
+    "answer_must_contain_any": ["국가장학금", "4795/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "policy_student_loan",
+    "category": "policy",
+    "kind": "search",
+    "query": "학자금대출 안내",
+    "expected_url_contains": ["4796/subview.do"],
+    "expected_title_contains": ["학자금대출"],
+    "answer_must_contain_any": ["학자금", "4796/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "policy_certificate_issue",
+    "category": "policy",
+    "kind": "search",
+    "query": "제증명서발급 안내",
+    "expected_url_contains": ["4799/subview.do"],
+    "expected_title_contains": ["제증명서발급", "인터넷에의한발급"],
+    "answer_must_contain_any": ["증명서", "4799/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "policy_field_training",
+    "category": "policy",
+    "kind": "search",
+    "query": "현장실습 안내",
+    "expected_url_contains": ["4756/subview.do"],
+    "expected_title_contains": ["현장실습"],
+    "answer_must_contain_any": ["현장실습", "4756/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "grad_professional_associate",
+    "category": "grad",
+    "kind": "search",
+    "query": "전문학사 졸업학점 알려줘",
+    "expected_url_contains": ["4778/subview.do"],
+    "expected_title_contains": ["전문학사"],
+    "answer_must_contain_any": ["졸업", "학점"],
+    "requires_source_url": true
+  },
+  {
+    "id": "grad_postponement",
+    "category": "grad",
+    "kind": "search",
+    "query": "졸업보류 안내",
+    "expected_url_contains": ["4781/subview.do"],
+    "expected_title_contains": ["졸업보류"],
+    "answer_must_contain_any": ["졸업보류", "4781/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "grad_deferment",
+    "category": "grad",
+    "kind": "search",
+    "query": "졸업유예 안내",
+    "expected_url_contains": ["4782/subview.do"],
+    "expected_title_contains": ["졸업유예"],
+    "answer_must_contain_any": ["졸업유예", "4782/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "department_computer_engineering_intro",
+    "category": "department",
+    "kind": "search",
+    "query": "컴퓨터공학부 소개",
+    "expected_url_contains": ["4560/subview.do"],
+    "expected_title_contains": ["컴퓨터공학부"],
+    "answer_must_contain_any": ["컴퓨터공학부", "4560/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "department_software_intro",
+    "category": "department",
+    "kind": "search",
+    "query": "컴퓨터소프트웨어공학과 소개",
+    "expected_url_contains": ["4573/subview.do", "4560/subview.do"],
+    "expected_title_contains": ["컴퓨터소프트웨어공학과", "컴퓨터공학부"],
+    "answer_must_contain_any": ["컴퓨터소프트웨어공학과", "소프트웨어", "4573/subview.do", "4560/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "department_business_intro",
+    "category": "department",
+    "kind": "search",
+    "query": "경영학과 소개",
+    "expected_url_contains": ["4670/subview.do"],
+    "expected_title_contains": ["경영학과"],
+    "answer_must_contain_any": ["경영학과", "4658/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "department_visual_design_intro",
+    "category": "department",
+    "kind": "search",
+    "query": "시각디자인과 소개",
+    "expected_url_contains": ["4647/subview.do"],
+    "expected_title_contains": ["시각디자인과"],
+    "answer_must_contain_any": ["시각디자인과", "4649/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "life_dorm_entry",
+    "category": "dorm",
+    "kind": "search",
+    "query": "기숙사 입사 안내",
+    "expected_url_contains": ["4843/subview.do"],
+    "expected_title_contains": ["입사 안내"],
+    "answer_must_contain_any": ["입사", "4843/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "life_dorm_rules",
+    "category": "dorm",
+    "kind": "search",
+    "query": "기숙사 생활수칙",
+    "expected_url_contains": ["4845/subview.do"],
+    "expected_title_contains": ["생활수칙"],
+    "answer_must_contain_any": ["생활수칙", "4845/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "privacy_policy",
+    "category": "privacy",
+    "kind": "search",
+    "query": "개인정보처리방침",
+    "expected_url_contains": ["4924/subview.do"],
+    "expected_title_contains": ["개인정보처리방침"],
+    "answer_must_contain_any": ["개인정보", "4924/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "schedule_commencement_2025",
+    "category": "schedule",
+    "kind": "schedule",
+    "query": "2025년 학위수여식 알려줘",
+    "answer_must_contain_any": ["2025-02-21", "학위수여식"],
+    "requires_date": true
+  },
+  {
+    "id": "schedule_semester_start_2025",
+    "category": "schedule",
+    "kind": "schedule",
+    "query": "2025년 1학기 개강일",
+    "answer_must_contain_any": ["2025-03-04", "개강"],
+    "requires_date": true
+  },
+  {
+    "id": "schedule_midterm_2025",
+    "category": "schedule",
+    "kind": "schedule",
+    "query": "2025년 중간고사 일정",
+    "answer_must_contain_any": ["2025", "중간고사"],
+    "requires_date": true
+  },
+  {
+    "id": "schedule_final_2025",
+    "category": "schedule",
+    "kind": "schedule",
+    "query": "2025년 기말고사 일정",
+    "answer_must_contain_any": ["2025", "학기말고사", "기말고사"],
+    "requires_date": true
+  },
+  {
+    "id": "schedule_course_change_2025",
+    "category": "schedule",
+    "kind": "schedule",
+    "query": "2025년 수강신청 정정기간",
+    "answer_must_contain_any": ["2025", "수강신청", "정정"],
+    "requires_date": true
+  }
+]

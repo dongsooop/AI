@@ -29,7 +29,9 @@ THIS_DIR = Path(__file__).resolve().parent
 ROOT_DIR = THIS_DIR.parent.parent
 
 # 졸업학점 관련 키워드 복원 (학교 기본 정보 포함)
-GRAD_KWS = ["졸업", "졸업학점", "졸업 학점", "졸업요건", "졸업요구학점", "이수학점", "졸업 이수학점"]
+GRAD_KWS = ["졸업학점", "졸업 학점", "졸업요건", "졸업요구학점", "이수학점", "졸업 이수학점"]
+GRAD_CREDIT_QUERY_RE = re.compile(r"(졸업\s*학점|졸업\s*(?:요건|요구|기준)|졸업\s*이수|이수\s*학점|3\s*년제)")
+GRAD_NON_CREDIT_POLICY_RE = re.compile(r"(졸업보류|졸업유예|졸업연기)")
 FAX_RE = re.compile(r"(?:팩스|FAX)", re.I)
 GENERIC_LABEL_RE = GENERIC_ORG_LABEL_RE
 
@@ -196,8 +198,32 @@ def _extract_grad_credits_from_text(text: str):
     return total, parts
 
 def _looks_like_grad_query(q: str) -> bool:
-    ql = (q or "").lower()
-    return any(k in q or k in ql for k in GRAD_KWS)
+    text = q or ""
+    if GRAD_NON_CREDIT_POLICY_RE.search(text) and not re.search(r"(학점|이수)", text):
+        return False
+    ql = text.lower()
+    compact = _compact(text)
+    return (
+        bool(GRAD_CREDIT_QUERY_RE.search(text))
+        or ("졸업" in compact and "학점" in compact)
+        or any(k in text or k in ql for k in GRAD_KWS)
+    )
+
+def _query_match_terms(query: str) -> list[str]:
+    stop = {
+        "안내", "관련", "정보", "알려줘", "찾아줘", "뭐야", "무엇", "어디", "어떻게",
+        "신청", "기준", "절차", "페이지",
+    }
+    terms = []
+    for token in re.findall(HANGUL_TOKEN_PATTERN, query or ""):
+        if len(token) < 2 or token in stop:
+            continue
+        terms.append(token)
+    return list(dict.fromkeys(terms))
+
+def _text_match_score(text: str, terms: list[str]) -> int:
+    compact_text = _compact(text)
+    return sum(1 for term in terms if _compact(term) and _compact(term) in compact_text)
 
 def _compact(s: str) -> str:
     return re.sub(r"\s+", "", (s or "").lower())
@@ -566,12 +592,31 @@ def build_answer(query, top_k=6):
 
         hits = hybrid_search(query, top_k=max(top_k, GRAD_SEARCH_POOL_SIZE))
         urls = hits["url"].fillna("")
+        titles = hits["title"].fillna("")
+        leaf_titles = hits.get("leaf_title", pd.Series([""]*len(hits))).fillna("")
+        breadcrumbs = hits.get("breadcrumb", pd.Series([""]*len(hits))).fillna("")
         home_like = urls.str.contains(HOME_LIKE_URL_PATTERN, case=False, regex=True)
         bbs_like  = urls.str.contains(BOARD_URL_PATTERN, case=False, regex=True)
         is_page   = hits["doc_type"].isin(["page", "policy", "table_like", "department"])
+        terms = _query_match_terms(query)
+        title_term_match = titles.map(lambda s: _text_match_score(s, terms))
+        leaf_term_match = leaf_titles.map(lambda s: _text_match_score(s, terms))
+        breadcrumb_term_match = breadcrumbs.map(lambda s: _text_match_score(s, terms))
+        professional_match = pd.Series([0] * len(hits))
+        if "전문학사" in query:
+            professional_match = titles.str.contains("전문학사", regex=False).astype(int) * 3
+        elif "학사" in query and "전문학사" not in query:
+            professional_match = (
+                titles.str.contains("학사", regex=False)
+                & ~titles.str.contains("전문학사", regex=False)
+            ).astype(int) * 2
         rr = (
             HOME_PAGE_RERANK_BOOST * home_like.astype(int)
             + PAGE_DOC_RERANK_BOOST * is_page.astype(int)
+            + TITLE_UNIT_MATCH_BOOST * 2.0 * title_term_match
+            + TITLE_UNIT_MATCH_BOOST * 1.5 * leaf_term_match
+            + TITLE_UNIT_MATCH_BOOST * 0.8 * breadcrumb_term_match
+            + professional_match
             - BOARD_PAGE_PENALTY * bbs_like.astype(int)
         )
         hits = hits.assign(_rr=rr).sort_values(["_rr", "score"], ascending=[False, False])
@@ -627,17 +672,35 @@ def build_answer(query, top_k=6):
 
     if not hits.empty:
         urls = hits["url"].fillna("")
+        titles = hits["title"].fillna("")
+        leaf_titles = hits.get("leaf_title", pd.Series([""]*len(hits))).fillna("")
+        breadcrumbs = hits.get("breadcrumb", pd.Series([""]*len(hits))).fillna("")
         home_like = urls.str.contains(HOME_LIKE_URL_PATTERN, case=False, regex=True)
         bbs_like  = urls.str.contains(BOARD_URL_PATTERN, case=False, regex=True)
         is_page   = hits["doc_type"].isin(["page", "intro", "department", "policy", "table_like", "history"])
         def _n(s: str) -> str: return re.sub(r"\s+", "", (s or "").lower())
         qn = _n(query)
-        title_match = hits["title"].fillna("").map(lambda s: qn in _n(s))
+        title_match = titles.map(lambda s: qn in _n(s))
         unit_match  = hits.get("unit", pd.Series([""]*len(hits))).fillna("").map(lambda s: qn in _n(s))
+        terms = _query_match_terms(query)
+        title_term_match = titles.map(lambda s: _text_match_score(s, terms))
+        leaf_term_match = leaf_titles.map(lambda s: _text_match_score(s, terms))
+        breadcrumb_term_match = breadcrumbs.map(lambda s: _text_match_score(s, terms))
+        academic_policy_match = (
+            breadcrumbs.str.contains("학사안내", regex=False)
+            & ~titles.str.contains("센터|공지사항|동영상자료|보고절차", regex=True)
+            & hits["doc_type"].isin(["policy", "page", "history", "table_like"])
+        ).astype(int)
+        if any(k in query for k in ("센터", "연락처", "전화", "담당자")):
+            academic_policy_match = pd.Series([0] * len(hits))
         rr = (
             HOME_PAGE_RERANK_BOOST * home_like.astype(int)
           + PAGE_DOC_RERANK_BOOST * is_page.astype(int)
           + TITLE_UNIT_MATCH_BOOST * (title_match.astype(int) | unit_match.astype(int))
+          + TITLE_UNIT_MATCH_BOOST * 2.5 * title_term_match
+          + TITLE_UNIT_MATCH_BOOST * 2.0 * leaf_term_match
+          + TITLE_UNIT_MATCH_BOOST * 1.0 * breadcrumb_term_match
+          + TITLE_UNIT_MATCH_BOOST * 1.5 * academic_policy_match
           - BOARD_PAGE_PENALTY * bbs_like.astype(int)
         )
         hits = hits.assign(_rr=rr).sort_values(["_rr", "score"], ascending=[False, False])
