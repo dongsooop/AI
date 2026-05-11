@@ -1,6 +1,11 @@
 .DS_Store
 .vscode
 data/
+!data/
+data/*
+!data/schedule/
+data/schedule/*
+!data/schedule/학사일정_년도추가.csv
 model/
 database/
 .env
