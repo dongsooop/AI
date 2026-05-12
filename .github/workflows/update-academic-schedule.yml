@@ -62,7 +62,7 @@ jobs:
           body: |
             ## 관련 이슈
 
-            Closes #이슈번호
+            Closes #111
 
             ## 🎯 배경
 
