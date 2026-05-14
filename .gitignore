@@ -30,7 +30,3 @@ backup_file/
 .codex/*
 !.codex/skills/
 !.codex/skills/**
-!docs/AGENTS.md
-!docs/PLANS.md
-!docs/BRANCH_REVIEW_GUIDE.md
-!docs/CHECKLIST.md
