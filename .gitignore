@@ -23,7 +23,10 @@ test
 CLAUDE.md
 .claude/
 backup_file/
-AGENTS.md
-PLANS.md
-SKILL.md
-CHECKLIST.md
+/AGENTS.md
+/PLANS.md
+/SKILL.md
+/CHECKLIST.md
+.codex/*
+!.codex/skills/
+!.codex/skills/**

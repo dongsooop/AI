@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dongsooop Branch Review"
+  short_description: "Review Dongsooop branches before publishing"
+  default_prompt: "Use $reviewing-dongsooop-branch to review the current branch before pushing."
