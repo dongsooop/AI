@@ -1,0 +1,4 @@
+interface:
+  display_name: "시간표 OCR 디버깅"
+  short_description: "Dongsooop 시간표 OCR 문제 점검"
+  default_prompt: "Dongsooop 시간표 OCR의 이미지 업로드, 격자 탐지, 셀 OCR, 시간대 매핑, Spring 전송 문제를 디버깅할 때 이 스킬을 사용합니다."

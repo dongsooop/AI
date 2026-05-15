@@ -1,0 +1,4 @@
+interface:
+  display_name: "챗봇 RAG 디버깅"
+  short_description: "Dongsooop 챗봇 RAG 문제 점검"
+  default_prompt: "Dongsooop 챗봇 RAG의 검색, 근거성, 아티팩트, 회귀 문제를 디버깅할 때 이 스킬을 사용합니다."

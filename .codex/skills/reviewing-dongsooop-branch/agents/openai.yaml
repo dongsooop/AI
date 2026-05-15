@@ -1,4 +1,4 @@
 interface:
-  display_name: "Dongsooop Branch Review"
-  short_description: "Review Dongsooop branches before publishing"
-  default_prompt: "Use $reviewing-dongsooop-branch to review the current branch before pushing."
+  display_name: "Dongsooop 브랜치 리뷰"
+  short_description: "Dongsooop 브랜치 공개 전 점검"
+  default_prompt: "현재 브랜치를 푸시하기 전에 $reviewing-dongsooop-branch 스킬로 검토합니다."
