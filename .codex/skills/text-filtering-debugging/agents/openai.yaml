@@ -1,0 +1,4 @@
+interface:
+  display_name: "텍스트 필터링 디버깅"
+  short_description: "Dongsooop 비속어 필터 문제 점검"
+  default_prompt: "Dongsooop 텍스트 필터링의 ELECTRA 추론, 영어 비속어 사전, 문장 분리, 엔드포인트 응답, 학습 데이터 문제를 디버깅할 때 이 스킬을 사용합니다."

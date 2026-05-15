@@ -17,7 +17,7 @@
 - 한국어 처리 특성을 유지해야 합니다. 토크나이징, OCR 전처리, 비속어 규칙, RAG 검색 로직을 바꿀 때 특히 주의합니다.
 - 비밀값, 토큰, `.env` 값, SSH 키, 서버 접속 정보는 소스 파일에 커밋하지 않습니다.
 - 이 프로젝트의 OCI 배포는 Docker 이미지 안의 `.env` 파일을 사용하는 전제를 포함합니다. 명시적인 요구가 없으면 `Dockerfile` 또는 `Dockerfiles_oss`에서 `COPY .env ./.env`를 제거하지 않습니다.
-- 루트의 `AGENTS.md`, `PLANS.md`, `SKILL.md`, `CHECKLIST.md`는 로컬 에이전트 작업 지침 문서입니다. 공개용 문서는 `docs/` 아래 사본을 사용합니다.
+- 루트의 `AGENTS.md`는 로컬 에이전트 진입점입니다. 추가 로컬 보조 문서는 `.local-agent-docs/`에 두며, 공개용 문서는 `docs/` 아래 파일을 사용합니다.
 - Codex에서 반복적으로 수행하는 브랜치 리뷰 작업은 `.codex/skills/reviewing-dongsooop-branch/SKILL.md`의 프로젝트 skill을 사용합니다.
 - `model/artifacts/` 아래 파일은 생성 산출물로 간주합니다. 직접 수정하지 말고 생성 로직을 수정합니다.
 - 검색 품질이나 응답 포맷에 영향을 주는 변경은 가능하면 기존 디버그/회귀 스크립트로 검증합니다.

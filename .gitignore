@@ -1,5 +1,22 @@
+# OS / editor
 .DS_Store
 .vscode
+
+# Environment / local settings
+.env
+*.env
+setting.txt
+
+# Python / runtime artifacts
+__pycache__
+.ipynb_checkpoints/
+hs_err_pid*.log
+
+# Local dependencies
+requirements.txt
+requirements_oss.txt
+
+# Private or generated data
 data/
 !data/
 data/*
@@ -8,25 +25,19 @@ data/schedule/*
 !data/schedule/학사일정_년도추가.csv
 model/
 database/
-.env
-*.env
-.ipynb_checkpoints/
-requirements.txt
-requirements_oss.txt
-setting.txt
-__pycache__
-hs_err_pid*.log
 crawling
 debug/
 finetuning
 test
+backup_file/
+
+# Local agent docs
+/AGENTS.md
+.local-agent-docs/
 CLAUDE.md
 .claude/
-backup_file/
-/AGENTS.md
-/PLANS.md
-/SKILL.md
-/CHECKLIST.md
+
+# Codex project skills
 .codex/*
 !.codex/skills/
 !.codex/skills/**
