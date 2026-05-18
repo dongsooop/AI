@@ -64,6 +64,7 @@ def classify(files: list[ChangedFile]) -> dict[str, list[str]]:
             if match_any(changed.path, patterns):
                 scopes[scope].append(changed.path)
                 matched = True
+                break
         if not matched:
             scopes["other"].append(changed.path)
     return dict(scopes)

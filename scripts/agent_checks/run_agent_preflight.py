@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+import shlex
 
 from check_changed_scope import classify
 from lib import REPO_ROOT, get_changed_files
@@ -46,7 +47,7 @@ def print_recommended_checks() -> None:
 
     python_paths = [path for path in changed_paths if path.endswith(".py")]
     if python_paths:
-        joined = " ".join(python_paths)
+        joined = " ".join(shlex.quote(path) for path in python_paths)
         print(f"- python -m compileall {joined}")
     if "chatbot" in scopes:
         print("- python debug/regression/run_chatbot_regression.py")
