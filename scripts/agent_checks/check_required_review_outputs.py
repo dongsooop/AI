@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
+import sys
+
+from lib import add_target_args
+
 
 REQUIRED_SECTIONS = [
     "보안 이슈",
@@ -15,7 +20,14 @@ REQUIRED_SECTIONS = [
 ]
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_target_args(parser)
+    return parser.parse_args()
+
+
 def main() -> int:
+    parse_args()
     print("[review-output]")
     print("Branch review responses must include:")
     for section in REQUIRED_SECTIONS:
@@ -24,5 +36,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
-
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print(f"[error] {exc}", file=sys.stderr)
+        raise SystemExit(2)
