@@ -105,6 +105,10 @@ def main() -> int:
     print_recommended_checks(mode=mode, base=base)
     print()
 
+    invalid_codes = [code for code in exit_codes if code not in (0, 1, 2)]
+    if invalid_codes:
+        print(f"[preflight] failed because a check returned invalid exit code(s): {invalid_codes}")
+        return 2
     if any(code == 2 for code in exit_codes):
         print("[preflight] failed because a check could not run")
         return 2
