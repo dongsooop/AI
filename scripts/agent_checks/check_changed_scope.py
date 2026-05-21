@@ -95,11 +95,14 @@ def main() -> int:
 
     service_scopes = {"chatbot", "text_filter_timetable"}
     touched_services = service_scopes.intersection(scopes)
+    has_warning = False
     if len(touched_services) > 1:
         print("[warning] Changes cross chatbot and text_filter/timetable service boundaries.")
+        has_warning = True
     if "generated_artifacts" in scopes:
         print("[warning] Generated artifacts changed. Prefer updating generation logic.")
-    return 0
+        has_warning = True
+    return 1 if has_warning else 0
 
 
 if __name__ == "__main__":

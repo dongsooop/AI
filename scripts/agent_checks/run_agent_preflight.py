@@ -60,7 +60,12 @@ def print_recommended_checks(mode: str, base: str | None) -> None:
 
     print("[recommended-checks]")
     if not files:
-        print("- no checks needed; working tree has no changes")
+        if mode == "staged":
+            print("- no checks needed; staged changes are empty")
+        elif mode == "base":
+            print(f"- no checks needed; no changes found against {base}")
+        else:
+            print("- no checks needed; working tree has no changes")
         return
 
     python_paths = [path for path in changed_paths if path.endswith(".py")]
