@@ -328,7 +328,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
         }
 
     tool_result = run_mode_tools(mode, user_text)
-    if tool_result.handled:
+    if tool_result.resolved:
         return cache_and_return(tool_result.to_response())
 
     if mode == "oss":
@@ -350,12 +350,11 @@ async def chat_with_oss(req: ChatReq) -> dict:
 
             if len(user_text) <= 2 or GREETING_RE.search(user_text):
                 output = "안녕하세요, 무엇을 도와드릴까요?"
-            else:
-                output = "잘 이해하지 못했어요. 다시 질문해주세요."
 
-        latency = int((time.monotonic() - start) * 1000)
-        _log_executor.submit(_log_chatbot, user_text, "oss", output, None, False, latency)
-        return {"engine": "oss", "text": output}
+        if output:
+            latency = int((time.monotonic() - start) * 1000)
+            _log_executor.submit(_log_chatbot, user_text, "oss", output, None, False, latency)
+            return {"engine": "oss", "text": output}
 
     fallback = run_final_fallback_tools(mode, user_text)
     if fallback.resolved:

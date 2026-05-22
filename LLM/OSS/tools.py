@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
+import logging
 
 from core.settings import get_settings
 from LLM.OSS.formatter import (
@@ -13,6 +14,7 @@ from LLM.sub_model.schedule_index import schedule_search
 
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -47,7 +49,8 @@ def call_submodel(user_text: str) -> str:
     try:
         result = build_answer(user_text, top_k=12)
         base = (result or {}).get("answer", "").strip()
-    except Exception:
+    except Exception as exc:
+        logger.warning("build_answer failed: %s", exc, exc_info=True)
         base = ""
 
     if settings.json_only_mode:
@@ -55,7 +58,8 @@ def call_submodel(user_text: str) -> str:
 
     try:
         schedule = schedule_search(user_text, top_k=8)
-    except Exception:
+    except Exception as exc:
+        logger.warning("schedule_search failed: %s", exc, exc_info=True)
         schedule = ""
 
     if schedule and base:
@@ -64,7 +68,10 @@ def call_submodel(user_text: str) -> str:
 
 
 def _direct_answer_tool(user_text: str, engine: str) -> ToolResult:
-    direct = metadata_direct_answer(user_text)
+    try:
+        direct = metadata_direct_answer(user_text)
+    except Exception:
+        return EMPTY_TOOL_RESULT
     if not direct:
         return EMPTY_TOOL_RESULT
     return ToolResult(
@@ -80,7 +87,10 @@ def _schedule_tool(user_text: str, *, ceremonial_first: bool = False) -> ToolRes
     if ceremonial_first and not any(keyword in user_text for keyword in ("종강", "졸업식", "종업식", "학위수여식")):
         return EMPTY_TOOL_RESULT
 
-    schedule = schedule_search(user_text, top_k=8)
+    try:
+        schedule = schedule_search(user_text, top_k=8)
+    except Exception:
+        return EMPTY_TOOL_RESULT
     if not schedule:
         return EMPTY_TOOL_RESULT
     return ToolResult(
@@ -92,7 +102,10 @@ def _schedule_tool(user_text: str, *, ceremonial_first: bool = False) -> ToolRes
 
 
 def _clarification_tool(user_text: str) -> ToolResult:
-    clarification = dept_clarification_message(user_text)
+    try:
+        clarification = dept_clarification_message(user_text)
+    except Exception:
+        return EMPTY_TOOL_RESULT
     if not clarification:
         return EMPTY_TOOL_RESULT
     return ToolResult(
@@ -104,8 +117,11 @@ def _clarification_tool(user_text: str) -> ToolResult:
 
 
 def _postprocess_tool(mode: str, user_text: str) -> ToolResult:
-    sub_answer = call_submodel(user_text)
-    text, url = run_postprocess(mode, user_text, sub_answer)
+    try:
+        sub_answer = call_submodel(user_text)
+        text, url = run_postprocess(mode, user_text, sub_answer)
+    except Exception:
+        return EMPTY_TOOL_RESULT
     return ToolResult(
         name=f"{mode}_search_postprocess",
         text=text,
@@ -116,7 +132,10 @@ def _postprocess_tool(mode: str, user_text: str) -> ToolResult:
 
 
 def _confident_search_tool(user_text: str) -> ToolResult:
-    confident = confident_search_answer(user_text, top_k=2)
+    try:
+        confident = confident_search_answer(user_text, top_k=2)
+    except Exception:
+        return EMPTY_TOOL_RESULT
     if not confident:
         return EMPTY_TOOL_RESULT
     return ToolResult(
@@ -180,10 +199,11 @@ def run_empty_oss_fallback_tools(user_text: str) -> ToolResult:
         )
     if sub_answer:
         mode = "topic" if looks_like_topic(user_text) else "fast"
-        text, _ = run_postprocess(mode, user_text, sub_answer)
+        text, url = run_postprocess(mode, user_text, sub_answer)
         return ToolResult(
             name=f"{mode}_oss_empty_fallback",
             text=text,
+            url=url,
             engine="oss",
             confidence=0.6 if text else 0.0,
         )
