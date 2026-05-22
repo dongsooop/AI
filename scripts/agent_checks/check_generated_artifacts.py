@@ -2,15 +2,26 @@
 
 from __future__ import annotations
 
-from lib import get_changed_files
+import argparse
+import sys
+
+from lib import add_target_args, get_changed_files, target_from_args
 
 
 ARTIFACT_PREFIX = "model/artifacts/"
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_target_args(parser)
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
+    mode, base = target_from_args(args)
     print("[artifact-check]")
-    changed = [item.path for item in get_changed_files() if item.path.startswith(ARTIFACT_PREFIX)]
+    changed = [item.path for item in get_changed_files(mode=mode, base=base) if item.path.startswith(ARTIFACT_PREFIX)]
     if not changed:
         print("- no generated artifacts changed")
         return 0
@@ -21,5 +32,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
-
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print(f"[error] {exc}", file=sys.stderr)
+        raise SystemExit(2)

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
+import sys
 from collections import defaultdict
 
-from lib import ChangedFile, get_changed_files, match_any
+from lib import ChangedFile, add_target_args, get_changed_files, match_any, target_from_args
 
 
 SCOPE_PATTERNS: dict[str, list[str]] = {
@@ -70,8 +72,16 @@ def classify(files: list[ChangedFile]) -> dict[str, list[str]]:
     return dict(scopes)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_target_args(parser)
+    return parser.parse_args()
+
+
 def main() -> int:
-    files = get_changed_files()
+    args = parse_args()
+    mode, base = target_from_args(args)
+    files = get_changed_files(mode=mode, base=base)
     print("[scope]")
     if not files:
         print("- no changed files")
@@ -85,12 +95,19 @@ def main() -> int:
 
     service_scopes = {"chatbot", "text_filter_timetable"}
     touched_services = service_scopes.intersection(scopes)
+    has_warning = False
     if len(touched_services) > 1:
         print("[warning] Changes cross chatbot and text_filter/timetable service boundaries.")
+        has_warning = True
     if "generated_artifacts" in scopes:
         print("[warning] Generated artifacts changed. Prefer updating generation logic.")
-    return 0
+        has_warning = True
+    return 1 if has_warning else 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print(f"[error] {exc}", file=sys.stderr)
+        raise SystemExit(2)

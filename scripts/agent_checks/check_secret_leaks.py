@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
 import re
+import sys
 
-from lib import get_changed_files, is_probably_text, read_text_file
+from lib import add_target_args, get_added_lines, get_changed_files, target_from_args
 
 
 SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
@@ -28,37 +30,37 @@ PLACEHOLDER_HINTS = (
 )
 
 
-def scan_file(path: str) -> list[tuple[int, str, str]]:
-    if not is_probably_text(path):
-        return []
-    findings: list[tuple[int, str, str]] = []
-    try:
-        text = read_text_file(path)
-    except OSError:
-        return []
-    for line_no, line in enumerate(text.splitlines(), start=1):
-        lowered = line.lower()
+def scan_added_lines(mode: str, base: str | None) -> list[tuple[str, int, str, str]]:
+    findings: list[tuple[str, int, str, str]] = []
+    for added in get_added_lines(mode=mode, base=base):
+        if added.path == "scripts/agent_checks/check_secret_leaks.py":
+            continue
+        lowered = added.text.lower()
         for label, pattern in SECRET_PATTERNS:
-            if pattern.search(line):
+            if pattern.search(added.text):
                 hint = "placeholder-like" if any(token in lowered for token in PLACEHOLDER_HINTS) else "verify"
-                findings.append((line_no, label, hint))
+                findings.append((added.path, added.line_no, label, hint))
     return findings
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_target_args(parser)
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
+    mode, base = target_from_args(args)
     print("[secret-check]")
-    files = get_changed_files()
     findings: list[tuple[str, int, str, str]] = []
-    for changed in files:
-        if changed.path == "scripts/agent_checks/check_secret_leaks.py":
-            continue
+    for changed in get_changed_files(mode=mode, base=base):
         if changed.path.endswith(".env") or "/.env" in changed.path:
             findings.append((changed.path, 0, "ENV_FILE", "verify"))
-        for line_no, label, hint in scan_file(changed.path):
-            findings.append((changed.path, line_no, label, hint))
+    findings.extend(scan_added_lines(mode=mode, base=base))
 
     if not findings:
-        print("- no obvious sensitive patterns found in changed text files")
+        print("- no obvious sensitive patterns found in added lines")
         return 0
 
     for path, line_no, label, hint in findings:
@@ -69,4 +71,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print(f"[error] {exc}", file=sys.stderr)
+        raise SystemExit(2)
