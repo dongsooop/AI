@@ -19,8 +19,6 @@ from core.exceptions import ConfigurationError
 from core.logging import get_logger
 from core.settings import get_settings
 from LLM.OSS.formatter import (
-    dept_clarification_message,
-    render_chatty_schedule,
     scrub_non_contact,
 )
 from LLM.OSS.modes import (
@@ -33,10 +31,13 @@ from LLM.OSS.modes import (
     looks_like_schedule,
     looks_like_topic,
 )
-from LLM.OSS.postprocess import run_postprocess
+from LLM.OSS.tools import (
+    run_empty_oss_fallback_tools,
+    run_final_fallback_tools,
+    run_mode_tools,
+    run_oss_fast_path_tools,
+)
 from LLM.rule_book.graph import run_rule_book
-from LLM.sub_model.query_index import build_answer, confident_search_answer, metadata_direct_answer
-from LLM.sub_model.schedule_index import schedule_search
 
 
 settings = get_settings()
@@ -249,27 +250,6 @@ async def should_block_profanity(user_text: str) -> bool:
     return any(str(label).strip() == "비속어" for label in results)
 
 
-def call_submodel(user_text: str) -> str:
-    base = ""
-    try:
-        result = build_answer(user_text, top_k=12)
-        base = (result or {}).get("answer", "").strip()
-    except Exception:
-        base = ""
-
-    if settings.json_only_mode:
-        return base
-
-    try:
-        schedule = schedule_search(user_text, top_k=8)
-    except Exception:
-        schedule = ""
-
-    if schedule and base:
-        return schedule + "\n" + base
-    return schedule or base
-
-
 def extract_user_text(req: ChatReq) -> str:
     if req.text:
         return req.text.strip()
@@ -347,159 +327,54 @@ async def chat_with_oss(req: ChatReq) -> dict:
             "text": f"우리는 {settings.org_name} 정보를 함께 해결하는 대화 파트너이고, 저는 {settings.service_name}의 {settings.bot_name}입니다.",
         }
 
-    if mode == "fast":
-        if any(keyword in user_text for keyword in ("종강", "졸업식", "종업식", "학위수여식")):
-            schedule_only = schedule_search(user_text, top_k=8)
-            if schedule_only:
-                return cache_and_return({"engine": "fast", "text": render_chatty_schedule(schedule_only, user_text)})
-
-        direct = metadata_direct_answer(user_text)
-        if direct:
-            response = {"engine": "fast", "text": direct["answer"]}
-            if direct.get("url"):
-                response["url"] = direct["url"]
-            return cache_and_return(response)
-
-        schedule_only = schedule_search(user_text, top_k=8)
-        if schedule_only:
-            return cache_and_return({"engine": "fast", "text": render_chatty_schedule(schedule_only, user_text)})
-
-        clarification = dept_clarification_message(user_text)
-        if clarification:
-            return cache_and_return({"engine": "fast", "text": clarification})
-
-        sub_answer = call_submodel(user_text)
-        text, url = run_postprocess("fast", user_text, sub_answer)
-        response = {"engine": "fast", "text": text}
-        if url:
-            response["url"] = url
-        return cache_and_return(response)
-
-    if mode == "policy":
-        direct = metadata_direct_answer(user_text)
-        if direct:
-            response = {"engine": "policy", "text": direct["answer"]}
-            if direct.get("url"):
-                response["url"] = direct["url"]
-            return cache_and_return(response)
-
-        sub_answer = call_submodel(user_text)
-        text, url = run_postprocess("policy", user_text, sub_answer)
-        response = {"engine": "policy", "text": text}
-        if url:
-            response["url"] = url
-        return cache_and_return(response)
-
-    if mode == "dorm":
-        sub_answer = call_submodel(user_text)
-        text, url = run_postprocess("dorm", user_text, sub_answer)
-        response = {"engine": "dorm", "text": text}
-        if url:
-            response["url"] = url
-        return cache_and_return(response)
-
-    if mode == "grad":
-        direct = metadata_direct_answer(user_text)
-        if direct:
-            response = {"engine": "grad", "text": direct["answer"]}
-            if direct.get("url"):
-                response["url"] = direct["url"]
-            return cache_and_return(response)
-
-        sub_answer = call_submodel(user_text)
-        text, url = run_postprocess("grad", user_text, sub_answer)
-        response = {"engine": "grad", "text": text}
-        if url:
-            response["url"] = url
-        return cache_and_return(response)
-
-    if mode == "topic":
-        sub_answer = call_submodel(user_text)
-        text, url = run_postprocess("topic", user_text, sub_answer)
-        response = {"engine": "topic", "text": text}
-        if url:
-            response["url"] = url
-        return cache_and_return(response)
+    tool_result = run_mode_tools(mode, user_text)
+    if tool_result.handled:
+        return cache_and_return(tool_result.to_response())
 
     if mode == "oss":
-        direct = metadata_direct_answer(user_text)
-        if direct:
-            response = {"engine": "fast", "text": direct["answer"]}
-            if direct.get("url"):
-                response["url"] = direct["url"]
-            return cache_and_return(response)
-
-        confident = confident_search_answer(user_text, top_k=2)
-        if confident:
-            response = {"engine": "fast", "text": confident["answer"]}
-            if confident.get("url"):
-                response["url"] = confident["url"]
-            return cache_and_return(response)
+        fast_path = run_oss_fast_path_tools(user_text)
+        if fast_path.resolved:
+            return cache_and_return(fast_path.to_response())
 
         output = await call_oss_async(messages_for_oss)
         if not any(keyword in user_text for keyword in ("연락처", "전화", "번호", "문의")) and not any(keyword in user_text for keyword in COUNCIL_KWS):
             output = scrub_non_contact(output)
 
         if not output:
-            if looks_like_schedule(user_text):
-                schedule_only = schedule_search(user_text, top_k=8)
-                if schedule_only:
-                    response = {"engine": "fast", "text": render_chatty_schedule(schedule_only, user_text)}
-                    latency = int((time.monotonic() - start) * 1000)
-                    _log_executor.submit(_log_chatbot, user_text, "fast", response["text"], None, False, latency)
-                    return response
+            fallback = run_empty_oss_fallback_tools(user_text)
+            if fallback.handled:
+                response = fallback.to_response()
+                latency = int((time.monotonic() - start) * 1000)
+                _log_executor.submit(_log_chatbot, user_text, response["engine"], response["text"], response.get("url"), False, latency)
+                return response
 
             if len(user_text) <= 2 or GREETING_RE.search(user_text):
                 output = "안녕하세요, 무엇을 도와드릴까요?"
             else:
-                sub_answer = call_submodel(user_text)
-                if looks_like_schedule(user_text) and sub_answer:
-                    response = {"engine": "fast", "text": render_chatty_schedule(sub_answer, user_text)}
-                    latency = int((time.monotonic() - start) * 1000)
-                    _log_executor.submit(_log_chatbot, user_text, "fast", response["text"], None, False, latency)
-                    return response
-                if sub_answer:
-                    if looks_like_topic(user_text):
-                        text, _ = run_postprocess("topic", user_text, sub_answer)
-                    else:
-                        text, _ = run_postprocess("fast", user_text, sub_answer)
-                    output = text
-                else:
-                    output = "잘 이해하지 못했어요. 다시 질문해주세요."
+                output = "잘 이해하지 못했어요. 다시 질문해주세요."
 
         latency = int((time.monotonic() - start) * 1000)
         _log_executor.submit(_log_chatbot, user_text, "oss", output, None, False, latency)
         return {"engine": "oss", "text": output}
 
-    direct = metadata_direct_answer(user_text)
-    if direct:
-        response = {"engine": "fast", "text": direct["answer"]}
-        if direct.get("url"):
-            response["url"] = direct["url"]
-        return cache_and_return(response)
+    fallback = run_final_fallback_tools(mode, user_text)
+    if fallback.resolved:
+        return cache_and_return(fallback.to_response())
 
-    confident = confident_search_answer(user_text, top_k=2)
-    if confident:
-        response = {"engine": "fast", "text": confident["answer"]}
-        if confident.get("url"):
-            response["url"] = confident["url"]
-        return cache_and_return(response)
-
-    sub_answer = call_submodel(user_text)
     fused = await call_oss_async(
         [
             {
                 "role": "system",
                 "content": "Reasoning: low\n다음 <context>의 사실만 사용해 한국어로 한 문장으로만 답하라. 불릿/개행 금지. 임의의 전화번호/URL을 생성하지 말라.",
             },
-            {"role": "user", "content": user_text + "\n\n<context>\n" + (sub_answer or "") + "\n</context>"},
+            {"role": "user", "content": user_text + "\n\n<context>\n" + (fallback.text or "") + "\n</context>"},
         ],
         max_tokens=96,
         temperature=0.2,
         timeout=45,
     )
     if not fused:
-        text, _ = run_postprocess("topic", user_text, sub_answer)
+        text = run_mode_tools("topic", user_text).text
         fused = text if looks_like_topic(user_text) else "좋아요, 무엇을 이야기해 볼까요?"
 
     latency = int((time.monotonic() - start) * 1000)
