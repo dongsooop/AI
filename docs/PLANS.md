@@ -73,6 +73,7 @@
 │   ├── OSS/
 │   │   ├── Open_AI_OSS.py          # 챗봇 메인 오케스트레이션
 │   │   ├── service.py              # 챗봇 서비스 연결부
+│   │   ├── tools.py                # 비용 우선 deterministic tool routing
 │   │   ├── formatter.py            # 응답 포맷팅
 │   │   ├── modes.py                # 챗봇 모드 정의
 │   │   └── postprocess/
@@ -147,6 +148,7 @@
 
 - `LLM/OSS/Open_AI_OSS.py`
 - `LLM/OSS/service.py`
+- `LLM/OSS/tools.py`
 - `LLM/OSS/formatter.py`
 - `LLM/OSS/modes.py`
 
