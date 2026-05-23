@@ -1,0 +1,40 @@
+{
+  "category": "schedule",
+  "cases": [
+    {
+      "id": "schedule_commencement_2025",
+      "kind": "schedule",
+      "query": "2025년 학위수여식 알려줘",
+      "answer_must_contain_any": ["2025-02-21", "학위수여식"],
+      "requires_date": true
+    },
+    {
+      "id": "schedule_semester_start_2025",
+      "kind": "schedule",
+      "query": "2025년 1학기 개강일",
+      "answer_must_contain_any": ["2025-03-04", "개강"],
+      "requires_date": true
+    },
+    {
+      "id": "schedule_midterm_2025",
+      "kind": "schedule",
+      "query": "2025년 중간고사 일정",
+      "answer_must_contain_any": ["2025", "중간고사"],
+      "requires_date": true
+    },
+    {
+      "id": "schedule_final_2025",
+      "kind": "schedule",
+      "query": "2025년 기말고사 일정",
+      "answer_must_contain_any": ["2025", "학기말고사", "기말고사"],
+      "requires_date": true
+    },
+    {
+      "id": "schedule_course_change_2025",
+      "kind": "schedule",
+      "query": "2025년 수강신청 정정기간",
+      "answer_must_contain_any": ["2025", "수강신청", "정정"],
+      "requires_date": true
+    }
+  ]
+}

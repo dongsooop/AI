@@ -1,0 +1,104 @@
+{
+  "cases": [
+    {
+      "id": "grad_professional_associate",
+      "category": "grad",
+      "kind": "search",
+      "query": "전문학사 졸업학점 알려줘",
+      "expected_url_contains": ["4778/subview.do"],
+      "expected_title_contains": ["전문학사"],
+      "answer_must_contain_any": ["졸업", "학점"],
+      "requires_source_url": true
+    },
+    {
+      "id": "grad_postponement",
+      "category": "grad",
+      "kind": "search",
+      "query": "졸업보류 안내",
+      "expected_url_contains": ["4781/subview.do"],
+      "expected_title_contains": ["졸업보류"],
+      "answer_must_contain_any": ["졸업보류", "4781/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "grad_deferment",
+      "category": "grad",
+      "kind": "search",
+      "query": "졸업유예 안내",
+      "expected_url_contains": ["4782/subview.do"],
+      "expected_title_contains": ["졸업유예"],
+      "answer_must_contain_any": ["졸업유예", "4782/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "department_computer_engineering_intro",
+      "category": "department",
+      "kind": "search",
+      "query": "컴퓨터공학부 소개",
+      "expected_url_contains": ["4560/subview.do"],
+      "expected_title_contains": ["컴퓨터공학부"],
+      "answer_must_contain_any": ["컴퓨터공학부", "4560/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "department_software_intro",
+      "category": "department",
+      "kind": "search",
+      "query": "컴퓨터소프트웨어공학과 소개",
+      "expected_url_contains": ["4573/subview.do", "4560/subview.do"],
+      "expected_title_contains": ["컴퓨터소프트웨어공학과", "컴퓨터공학부"],
+      "answer_must_contain_any": ["컴퓨터소프트웨어공학과", "소프트웨어", "4573/subview.do", "4560/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "department_business_intro",
+      "category": "department",
+      "kind": "search",
+      "query": "경영학과 소개",
+      "expected_url_contains": ["4670/subview.do"],
+      "expected_title_contains": ["경영학과"],
+      "answer_must_contain_any": ["경영학과", "4658/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "department_visual_design_intro",
+      "category": "department",
+      "kind": "search",
+      "query": "시각디자인과 소개",
+      "expected_url_contains": ["4647/subview.do"],
+      "expected_title_contains": ["시각디자인과"],
+      "answer_must_contain_any": ["시각디자인과", "4649/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "life_dorm_entry",
+      "category": "dorm",
+      "kind": "search",
+      "query": "기숙사 입사 안내",
+      "expected_url_contains": ["4843/subview.do"],
+      "expected_title_contains": ["입사 안내"],
+      "answer_must_contain_any": ["입사", "4843/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "life_dorm_rules",
+      "category": "dorm",
+      "kind": "search",
+      "query": "기숙사 생활수칙",
+      "expected_url_contains": ["4845/subview.do"],
+      "expected_title_contains": ["생활수칙"],
+      "answer_must_contain_any": ["생활수칙", "4845/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "privacy_policy",
+      "category": "privacy",
+      "kind": "search",
+      "query": "개인정보처리방침",
+      "expected_url_contains": ["4924/subview.do"],
+      "expected_title_contains": ["개인정보처리방침"],
+      "answer_must_contain_any": ["개인정보", "4924/subview.do"],
+      "requires_source_url": true
+    }
+  ]
+}

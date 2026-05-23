@@ -1,0 +1,86 @@
+{
+  "category": "policy",
+  "cases": [
+    {
+      "id": "policy_leave_absence",
+      "kind": "search",
+      "query": "휴학 신청 안내",
+      "expected_url_contains": ["4784/subview.do"],
+      "expected_title_contains": ["휴학"],
+      "answer_must_contain_any": ["휴학", "4784/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "policy_return_to_school",
+      "kind": "search",
+      "query": "복학 안내",
+      "expected_url_contains": ["4785/subview.do"],
+      "expected_title_contains": ["복학"],
+      "answer_must_contain_any": ["복학", "4785/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "policy_course_registration",
+      "kind": "search",
+      "query": "수강신청 안내",
+      "expected_url_contains": ["4752/subview.do", "4753/subview.do"],
+      "expected_title_contains": ["수강신청"],
+      "answer_must_contain_any": ["수강신청", "4752/subview.do", "4753/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "policy_registration_tuition",
+      "kind": "search",
+      "query": "등록금납부 안내",
+      "expected_url_contains": ["4793/subview.do"],
+      "expected_title_contains": ["등록금납부"],
+      "answer_must_contain_any": ["등록금", "4793/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "policy_internal_external_scholarship",
+      "kind": "search",
+      "query": "교내외장학금 안내",
+      "expected_url_contains": ["4794/subview.do"],
+      "expected_title_contains": ["교내외장학금"],
+      "answer_must_contain_any": ["장학", "4794/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "policy_national_scholarship",
+      "kind": "search",
+      "query": "국가장학금 안내",
+      "expected_url_contains": ["4795/subview.do"],
+      "expected_title_contains": ["국가장학금"],
+      "answer_must_contain_any": ["국가장학금", "4795/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "policy_student_loan",
+      "kind": "search",
+      "query": "학자금대출 안내",
+      "expected_url_contains": ["4796/subview.do"],
+      "expected_title_contains": ["학자금대출"],
+      "answer_must_contain_any": ["학자금", "4796/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "policy_certificate_issue",
+      "kind": "search",
+      "query": "제증명서발급 안내",
+      "expected_url_contains": ["4799/subview.do"],
+      "expected_title_contains": ["제증명서발급", "인터넷에의한발급"],
+      "answer_must_contain_any": ["증명서", "4799/subview.do"],
+      "requires_source_url": true
+    },
+    {
+      "id": "policy_field_training",
+      "kind": "search",
+      "query": "현장실습 안내",
+      "expected_url_contains": ["4756/subview.do"],
+      "expected_title_contains": ["현장실습"],
+      "answer_must_contain_any": ["현장실습", "4756/subview.do"],
+      "requires_source_url": true
+    }
+  ]
+}

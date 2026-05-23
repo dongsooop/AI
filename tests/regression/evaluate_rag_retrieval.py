@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import os
 import re
 import statistics
 import sys
@@ -16,12 +17,103 @@ DATE_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
 URL_RE = re.compile(r"https?://[^\s)>\]}\"']+")
 
 
-def load_cases(path: Path) -> list[dict]:
+DEFAULT_CASES_PATH = ROOT_DIR / "debug" / "regression" / "questions"
+
+
+def _load_cases_file(path: Path) -> list[dict]:
     with path.open("r", encoding="utf-8") as f:
-        cases = json.load(f)
+        data = json.load(f)
+
+    default_category = ""
+    if isinstance(data, dict):
+        default_category = str(data.get("category", "") or "")
+        cases = data.get("cases")
+    else:
+        cases = data
+
     if not isinstance(cases, list):
-        raise ValueError("RAG eval cases must be a JSON array")
-    return cases
+        raise ValueError(f"RAG eval cases must be a JSON array or an object with cases: {path}")
+
+    loaded = []
+    for case in cases:
+        if not isinstance(case, dict):
+            raise ValueError(f"RAG eval case must be an object: {path}")
+        item = dict(case)
+        if default_category and not item.get("category"):
+            item["category"] = default_category
+        try:
+            case_file = str(path.relative_to(ROOT_DIR))
+        except ValueError:
+            case_file = str(path)
+        item.setdefault("case_file", case_file)
+        loaded.append(item)
+    return loaded
+
+
+def load_cases(path: Path) -> list[dict]:
+    if path.is_dir():
+        files = sorted(path.glob("*.json"))
+        if not files:
+            raise ValueError(f"no RAG eval case JSON files found in {path}")
+        cases = []
+        for file_path in files:
+            cases.extend(_load_cases_file(file_path))
+        return cases
+    return _load_cases_file(path)
+
+
+def validate_cases(cases: list[dict]) -> list[str]:
+    errors = []
+    seen_ids = set()
+    for idx, case in enumerate(cases, start=1):
+        case_id = str(case.get("id", "") or "")
+        kind = case.get("kind", "search")
+        prefix = case_id or f"case#{idx}"
+
+        if not case_id:
+            errors.append(f"{prefix}:missing_id")
+        elif case_id in seen_ids:
+            errors.append(f"{prefix}:duplicate_id")
+        seen_ids.add(case_id)
+
+        if kind not in {"search", "schedule"}:
+            errors.append(f"{prefix}:unknown_kind:{kind}")
+        if not str(case.get("query", "") or "").strip():
+            errors.append(f"{prefix}:missing_query")
+        if not str(case.get("category", "") or "").strip():
+            errors.append(f"{prefix}:missing_category")
+
+        if kind == "search":
+            has_expected_source = bool(case.get("expected_url_contains") or case.get("expected_title_contains"))
+            if not has_expected_source:
+                errors.append(f"{prefix}:missing_expected_source")
+            if case.get("requires_source_url") and not case.get("expected_url_contains"):
+                errors.append(f"{prefix}:requires_source_without_expected_url")
+
+        if not (case.get("answer_must_contain_any") or case.get("answer_must_contain_all")):
+            errors.append(f"{prefix}:missing_answer_expectation")
+    return errors
+
+
+def configure_default_artifact_env() -> None:
+    """Make local evaluation runnable without requiring a private .env file."""
+    defaults = {
+        "DATA_JSON": ROOT_DIR / "data" / "school_info" / "old_data" / "dmu_documents_cleaned.json",
+        "ART_DIR": ROOT_DIR / "model" / "artifacts",
+        "SEARCH_DF_PATH": ROOT_DIR / "model" / "artifacts" / "search_df.parquet",
+        "EMB_PATH": ROOT_DIR / "model" / "artifacts" / "embeddings.npy",
+        "BM25_PATH": ROOT_DIR / "model" / "artifacts" / "bm25.pkl",
+        "TOK_PATH": ROOT_DIR / "model" / "artifacts" / "tokenized_corpus.json.gz",
+        "CONTACTS_CSV": ROOT_DIR / "model" / "artifacts" / "contact_docs.csv",
+        "META_PATH": ROOT_DIR / "model" / "artifacts" / "meta.json",
+        "CONTACT_KWS_PATH": ROOT_DIR / "data" / "sub_model_data" / "contact_kws.txt",
+        "SCHEDULE_CSV_PATH": ROOT_DIR / "data" / "schedule" / "학사일정_년도추가.csv",
+    }
+    for key, path in defaults.items():
+        if os.getenv(key):
+            continue
+        if path.exists():
+            os.environ[key] = str(path)
 
 
 def contains_any(text: str, needles: list[str]) -> bool:
@@ -82,15 +174,51 @@ def hallucination_flags(answer: str, hits, expected_url_fragments: list[str]) ->
 
 
 def evaluate_search_case(case: dict, top_k: int, answer_top_k: int) -> dict:
-    from LLM.sub_model.query_index import build_answer, hybrid_search
-
     query = case.get("query", "")
+    try:
+        from LLM.sub_model.query_index import build_answer, hybrid_search
+        import_error = ""
+    except Exception as exc:
+        import_error = f"{type(exc).__name__}:{exc}"
+        return {
+            "id": case.get("id"),
+            "category": case.get("category", ""),
+            "kind": "search",
+            "query": query,
+            "top1_url_match": False,
+            "top3_url_match": False,
+            "top1_title_match": False,
+            "answer_keyword_match": False,
+            "source_url_match": False if case.get("requires_source_url", False) else True,
+            "date_match": True,
+            "hallucination_detected": False,
+            "hallucination_flags": [],
+            "expected_url_rank": None,
+            "top1_title": "",
+            "top1_url": "",
+            "answer": "",
+            "error": import_error,
+            "retrieval_latency_ms": 0.0,
+            "answer_latency_ms": 0.0,
+            "passed": False,
+        }
+
     started = time.perf_counter()
-    hits = hybrid_search(query, top_k=top_k)
+    try:
+        hits = hybrid_search(query, top_k=top_k)
+        retrieval_error = ""
+    except Exception as exc:
+        hits = None
+        retrieval_error = f"{type(exc).__name__}:{exc}"
     retrieval_ms = round((time.perf_counter() - started) * 1000, 2)
 
     answer_started = time.perf_counter()
-    answer_payload = build_answer(query, top_k=answer_top_k) or {}
+    try:
+        answer_payload = build_answer(query, top_k=answer_top_k) or {}
+        answer_error = ""
+    except Exception as exc:
+        answer_payload = {}
+        answer_error = f"{type(exc).__name__}:{exc}"
     answer_ms = round((time.perf_counter() - answer_started) * 1000, 2)
 
     answer = str(answer_payload.get("answer", "") or "")
@@ -119,12 +247,15 @@ def evaluate_search_case(case: dict, top_k: int, answer_top_k: int) -> dict:
         "hallucination_detected": bool(hallu),
         "hallucination_flags": hallu,
         "expected_url_rank": url_rank,
-        "top1_title": str(hits.iloc[0].get("title", "") if not hits.empty else ""),
-        "top1_url": str(hits.iloc[0].get("url", "") if not hits.empty else ""),
+        "top1_title": str(hits.iloc[0].get("title", "") if hits is not None and not hits.empty else ""),
+        "top1_url": str(hits.iloc[0].get("url", "") if hits is not None and not hits.empty else ""),
         "answer": answer,
+        "error": retrieval_error or answer_error,
         "retrieval_latency_ms": retrieval_ms,
         "answer_latency_ms": answer_ms,
         "passed": all([
+            not retrieval_error,
+            not answer_error,
             top3_url_match if expected_urls else True,
             answer_any and answer_all,
             source_url_match,
@@ -135,11 +266,42 @@ def evaluate_search_case(case: dict, top_k: int, answer_top_k: int) -> dict:
 
 
 def evaluate_schedule_case(case: dict, top_k: int) -> dict:
-    from LLM.sub_model.schedule_index import schedule_search
-
     query = case.get("query", "")
+    try:
+        from LLM.sub_model.schedule_index import schedule_search
+        import_error = ""
+    except Exception as exc:
+        import_error = f"{type(exc).__name__}:{exc}"
+        return {
+            "id": case.get("id"),
+            "category": case.get("category", ""),
+            "kind": "schedule",
+            "query": query,
+            "top1_url_match": None,
+            "top3_url_match": None,
+            "top1_title_match": None,
+            "answer_keyword_match": False,
+            "source_url_match": True,
+            "date_match": False if case.get("requires_date", False) else True,
+            "hallucination_detected": False,
+            "hallucination_flags": [],
+            "expected_url_rank": None,
+            "top1_title": "",
+            "top1_url": "",
+            "answer": "",
+            "error": import_error,
+            "retrieval_latency_ms": 0.0,
+            "answer_latency_ms": 0.0,
+            "passed": False,
+        }
+
     started = time.perf_counter()
-    answer = schedule_search(query, top_k=top_k) or ""
+    try:
+        answer = schedule_search(query, top_k=top_k) or ""
+        error = ""
+    except Exception as exc:
+        answer = ""
+        error = f"{type(exc).__name__}:{exc}"
     latency_ms = round((time.perf_counter() - started) * 1000, 2)
 
     answer_any = contains_any(answer, case.get("answer_must_contain_any", []))
@@ -163,9 +325,10 @@ def evaluate_schedule_case(case: dict, top_k: int) -> dict:
         "top1_title": "",
         "top1_url": "",
         "answer": answer,
+        "error": error,
         "retrieval_latency_ms": latency_ms,
         "answer_latency_ms": 0.0,
-        "passed": all([answer_any and answer_all, date_pass]),
+        "passed": all([not error, answer_any and answer_all, date_pass]),
     }
 
 
@@ -219,17 +382,29 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Evaluate RAG retrieval and source-grounded answer quality")
     ap.add_argument(
         "--cases",
-        default=str(Path(__file__).with_name("rag_eval_cases.json")),
-        help="path to RAG eval cases JSON",
+        default=str(DEFAULT_CASES_PATH),
+        help="path to a RAG eval cases JSON file or a directory of *.json files",
     )
     ap.add_argument("--top-k", type=int, default=5, help="hybrid_search top_k for retrieval metrics")
     ap.add_argument("--answer-top-k", type=int, default=6, help="build_answer top_k for answer metrics")
     ap.add_argument("--schedule-top-k", type=int, default=5, help="schedule_search top_k for schedule cases")
     ap.add_argument("--out", default="/tmp/rag_eval_report.json", help="output report path")
     ap.add_argument("--fail-on-fail", action="store_true", help="exit 2 when any case fails")
+    ap.add_argument("--validate-only", action="store_true", help="validate case schema without importing RAG runtime")
     args = ap.parse_args()
 
     cases = load_cases(Path(args.cases))
+    validation_errors = validate_cases(cases)
+    if validation_errors:
+        print(json.dumps({"valid": False, "errors": validation_errors}, ensure_ascii=False))
+        return 2
+    if args.validate_only:
+        categories = sorted({case.get("category", "") for case in cases})
+        print(json.dumps({"valid": True, "total": len(cases), "categories": categories}, ensure_ascii=False))
+        return 0
+
+    configure_default_artifact_env()
+
     results = []
     for case in cases:
         kind = case.get("kind", "search")
@@ -268,6 +443,8 @@ def main() -> int:
                 reasons.append("date")
             if r["hallucination_detected"]:
                 reasons.append("hallucination_proxy")
+            if r.get("error"):
+                reasons.append(r["error"])
             print(f"- {r['id']}: {', '.join(reasons) or 'failed'}")
 
     return 2 if failed and args.fail_on_fail else 0
