@@ -62,9 +62,21 @@ def load_cases(path: Path) -> list[dict]:
     return _load_cases_file(path)
 
 
+def _is_list_of_str(value) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
 def validate_cases(cases: list[dict]) -> list[str]:
     errors = []
     seen_ids = set()
+    list_fields = [
+        "expected_url_contains",
+        "expected_title_contains",
+        "answer_must_contain_any",
+        "answer_must_contain_all",
+    ]
+    bool_fields = ["requires_source_url", "requires_date"]
+
     for idx, case in enumerate(cases, start=1):
         case_id = str(case.get("id", "") or "")
         kind = case.get("kind", "search")
@@ -82,6 +94,14 @@ def validate_cases(cases: list[dict]) -> list[str]:
             errors.append(f"{prefix}:missing_query")
         if not str(case.get("category", "") or "").strip():
             errors.append(f"{prefix}:missing_category")
+
+        for field in list_fields:
+            if field in case and not _is_list_of_str(case.get(field)):
+                errors.append(f"{prefix}:{field}_must_be_list_of_strings")
+
+        for field in bool_fields:
+            if field in case and not isinstance(case.get(field), bool):
+                errors.append(f"{prefix}:{field}_must_be_bool")
 
         if kind == "search":
             has_expected_source = bool(case.get("expected_url_contains") or case.get("expected_title_contains"))
@@ -197,7 +217,11 @@ def evaluate_search_case(case: dict, top_k: int, answer_top_k: int) -> dict:
             "top1_title": "",
             "top1_url": "",
             "answer": "",
-            "error": import_error,
+            "errors": {
+                "import": import_error,
+                "retrieval": "",
+                "answer": "",
+            },
             "retrieval_latency_ms": 0.0,
             "answer_latency_ms": 0.0,
             "passed": False,
@@ -250,7 +274,11 @@ def evaluate_search_case(case: dict, top_k: int, answer_top_k: int) -> dict:
         "top1_title": str(hits.iloc[0].get("title", "") if hits is not None and not hits.empty else ""),
         "top1_url": str(hits.iloc[0].get("url", "") if hits is not None and not hits.empty else ""),
         "answer": answer,
-        "error": retrieval_error or answer_error,
+        "errors": {
+            "import": "",
+            "retrieval": retrieval_error,
+            "answer": answer_error,
+        },
         "retrieval_latency_ms": retrieval_ms,
         "answer_latency_ms": answer_ms,
         "passed": all([
@@ -289,7 +317,10 @@ def evaluate_schedule_case(case: dict, top_k: int) -> dict:
             "top1_title": "",
             "top1_url": "",
             "answer": "",
-            "error": import_error,
+            "errors": {
+                "import": import_error,
+                "schedule": "",
+            },
             "retrieval_latency_ms": 0.0,
             "answer_latency_ms": 0.0,
             "passed": False,
@@ -325,7 +356,10 @@ def evaluate_schedule_case(case: dict, top_k: int) -> dict:
         "top1_title": "",
         "top1_url": "",
         "answer": answer,
-        "error": error,
+        "errors": {
+            "import": "",
+            "schedule": error,
+        },
         "retrieval_latency_ms": latency_ms,
         "answer_latency_ms": 0.0,
         "passed": all([not error, answer_any and answer_all, date_pass]),
@@ -443,8 +477,9 @@ def main() -> int:
                 reasons.append("date")
             if r["hallucination_detected"]:
                 reasons.append("hallucination_proxy")
-            if r.get("error"):
-                reasons.append(r["error"])
+            for stage, error in (r.get("errors") or {}).items():
+                if error:
+                    reasons.append(f"{stage}:{error}")
             print(f"- {r['id']}: {', '.join(reasons) or 'failed'}")
 
     return 2 if failed and args.fail_on_fail else 0
