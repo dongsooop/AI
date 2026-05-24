@@ -27,6 +27,12 @@ model/
 database/
 crawling
 debug/
+!debug/
+debug/*
+!debug/regression/
+debug/regression/*
+!debug/regression/questions/
+!debug/regression/questions/**
 finetuning
 test
 backup_file/
