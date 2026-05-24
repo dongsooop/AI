@@ -32,6 +32,7 @@ from LLM.OSS.modes import (
     looks_like_topic,
 )
 from LLM.OSS.tools import (
+    ToolResult,
     run_empty_oss_fallback_tools,
     run_final_fallback_tools,
     run_mode_tools,
@@ -169,6 +170,23 @@ def _log_chatbot(query: str, mode: str, response: str, url: Optional[str], cache
     finally:
         if conn and _db_pool:
             _db_pool.putconn(conn)
+
+
+def _log_tool_route(user_text: str, mode: str, stage: str, result: ToolResult) -> None:
+    query_hash = hashlib.sha256((user_text or "").encode("utf-8")).hexdigest()[:12]
+    logger.info(
+        "chatbot_tool_route query_hash=%s mode=%s stage=%s tool=%s engine=%s confidence=%.2f "
+        "llm_required=%s has_text=%s reason=%s",
+        query_hash,
+        mode,
+        stage,
+        result.name,
+        result.engine,
+        result.confidence,
+        result.llm_required,
+        bool(result.text.strip()),
+        result.reason,
+    )
 
 
 def _get_oss_client() -> OpenAI:
@@ -328,13 +346,39 @@ async def chat_with_oss(req: ChatReq) -> dict:
         }
 
     tool_result = run_mode_tools(mode, user_text)
+    _log_tool_route(user_text, mode, "mode_tools", tool_result)
     if tool_result.resolved:
         return cache_and_return(tool_result.to_response())
 
+    grounded_fallback: ToolResult | None = None
     if mode == "oss":
         fast_path = run_oss_fast_path_tools(user_text)
+        _log_tool_route(user_text, mode, "oss_fast_path", fast_path)
         if fast_path.resolved:
             return cache_and_return(fast_path.to_response())
+
+        grounded_fallback = run_final_fallback_tools(mode, user_text)
+        _log_tool_route(user_text, mode, "oss_grounded_fallback", grounded_fallback)
+        if grounded_fallback.resolved:
+            return cache_and_return(grounded_fallback.to_response())
+
+        if grounded_fallback.llm_required and grounded_fallback.text.strip():
+            output = await call_oss_async(
+                [
+                    {
+                        "role": "system",
+                        "content": "Reasoning: low\n다음 <context>의 사실만 사용해 한국어로 한 문장으로만 답하라. 불릿/개행 금지. 임의의 전화번호/URL을 생성하지 말라.",
+                    },
+                    {"role": "user", "content": user_text + "\n\n<context>\n" + grounded_fallback.text + "\n</context>"},
+                ],
+                max_tokens=96,
+                temperature=0.2,
+                timeout=45,
+            )
+            if output:
+                latency = int((time.monotonic() - start) * 1000)
+                _log_executor.submit(_log_chatbot, user_text, "oss", output, None, False, latency)
+                return {"engine": "oss", "text": output}
 
         output = await call_oss_async(messages_for_oss)
         if not any(keyword in user_text for keyword in ("연락처", "전화", "번호", "문의")) and not any(keyword in user_text for keyword in COUNCIL_KWS):
@@ -342,6 +386,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
 
         if not output:
             fallback = run_empty_oss_fallback_tools(user_text)
+            _log_tool_route(user_text, mode, "oss_empty_fallback", fallback)
             if fallback.handled:
                 response = fallback.to_response()
                 latency = int((time.monotonic() - start) * 1000)
@@ -356,7 +401,8 @@ async def chat_with_oss(req: ChatReq) -> dict:
             _log_executor.submit(_log_chatbot, user_text, "oss", output, None, False, latency)
             return {"engine": "oss", "text": output}
 
-    fallback = run_final_fallback_tools(mode, user_text)
+    fallback = grounded_fallback or run_final_fallback_tools(mode, user_text)
+    _log_tool_route(user_text, mode, "final_fallback", fallback)
     if fallback.resolved:
         return cache_and_return(fallback.to_response())
 
