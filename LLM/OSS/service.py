@@ -375,10 +375,31 @@ async def chat_with_oss(req: ChatReq) -> dict:
                 temperature=0.2,
                 timeout=45,
             )
+            if not any(keyword in user_text for keyword in ("연락처", "전화", "번호", "문의")) and not any(keyword in user_text for keyword in COUNCIL_KWS):
+                output = scrub_non_contact(output)
             if output:
                 latency = int((time.monotonic() - start) * 1000)
                 _log_executor.submit(_log_chatbot, user_text, "oss", output, None, False, latency)
                 return {"engine": "oss", "text": output}
+
+            fallback = run_empty_oss_fallback_tools(user_text)
+            _log_tool_route(user_text, mode, "oss_grounded_empty_fallback", fallback)
+            if fallback.handled:
+                response = fallback.to_response()
+                latency = int((time.monotonic() - start) * 1000)
+                _log_executor.submit(_log_chatbot, user_text, response["engine"], response["text"], response.get("url"), False, latency)
+                return response
+
+            if len(user_text) <= 2 or GREETING_RE.search(user_text):
+                latency = int((time.monotonic() - start) * 1000)
+                output = "안녕하세요, 무엇을 도와드릴까요?"
+                _log_executor.submit(_log_chatbot, user_text, "greet", output, None, False, latency)
+                return {"engine": "greet", "text": output}
+
+            return cache_and_return({
+                "engine": "oss",
+                "text": "관련 근거를 충분히 확인하지 못했어요. 질문을 조금 더 구체적으로 다시 입력해 주세요.",
+            })
 
         output = await call_oss_async(messages_for_oss)
         if not any(keyword in user_text for keyword in ("연락처", "전화", "번호", "문의")) and not any(keyword in user_text for keyword in COUNCIL_KWS):
