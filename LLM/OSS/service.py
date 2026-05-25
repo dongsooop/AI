@@ -421,6 +421,12 @@ async def chat_with_oss(req: ChatReq) -> dict:
             latency = int((time.monotonic() - start) * 1000)
             _log_executor.submit(_log_chatbot, user_text, "oss", output, None, False, latency)
             return {"engine": "oss", "text": output}
+        
+        if grounded_fallback is not None and not grounded_fallback.text.strip():
+            return cache_and_return({
+                "engine": "oss",
+                "text": "관련 근거를 충분히 확인하지 못했어요. 질문을 조금 더 구체적으로 다시 입력해주세요."
+            })
 
     fallback = grounded_fallback or run_final_fallback_tools(mode, user_text)
     _log_tool_route(user_text, mode, "final_fallback", fallback)
