@@ -32,12 +32,16 @@ jobs:
         run: |
           python -m py_compile \
             tests/regression/evaluate_rag_retrieval.py \
+            tests/regression/check_chatbot_tool_routing.py \
             tests/regression/check_query_index_compat.py \
             tests/regression/check_query_index_metadata_quality.py \
+            LLM/OSS/tools.py \
+            LLM/OSS/service.py \
             LLM/sub_model/query_index.py
 
       - name: Run lightweight query-index compatibility checks
         run: |
+          python tests/regression/check_chatbot_tool_routing.py
           python tests/regression/check_query_index_compat.py
           python tests/regression/check_query_index_metadata_quality.py
 
@@ -49,7 +53,7 @@ jobs:
             echo ""
             echo "- Triggered by: \`${{ github.event_name }}\`"
             echo "- PR label required: \`run-rag-check\`"
-            echo "- Checks: question-set schema validation, Python compile, lightweight query-index regressions"
+            echo "- Checks: question-set schema validation, Python compile, lightweight chatbot routing/query-index regressions"
             echo ""
             echo "This workflow does not run the full local model-backed 30-case RAG evaluation."
           } >> "$GITHUB_STEP_SUMMARY"

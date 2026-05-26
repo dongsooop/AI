@@ -25,6 +25,7 @@ class ToolResult:
     engine: str = "fast"
     confidence: float = 0.0
     llm_required: bool = False
+    reason: str = ""
 
     @property
     def resolved(self) -> bool:
@@ -41,7 +42,7 @@ class ToolResult:
         return response
 
 
-EMPTY_TOOL_RESULT = ToolResult(name="none", confidence=0.0)
+EMPTY_TOOL_RESULT = ToolResult(name="none", confidence=0.0, reason="no tool matched")
 
 
 def call_submodel(user_text: str) -> str:
@@ -80,6 +81,7 @@ def _direct_answer_tool(user_text: str, engine: str) -> ToolResult:
         url=direct.get("url"),
         engine=engine,
         confidence=0.95,
+        reason="metadata direct answer matched",
     )
 
 
@@ -98,6 +100,7 @@ def _schedule_tool(user_text: str, *, ceremonial_first: bool = False) -> ToolRes
         text=render_chatty_schedule(schedule, user_text),
         engine="fast",
         confidence=0.9,
+        reason="schedule intent matched",
     )
 
 
@@ -113,6 +116,7 @@ def _clarification_tool(user_text: str) -> ToolResult:
         text=clarification,
         engine="fast",
         confidence=0.85,
+        reason="department query needs clarification",
     )
 
 
@@ -128,6 +132,7 @@ def _postprocess_tool(mode: str, user_text: str) -> ToolResult:
         url=url,
         engine=mode,
         confidence=0.65 if text else 0.0,
+        reason=f"{mode} postprocess generated answer" if text else f"{mode} postprocess returned empty answer",
     )
 
 
@@ -144,6 +149,7 @@ def _confident_search_tool(user_text: str) -> ToolResult:
         url=confident.get("url"),
         engine="fast",
         confidence=0.85,
+        reason="high confidence search answer matched",
     )
 
 
@@ -196,6 +202,7 @@ def run_empty_oss_fallback_tools(user_text: str) -> ToolResult:
             text=render_chatty_schedule(sub_answer, user_text),
             engine="fast",
             confidence=0.7,
+            reason="schedule-like query recovered from rag context",
         )
     if sub_answer:
         mode = "topic" if looks_like_topic(user_text) else "fast"
@@ -206,6 +213,7 @@ def run_empty_oss_fallback_tools(user_text: str) -> ToolResult:
             url=url,
             engine="oss",
             confidence=0.6 if text else 0.0,
+            reason="oss returned empty answer; recovered from rag context" if text else "oss returned empty answer; rag fallback empty",
         )
     return EMPTY_TOOL_RESULT
 
@@ -224,4 +232,5 @@ def run_final_fallback_tools(mode: str, user_text: str) -> ToolResult:
         engine=mode,
         confidence=0.5,
         llm_required=True,
+        reason="no deterministic tool matched; rag context collected for grounded llm answer",
     )
