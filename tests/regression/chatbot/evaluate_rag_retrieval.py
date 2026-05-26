@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
+ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -17,7 +17,7 @@ DATE_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
 URL_RE = re.compile(r"https?://[^\s)>\]}\"']+")
 
 
-DEFAULT_CASES_PATH = ROOT_DIR / "debug" / "regression" / "questions"
+DEFAULT_CASES_PATH = Path(__file__).with_name("rag_eval_cases.json")
 
 
 def _load_cases_file(path: Path) -> list[dict]:

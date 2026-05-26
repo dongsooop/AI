@@ -185,7 +185,7 @@ conda run -n dl_study python -m py_compile LLM/OSS/service.py LLM/sub_model/quer
 
 ```bash
 conda run -n dl_study uvicorn app_oss_main:app --reload --port 8010
-conda run -n dl_study python debug/regression/run_chatbot_regression.py
+conda run -n dl_study python tests/regression/chatbot/run_chatbot_regression.py
 ```
 
 RAG 인덱스 생성 로직을 바꾼 경우에는 API 회귀 테스트 전에 다음도 확인합니다.

@@ -1,7 +1,7 @@
 from datetime import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 import re
 import cv2
 import numpy as np
@@ -13,6 +13,7 @@ WEEKDAYS_FILE = Path("data/weekdays.txt")
 TIME_SLOTS_FILE = Path("data/time_slots.txt")
 
 tesseract_config = r"--psm 6 --oem 1 -l kor+eng"
+fallback_tesseract_config = r"--psm 11 --oem 1 -l kor+eng"
 TARGET_WIDTH = 1170
 TARGET_HEIGHT = 2532
 SCALE = 2
@@ -30,13 +31,85 @@ HOUGH_THRESH, HOUGH_MINLINE, HOUGH_MAXGAP = 120, 80, 10
 NEAR_EPS, BAND_MERGE = 6, 8
 TRIM_OUTER, TRIM_X_GAP, TRIM_Y_GAP = True, 20, 15
 OCR_THREAD_WORKERS = 8
+LOW_OCR_CONFIDENCE = 55.0
+MAX_REJECTED_CELLS_IN_DIAGNOSTICS = 120
+
+
+def _clean_ocr_lines(text: str) -> List[str]:
+    return [re.sub(r"[|]", "", line.strip().replace(" ", "")) for line in text.split("\n") if line.strip()]
+
+
+def _ocr_confidence(roi_gray: np.ndarray, config: str) -> Optional[float]:
+    try:
+        data = pytesseract.image_to_data(Image.fromarray(roi_gray), config=config, output_type=pytesseract.Output.DICT)
+    except pytesseract.TesseractError:
+        return None
+
+    values: List[float] = []
+    for value in data.get("conf", []):
+        try:
+            confidence = float(value)
+        except (TypeError, ValueError):
+            continue
+        if confidence >= 0:
+            values.append(confidence)
+    if not values:
+        return None
+    return round(float(np.mean(values)), 2)
+
+
+def _run_ocr(roi_gray: np.ndarray, config: str, config_name: str) -> Dict[str, Any]:
+    text = pytesseract.image_to_string(Image.fromarray(roi_gray), config=config).strip()
+    lines = _clean_ocr_lines(text)
+    return {
+        "config": config_name,
+        "lines": lines,
+        "raw_text": text,
+        "confidence": _ocr_confidence(roi_gray, config),
+    }
+
+
+def _score_ocr_candidate(candidate: Dict[str, Any]) -> float:
+    confidence = candidate.get("confidence")
+    score = float(confidence) if confidence is not None else 0.0
+    lines = candidate.get("lines") or []
+    if lines:
+        score += 8.0
+    if len(lines) >= 2:
+        score += 10.0
+    if lines and _is_valid_course(lines[0]):
+        score += 12.0
+    if len(lines) >= 2 and _is_valid_professor(lines[1]):
+        score += 12.0
+    return score
 
 
 def _ocr_task(roi_bytes: bytes) -> List[str]:
     nparr = np.frombuffer(roi_bytes, np.uint8)
     roi_gray = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
-    txt = pytesseract.image_to_string(Image.fromarray(roi_gray), config=tesseract_config).strip()
-    return [re.sub(r"[|]", "", line.strip().replace(" ", "")) for line in txt.split("\n") if line.strip()]
+    text = pytesseract.image_to_string(Image.fromarray(roi_gray), config=tesseract_config).strip()
+    return _clean_ocr_lines(text)
+
+
+def _ocr_diagnostic_task(roi_bytes: bytes) -> Dict[str, Any]:
+    nparr = np.frombuffer(roi_bytes, np.uint8)
+    roi_gray = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
+    primary = _run_ocr(roi_gray, tesseract_config, "psm6")
+    needs_fallback = (
+        not primary["lines"]
+        or len(primary["lines"]) < 2
+        or (primary["confidence"] is not None and primary["confidence"] < LOW_OCR_CONFIDENCE)
+    )
+    if not needs_fallback:
+        primary["fallback_used"] = False
+        return primary
+
+    fallback = _run_ocr(roi_gray, fallback_tesseract_config, "psm11")
+    best = fallback if _score_ocr_candidate(fallback) > _score_ocr_candidate(primary) else primary
+    best["fallback_used"] = best is fallback
+    best["primary_confidence"] = primary["confidence"]
+    best["fallback_confidence"] = fallback["confidence"]
+    return best
 
 
 def _is_valid_course(value: str) -> bool:
@@ -115,6 +188,46 @@ def _make_base_gray(img_bgr: np.ndarray) -> np.ndarray:
     gray = cv2.cvtColor(upscaled, cv2.COLOR_BGR2GRAY)
     sharpen_kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
     return cv2.filter2D(gray, -1, sharpen_kernel)
+
+
+def assess_image_quality(img_bgr: np.ndarray) -> Dict[str, Any]:
+    height, width = img_bgr.shape[:2]
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    brightness = round(float(np.mean(gray)), 2)
+    contrast = round(float(np.std(gray)), 2)
+    blur_score = round(float(cv2.Laplacian(gray, cv2.CV_64F).var()), 2)
+
+    flags: List[str] = []
+    if width < 900 or height < 1400:
+        flags.append("low_resolution")
+    if brightness < 60:
+        flags.append("too_dark")
+    elif brightness > 220:
+        flags.append("too_bright")
+    if contrast < 35:
+        flags.append("low_contrast")
+    if blur_score < 80:
+        flags.append("possible_blur")
+
+    return {
+        "width": width,
+        "height": height,
+        "brightness": brightness,
+        "contrast": contrast,
+        "blur_score": blur_score,
+        "flags": flags,
+    }
+
+
+def _save_grid_debug_image(base_gray: np.ndarray, x_lines: List[int], y_lines: List[int], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    overlay = cv2.cvtColor(base_gray, cv2.COLOR_GRAY2BGR)
+    if x_lines and y_lines:
+        for x in x_lines:
+            cv2.line(overlay, (x, y_lines[0]), (x, y_lines[-1]), (0, 255, 0), 2)
+        for y in y_lines:
+            cv2.line(overlay, (x_lines[0], y), (x_lines[-1], y), (0, 0, 255), 2)
+    cv2.imwrite(str(output_path), overlay)
 
 
 def _vertical_lines(base_gray: np.ndarray) -> tuple[List[int], np.ndarray]:
@@ -255,7 +368,48 @@ def _merge_adjacent_same_name(items: List[dict]) -> List[dict]:
     return merged
 
 
-def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
+def _reject_cell(
+    rejected_cells: List[dict],
+    row: int,
+    col: int,
+    reason: str,
+    ocr_result: Optional[Dict[str, Any]] = None,
+) -> None:
+    if len(rejected_cells) >= MAX_REJECTED_CELLS_IN_DIAGNOSTICS:
+        return
+    item: Dict[str, Any] = {
+        "row": row,
+        "col": col + 1,
+        "reason": reason,
+    }
+    if ocr_result:
+        item["lines"] = ocr_result.get("lines", [])
+        item["confidence"] = ocr_result.get("confidence")
+        item["config"] = ocr_result.get("config")
+        item["fallback_used"] = ocr_result.get("fallback_used", False)
+    rejected_cells.append(item)
+
+
+def _extract_schedule_core(
+    img: np.ndarray,
+    debug_dir: Optional[Path] = None,
+    diagnostics_enabled: bool = False,
+) -> Dict[str, Any]:
+    diagnostics: Dict[str, Any] = {
+        "image_quality": assess_image_quality(img) if diagnostics_enabled else {},
+        "grid": {},
+        "ocr": {
+            "total_cells": 0,
+            "text_cells": 0,
+            "accepted_cells": 0,
+            "rejected_cells": [],
+            "fallback_cells": 0,
+            "low_confidence_cells": 0,
+            "average_confidence": None,
+        },
+        "debug_images": {},
+    }
+
     base_gray = _make_base_gray(img)
     x_lines, vertical_mask = _vertical_lines(base_gray)
     x_lines = _prune_x_lines(x_lines, base_gray)
@@ -271,44 +425,89 @@ def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
         if len(y_lines) > 2 and (y_lines[-1] - y_lines[-2] < TRIM_Y_GAP):
             y_lines = y_lines[:-1]
 
+    diagnostics["grid"] = {
+        "x_line_count": len(x_lines),
+        "y_line_count": len(y_lines),
+        "cell_columns": max(0, len(x_lines) - 1),
+        "cell_rows": max(0, len(y_lines) - 1),
+    }
+    if diagnostics_enabled and debug_dir is not None:
+        grid_path = debug_dir / "grid_overlay.png"
+        _save_grid_debug_image(base_gray, x_lines, y_lines, grid_path)
+        diagnostics["debug_images"]["grid_overlay"] = str(grid_path)
+
     if len(x_lines) - 1 < 3 or len(y_lines) - 1 < 3:
-        return []
+        diagnostics["failure_reason"] = "insufficient_grid_lines"
+        return {"schedules": [], "diagnostics": diagnostics}
 
     weekdays = _load_list_from_txt(WEEKDAYS_FILE)
     time_slots = _load_list_from_txt(TIME_SLOTS_FILE)
     if not weekdays or not time_slots:
-        return []
+        diagnostics["failure_reason"] = "missing_weekdays_or_time_slots"
+        return {"schedules": [], "diagnostics": diagnostics}
 
     tasks: List[bytes] = []
     meta_map: List[tuple[int, int]] = []
     for row, col, roi_gray in _iterate_cells_autogrid(base_gray, x_lines, y_lines):
         if row == 0:
             continue
+        if diagnostics_enabled:
+            diagnostics["ocr"]["total_cells"] += 1
         ok, buf = cv2.imencode(".png", roi_gray)
         if not ok:
+            if diagnostics_enabled:
+                _reject_cell(diagnostics["ocr"]["rejected_cells"], row, col, "roi_encode_failed")
             continue
         tasks.append(buf.tobytes())
         meta_map.append((row, col))
 
-    lines_list: List[List[str]] = []
+    ocr_results: List[Dict[str, Any]] = []
     if tasks:
         max_workers = min(OCR_THREAD_WORKERS, len(tasks)) or 1
+        ocr_func = _ocr_diagnostic_task if diagnostics_enabled else _ocr_task
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ocr_cell") as executor:
-            lines_list = list(executor.map(_ocr_task, tasks))
+            for result in executor.map(ocr_func, tasks):
+                if diagnostics_enabled:
+                    ocr_results.append(result)
+                else:
+                    ocr_results.append({
+                        "lines": result,
+                        "confidence": None,
+                        "config": "psm6",
+                        "fallback_used": False,
+                    })
 
     raw_cells: List[dict] = []
-    for (row, col), lines in zip(meta_map, lines_list):
+    confidence_values: List[float] = []
+    for (row, col), ocr_result in zip(meta_map, ocr_results):
+        lines = ocr_result.get("lines") or []
         if not lines:
+            if diagnostics_enabled:
+                _reject_cell(diagnostics["ocr"]["rejected_cells"], row, col, "empty_ocr", ocr_result)
             continue
+        if diagnostics_enabled:
+            diagnostics["ocr"]["text_cells"] += 1
+        confidence = ocr_result.get("confidence")
+        if diagnostics_enabled and confidence is not None:
+            confidence_values.append(float(confidence))
+            if confidence < LOW_OCR_CONFIDENCE:
+                diagnostics["ocr"]["low_confidence_cells"] += 1
+        if diagnostics_enabled and ocr_result.get("fallback_used"):
+            diagnostics["ocr"]["fallback_cells"] += 1
+
         course = lines[0]
         professor = lines[1] if len(lines) > 1 else ""
         room = lines[2] if len(lines) > 2 else ""
 
         if len(course) > 15 or len(professor) > 8 or len(room) > 10:
+            if diagnostics_enabled:
+                _reject_cell(diagnostics["ocr"]["rejected_cells"], row, col, "field_too_long", ocr_result)
             continue
 
         room = room.replace("=", "-")
         if not (_is_valid_course(course) and _is_valid_professor(professor)):
+            if diagnostics_enabled:
+                _reject_cell(diagnostics["ocr"]["rejected_cells"], row, col, "invalid_course_or_professor", ocr_result)
             continue
 
         raw_cells.append({
@@ -317,10 +516,19 @@ def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
             "name": course,
             "professor": professor,
             "room": room,
+            "confidence": confidence,
+            "ocr_config": ocr_result.get("config"),
+            "fallback_used": ocr_result.get("fallback_used", False),
         })
 
+    if diagnostics_enabled:
+        diagnostics["ocr"]["accepted_cells"] = len(raw_cells)
+        if confidence_values:
+            diagnostics["ocr"]["average_confidence"] = round(float(np.mean(confidence_values)), 2)
+
     if not raw_cells:
-        return []
+        diagnostics["failure_reason"] = "no_valid_cells"
+        return {"schedules": [], "diagnostics": diagnostics}
 
     schedule_rows: List[dict] = []
     for cell in raw_cells:
@@ -366,10 +574,20 @@ def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
         })
 
     if not schedule_rows:
-        return []
+        diagnostics["failure_reason"] = "no_mapped_schedule_rows"
+        return {"schedules": [], "diagnostics": diagnostics}
 
     merged = _merge_adjacent_same_name(schedule_rows)
     del base_gray
     del vertical_mask
     del horizontal_mask
-    return merged
+    diagnostics["schedule_count"] = len(merged)
+    return {"schedules": merged, "diagnostics": diagnostics}
+
+
+def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
+    return _extract_schedule_core(img, diagnostics_enabled=False)["schedules"]
+
+
+def extract_schedule_with_diagnostics(img: np.ndarray, debug_dir: Optional[Path] = None) -> Dict[str, Any]:
+    return _extract_schedule_core(img, debug_dir=debug_dir, diagnostics_enabled=True)

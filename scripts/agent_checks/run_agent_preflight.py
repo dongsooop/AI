@@ -73,7 +73,7 @@ def print_recommended_checks(mode: str, base: str | None) -> None:
         joined = " ".join(shlex.quote(path) for path in python_paths)
         print(f"- python -m compileall {joined}")
     if "chatbot" in scopes:
-        print("- python debug/regression/run_chatbot_regression.py")
+        print("- python tests/regression/chatbot/run_chatbot_regression.py")
     if "text_filter_timetable" in scopes:
         if any(path.startswith("image_analysis/") for path in changed_paths):
             print("- python debug/timetable/debug_timetable.py")
