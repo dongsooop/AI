@@ -3,22 +3,21 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-try:
-    import cv2
-    import numpy as np
-except ModuleNotFoundError as exc:
-    print(f"[SKIP] timetable OCR diagnostics dependency is missing: {exc.name}")
-    raise SystemExit(0) from exc
-
 ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from image_analysis.ocr_engine import (  # noqa: E402
-    assess_image_quality,
-    extract_schedule_fixed_scaled,
-    extract_schedule_with_diagnostics,
-)
+try:
+    import cv2
+    import numpy as np
+    from image_analysis.ocr_engine import ( # noqa: E402
+        assess_image_quality,
+        extract_schedule_fixed_scaled,
+        extract_schedule_with_diagnostics,
+    )
+except ModuleNotFoundError as exc:
+    print(f"[SKIP] timetable OCR diagnostics dependency is missing: {exc.name}")
+    raise SystemExit(2) from exc
 
 
 def make_synthetic_timetable() -> np.ndarray:

@@ -91,6 +91,18 @@ def _ocr_task(roi_bytes: bytes) -> List[str]:
     return _clean_ocr_lines(text)
 
 
+def _is_acceptable_ocr_candidate(candidate: Dict[str, Any]) -> bool:
+    lines = candidate.get("lines") or []
+    if not lines:
+        return False
+    course = lines[0]
+    professor = lines[1] if len(lines) > 1 else ""
+    room = lines[2] if len(lines) > 2 else ""
+    if len(course) > 15 or len(professor) > 8 or len(room) > 10:
+        return False
+    return _is_valid_course(course) and _is_valid_professor(professor)
+
+
 def _ocr_diagnostic_task(roi_bytes: bytes) -> Dict[str, Any]:
     nparr = np.frombuffer(roi_bytes, np.uint8)
     roi_gray = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
@@ -105,7 +117,12 @@ def _ocr_diagnostic_task(roi_bytes: bytes) -> Dict[str, Any]:
         return primary
 
     fallback = _run_ocr(roi_gray, fallback_tesseract_config, "psm11")
-    best = fallback if _score_ocr_candidate(fallback) > _score_ocr_candidate(primary) else primary
+    primary_ok = _is_acceptable_ocr_candidate(primary)
+    fallback_ok = _is_acceptable_ocr_candidate(fallback)
+    if primary_ok != fallback_ok:
+        best = fallback if fallback_ok else primary
+    else:
+        best = fallback if _score_ocr_candidate(fallback) > _score_ocr_candidate(primary) else primary
     best["fallback_used"] = best is fallback
     best["primary_confidence"] = primary["confidence"]
     best["fallback_confidence"] = fallback["confidence"]
