@@ -256,7 +256,7 @@
 - 토크나이징/청킹 영향은 `index_utils.py`를 봅니다.
 - 코퍼스 로직이 바뀌면 `build_index.py`로 아티팩트를 다시 생성합니다.
 - 인덱스 스키마가 바뀌면 `search_df.parquet`, `embeddings.npy`, `bm25.pkl`의 row 수가 서로 맞는지 확인합니다.
-- 회귀 케이스는 `debug/regression/chatbot_regression_cases.json`에 추가하고, 실제 API 회귀 테스트는 OSS FastAPI 서버와 JWT 토큰이 준비된 상태에서 실행합니다.
+- 챗봇 회귀 케이스는 `tests/regression/chatbot/`에 추가하고, 실제 API 회귀 테스트는 OSS FastAPI 서버와 JWT 토큰이 준비된 상태에서 실행합니다.
 
 ## 실행 명령
 
@@ -270,7 +270,7 @@ uvicorn app_oss_main:app --reload --port 8010
 ```bash
 # 챗봇 회귀 테스트는 먼저 OSS FastAPI 서버를 띄운 뒤 실행합니다.
 uvicorn app_oss_main:app --reload --port 8010
-python debug/regression/run_chatbot_regression.py
+python tests/regression/chatbot/run_chatbot_regression.py
 
 python debug/timetable/debug_timetable.py
 ```

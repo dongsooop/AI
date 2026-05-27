@@ -127,7 +127,7 @@ User Query → Greeting/Intent Detection → Hybrid Search (BM25 + embeddings)
 
 ```bash
 # 챗봇 회귀 테스트
-python debug/regression/run_chatbot_regression.py
+python tests/regression/chatbot/run_chatbot_regression.py
 
 # 시간표 디버그
 python debug/timetable/debug_timetable.py

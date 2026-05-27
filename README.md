@@ -73,7 +73,7 @@ Kakao map 기반 학교 주변 1Km 이내 식당을 확인할 수 있습니다.
 
 챗봇은 단순 응답 확인이 아니라 질문 세트 기반으로 검색 품질과 답변 근거성을 함께 평가합니다.
 
-- 질문 세트: `debug/regression/questions/*.json`
+- 질문 세트: `tests/regression/chatbot/rag_eval_cases.json`
 - 평가 범위: 학사일정, 연락처, 장학금, 수강신청, 졸업, 학과/기숙사 안내
 - 검색 평가: top-k 검색 결과에 기대 URL/문서가 포함되는지 `Recall@1`, `Recall@3` 측정
 - 답변 평가: 필수 키워드, 날짜 형식, 출처 URL 포함 여부, 비공식 URL 환각 여부 점검
@@ -81,19 +81,19 @@ Kakao map 기반 학교 주변 1Km 이내 식당을 확인할 수 있습니다.
 
 ```bash
 # 질문 세트 스키마 검증
-python tests/regression/evaluate_rag_retrieval.py --validate-only
+python tests/regression/chatbot/evaluate_rag_retrieval.py --validate-only
 
 # 로컬 모델/아티팩트 기반 전체 RAG 평가
-python tests/regression/evaluate_rag_retrieval.py --out /tmp/rag_eval_report.json --fail-on-fail
+python tests/regression/chatbot/evaluate_rag_retrieval.py --out /tmp/rag_eval_report.json --fail-on-fail
 
 # OSS FastAPI 서버 대상 API 회귀 평가
-python tests/regression/run_chatbot_regression.py --url http://127.0.0.1:8010/chatbot
+python tests/regression/chatbot/run_chatbot_regression.py --url http://127.0.0.1:8010/chatbot
 ```
 
 | 구분 | 질문 세트 | 검색 Recall@3 | 답변 근거성 | 비고 |
 | --- | ---: | ---: | ---: | --- |
 | 개선 전 기준선 | 30개 | 리포트 기준값 | 리포트 기준값 | `/tmp/rag_eval_report.json` 또는 저장된 baseline 리포트 |
-| 현재 브랜치 | 30개 | `summary.top3_url_accuracy` | `summary.source_url_pass_rate` | `evaluate_rag_retrieval.py` 실행 결과로 갱신 |
+| 현재 브랜치 | 30개 | `summary.top3_url_accuracy` | `summary.source_url_pass_rate` | `tests/regression/chatbot/evaluate_rag_retrieval.py` 실행 결과로 갱신 |
 | CI 경량 회귀 | synthetic + schema | 통과/실패 | 통과/실패 | 무거운 임베딩 모델 다운로드 없이 PR에서 빠르게 검증 |
 
 # ✌️ 작업 및 역할 분담
