@@ -8,6 +8,9 @@ from pathlib import Path
 from urllib import request, error
 from urllib.parse import urlparse
 
+ROOT_DIR = Path(__file__).resolve().parents[3]
+DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "chatbot" / "chatbot_regression_report.json"
+
 
 def load_cases(path: Path):
     with path.open("r", encoding="utf-8") as f:
@@ -178,7 +181,7 @@ def main():
     if args.baseline:
         report["comparison"] = compare_with_baseline(results, Path(args.baseline))
 
-    out_path = Path(args.out) if args.out else Path("/tmp/chatbot_regression_report.json")
+    out_path = Path(args.out) if args.out else DEFAULT_REPORT_PATH
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
