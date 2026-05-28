@@ -15,6 +15,7 @@ import pandas as pd
 ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
+DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "chatbot" / "query_index_compat_report.json"
 
 from LLM.sub_model.query_index_schema import (  # noqa: E402
     METADATA_BOOL_COLS,
@@ -230,7 +231,7 @@ def main() -> int:
     ap.add_argument(
         "--out",
         default="",
-        help="optional JSON report path; defaults to a temp file",
+        help="optional JSON report path",
     )
     args = ap.parse_args()
 
@@ -254,7 +255,7 @@ def main() -> int:
         "errors": errors,
     }
 
-    out_path = Path(args.out) if args.out else Path("/tmp/query_index_compat_report.json")
+    out_path = Path(args.out) if args.out else DEFAULT_REPORT_PATH
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 

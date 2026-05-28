@@ -15,6 +15,7 @@ import pandas as pd
 ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
+DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "chatbot" / "query_index_metadata_quality_report.json"
 
 
 def install_fake_sentence_transformer() -> None:
@@ -372,7 +373,7 @@ def main() -> int:
         "errors": errors,
     }
 
-    out_path = Path(args.out) if args.out else Path("/tmp/query_index_metadata_quality_report.json")
+    out_path = Path(args.out) if args.out else DEFAULT_REPORT_PATH
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 

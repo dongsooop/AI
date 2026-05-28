@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import argparse
+import json
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -6,6 +8,7 @@ from unittest.mock import patch
 ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
+DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "timetable" / "timetable_ocr_diagnostics_report.json"
 
 try:
     import cv2
@@ -45,6 +48,10 @@ def fake_image_to_data(*args, **kwargs) -> dict:
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description="Check timetable OCR diagnostics contract")
+    ap.add_argument("--out", default=str(DEFAULT_REPORT_PATH), help="output report path")
+    args = ap.parse_args()
+
     image = make_synthetic_timetable()
     quality = assess_image_quality(image)
     errors = []
@@ -91,12 +98,47 @@ def main() -> int:
     if call_counts["data"] != 0:
         errors.append(f"fast_path_called_confidence_ocr:{call_counts}")
 
+    average_confidence = ocr.get("average_confidence")
+    summary = {
+        "schema_version": 1,
+        "suite": "timetable_ocr_diagnostics",
+        "service": "timetable",
+        "status": "failed" if errors else "passed",
+        "total": 1,
+        "passed": 0 if errors else 1,
+        "failed": 1 if errors else 0,
+        "skipped": 0,
+        "metrics": {
+            "average_confidence": average_confidence,
+            "fallback_cells": ocr.get("fallback_cells", 0),
+            "accepted_cells": ocr.get("accepted_cells", 0),
+            "rejected_cells": len(ocr.get("rejected_cells", [])),
+            "schedule_count": diagnostics.get("schedule_count", 0),
+        },
+        "errors": errors,
+    }
+    output = {
+        "schema_version": 1,
+        "suite": "timetable_ocr_diagnostics",
+        "service": "timetable",
+        "summary": summary,
+        "diagnostics": diagnostics,
+        "fast_path_call_counts": call_counts,
+    }
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+
     if errors:
         for error in errors:
             print(f"[FAIL] {error}")
+        print(json.dumps(summary, ensure_ascii=False))
+        print(f"report={out_path}")
         return 1
 
     print("[OK] timetable OCR diagnostics contract")
+    print(json.dumps(summary, ensure_ascii=False))
+    print(f"report={out_path}")
     return 0
 
 

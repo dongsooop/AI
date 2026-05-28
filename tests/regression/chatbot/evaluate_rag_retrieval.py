@@ -18,6 +18,7 @@ URL_RE = re.compile(r"https?://[^\s)>\]}\"']+")
 
 
 DEFAULT_CASES_PATH = Path(__file__).with_name("rag_eval_cases.json")
+DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "chatbot" / "rag_eval_report.json"
 
 
 def _load_cases_file(path: Path) -> list[dict]:
@@ -422,7 +423,7 @@ def main() -> int:
     ap.add_argument("--top-k", type=int, default=5, help="hybrid_search top_k for retrieval metrics")
     ap.add_argument("--answer-top-k", type=int, default=6, help="build_answer top_k for answer metrics")
     ap.add_argument("--schedule-top-k", type=int, default=5, help="schedule_search top_k for schedule cases")
-    ap.add_argument("--out", default="/tmp/rag_eval_report.json", help="output report path")
+    ap.add_argument("--out", default=str(DEFAULT_REPORT_PATH), help="output report path")
     ap.add_argument("--fail-on-fail", action="store_true", help="exit 2 when any case fails")
     ap.add_argument("--validate-only", action="store_true", help="validate case schema without importing RAG runtime")
     args = ap.parse_args()

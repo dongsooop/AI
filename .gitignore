@@ -12,6 +12,7 @@ __pycache__
 .ipynb_checkpoints/
 hs_err_pid*.log
 tests/regression/**/reports/
+tests/reports/**/*.json
 
 # Local dependencies
 requirements.txt
