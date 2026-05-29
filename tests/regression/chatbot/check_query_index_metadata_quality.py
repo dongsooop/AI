@@ -188,6 +188,32 @@ def make_metadata_rich_df() -> pd.DataFrame:
             "phone": "",
             "email": "",
         },
+        {
+            "doc_id": 6,
+            "chunk_id": "6-0",
+            "parent_id": 6,
+            "title": "주요 서비스",
+            "url": "https://doit.dongyang.ac.kr/main/Login.aspx",
+            "source": "main",
+            "text": "주요 서비스 학생종합관리 DOIT 학생종합관리시스템(DOIT)",
+            "text_for_embedding": "주요 서비스 학생종합관리 DOIT",
+            "text_for_bm25": "주요 서비스 학생종합관리 DOIT 학생종합관리시스템",
+            "text_for_answer": "학생종합관리시스템(DOIT) 안내입니다.",
+            "doc_type": "page",
+            "chunk_type": "page",
+            "breadcrumb": "공통/주요 서비스",
+            "leaf_title": "주요 서비스",
+            "section_title": "주요 서비스",
+            "has_phone": False,
+            "has_email": False,
+            "has_date": False,
+            "has_credit": False,
+            "has_policy_keyword": False,
+            "is_privacy_old": False,
+            "unit": "",
+            "phone": "",
+            "email": "",
+        },
     ]
     return pd.DataFrame(rows)
 
@@ -345,6 +371,44 @@ def run_quality_checks() -> tuple[list[dict], list[str]]:
                         "sparse_top_url": sparse_hits.iloc[0]["url"] if not sparse_hits.empty else "",
                     }
                 )
+
+            spaced_answer = rich_index.build_answer("do it 이 뭐야?", top_k=5)
+            if "학생종합관리시스템" not in (spaced_answer or {}).get("answer", ""):
+                errors.append("spaced_do_it_answer_missing_system")
+            if (spaced_answer or {}).get("url") != "https://doit.dongyang.ac.kr/main/Login.aspx":
+                errors.append(f"spaced_do_it_url_unexpected:{(spaced_answer or {}).get('url')}")
+
+            direct_answer = rich_index.metadata_direct_answer("do it이 뭐야?")
+            if "학생종합관리시스템" not in (direct_answer or {}).get("answer", ""):
+                errors.append("spaced_do_it_direct_answer_missing_system")
+
+            compact_hits = rich_index.hybrid_search("DOIT 이 뭐야?", top_k=5, alpha=0.0)
+            compact_rank = rank_for_url(compact_hits, "https://doit.dongyang.ac.kr/main/Login.aspx")
+            if compact_rank != 1:
+                errors.append(f"compact_doit_expected_not_top:{compact_rank}")
+
+            results.append(
+                {
+                    "id": "spaced_do_it_noise",
+                    "query": "do it 이 뭐야?",
+                    "expected_url": "https://doit.dongyang.ac.kr/main/Login.aspx",
+                    "rich_rank": None,
+                    "sparse_rank": None,
+                    "rich_top_url": (spaced_answer or {}).get("url", ""),
+                    "sparse_top_url": "",
+                }
+            )
+            results.append(
+                {
+                    "id": "compact_doit_system",
+                    "query": "DOIT 이 뭐야?",
+                    "expected_url": "https://doit.dongyang.ac.kr/main/Login.aspx",
+                    "rich_rank": compact_rank,
+                    "sparse_rank": None,
+                    "rich_top_url": compact_hits.iloc[0]["url"] if not compact_hits.empty else "",
+                    "sparse_top_url": "",
+                }
+            )
     finally:
         for name, module in old_modules.items():
             if module is None:
