@@ -1,0 +1,16 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.pkl binary
+*.npy binary
+*.parquet binary
+*.pt binary
+*.pth binary
+*.onnx binary
