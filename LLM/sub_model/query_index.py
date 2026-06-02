@@ -74,7 +74,10 @@ ANSWER_TEXT_COL = "text_for_answer"
 PRIVACY_QUERY_RE = re.compile(r"(개인정보|영상정보|처리방침|이메일\s*무단|이전방침|이용안내)")
 POLICY_QUERY_RE = re.compile(r"(휴학|복학|등록|장학|졸업|수강|학칙|규정|절차|신청|자격|요건)")
 INTRO_QUERY_RE = re.compile(r"(소개|비전|상징|로고|캐릭터|연혁|학과|학부|전공)")
-SPACED_DO_IT_RE = re.compile(r"(?<![A-Za-z])do\s+it(?![A-Za-z])", re.I)
+SPACED_DO_IT_RE = re.compile(
+    r"(?<![A-Za-z])do\s+it(?=\s*(?:[이가은는를란]|뭐|무엇|시스템|학생|동양|학교))",
+    re.I,
+)
 COMPACT_DOIT_RE = re.compile(r"(?<![A-Za-z])doit(?![A-Za-z])", re.I)
 DOIT_URL = "https://doit.dongyang.ac.kr/main/Login.aspx"
 
@@ -231,12 +234,16 @@ def _text_match_score(text: str, terms: list[str]) -> int:
 def _compact(s: str) -> str:
     return re.sub(r"\s+", "", (s or "").lower())
 
+
 def _looks_like_doit_query(query: str) -> bool:
     text = query or ""
     return bool(SPACED_DO_IT_RE.search(text) or COMPACT_DOIT_RE.search(text))
 
+
 def _normalize_doit_query(query: str) -> str:
+    # Compact "doit" is already the school-system token; only spaced variants need folding.
     return SPACED_DO_IT_RE.sub("DOIT", query or "")
+
 
 def _metadata_doit_answer(query: str) -> dict | None:
     if not _looks_like_doit_query(query):
@@ -249,6 +256,12 @@ def _metadata_doit_answer(query: str) -> dict | None:
         ),
         "url": DOIT_URL,
     }
+
+
+def _doit_direct_answer(query: str) -> dict | None:
+    """Handle only DOIT aliases before general retrieval without changing other direct-answer flows."""
+    return _metadata_doit_answer(query)
+
 
 def _query_terms(query: str):
     stop = set(CONTACT_KWS) | {
@@ -381,7 +394,7 @@ def metadata_direct_answer(query: str) -> dict | None:
 
 def confident_search_answer(query: str, top_k: int = 3) -> dict | None:
     """Return a compact source-grounded answer when retrieval confidence is strong enough."""
-    direct = _metadata_doit_answer(query)
+    direct = _doit_direct_answer(query)
     if direct:
         return direct
 
@@ -548,7 +561,7 @@ def hybrid_search(query, top_k=8, alpha=DEFAULT_DENSE_WEIGHT, contact_boost=CONT
     return out.reset_index(drop=True)
 
 def build_answer(query, top_k=6):
-    direct = _metadata_doit_answer(query)
+    direct = _doit_direct_answer(query)
     if direct:
         return direct
 

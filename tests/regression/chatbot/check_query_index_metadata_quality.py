@@ -16,6 +16,7 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "chatbot" / "query_index_metadata_quality_report.json"
+DOIT_URL = "https://doit.dongyang.ac.kr/main/Login.aspx"
 
 
 def install_fake_sentence_transformer() -> None:
@@ -193,7 +194,7 @@ def make_metadata_rich_df() -> pd.DataFrame:
             "chunk_id": "6-0",
             "parent_id": 6,
             "title": "주요 서비스",
-            "url": "https://doit.dongyang.ac.kr/main/Login.aspx",
+            "url": DOIT_URL,
             "source": "main",
             "text": "주요 서비스 학생종합관리 DOIT 학생종합관리시스템(DOIT)",
             "text_for_embedding": "주요 서비스 학생종합관리 DOIT",
@@ -375,38 +376,48 @@ def run_quality_checks() -> tuple[list[dict], list[str]]:
             spaced_answer = rich_index.build_answer("do it 이 뭐야?", top_k=5)
             if "학생종합관리시스템" not in (spaced_answer or {}).get("answer", ""):
                 errors.append("spaced_do_it_answer_missing_system")
-            if (spaced_answer or {}).get("url") != "https://doit.dongyang.ac.kr/main/Login.aspx":
+            if (spaced_answer or {}).get("url") != DOIT_URL:
                 errors.append(f"spaced_do_it_url_unexpected:{(spaced_answer or {}).get('url')}")
 
             direct_answer = rich_index.metadata_direct_answer("do it이 뭐야?")
             if "학생종합관리시스템" not in (direct_answer or {}).get("answer", ""):
                 errors.append("spaced_do_it_direct_answer_missing_system")
 
+            for noise_query in ("just do it!", "how do it work?", "can you do it?", "어떻게 do it?"):
+                noise_answer = rich_index.metadata_direct_answer(noise_query)
+                if noise_answer:
+                    errors.append(f"spaced_do_it_false_positive:{noise_query}")
+
             compact_hits = rich_index.hybrid_search("DOIT 이 뭐야?", top_k=5, alpha=0.0)
-            compact_rank = rank_for_url(compact_hits, "https://doit.dongyang.ac.kr/main/Login.aspx")
+            compact_rank = rank_for_url(compact_hits, DOIT_URL)
             if compact_rank != 1:
                 errors.append(f"compact_doit_expected_not_top:{compact_rank}")
+
+            sparse_compact_hits = sparse_index.hybrid_search("DOIT 이 뭐야?", top_k=5, alpha=0.0)
+            sparse_compact_rank = rank_for_url(sparse_compact_hits, DOIT_URL)
+            if sparse_compact_rank != 1:
+                errors.append(f"compact_doit_sparse_expected_not_top:{sparse_compact_rank}")
 
             results.append(
                 {
                     "id": "spaced_do_it_noise",
                     "query": "do it 이 뭐야?",
-                    "expected_url": "https://doit.dongyang.ac.kr/main/Login.aspx",
+                    "expected_url": DOIT_URL,
                     "rich_rank": None,
                     "sparse_rank": None,
                     "rich_top_url": (spaced_answer or {}).get("url", ""),
-                    "sparse_top_url": "",
+                    "sparse_top_url": (spaced_answer or {}).get("url", ""),
                 }
             )
             results.append(
                 {
                     "id": "compact_doit_system",
                     "query": "DOIT 이 뭐야?",
-                    "expected_url": "https://doit.dongyang.ac.kr/main/Login.aspx",
+                    "expected_url": DOIT_URL,
                     "rich_rank": compact_rank,
-                    "sparse_rank": None,
+                    "sparse_rank": sparse_compact_rank,
                     "rich_top_url": compact_hits.iloc[0]["url"] if not compact_hits.empty else "",
-                    "sparse_top_url": "",
+                    "sparse_top_url": sparse_compact_hits.iloc[0]["url"] if not sparse_compact_hits.empty else "",
                 }
             )
     finally:
