@@ -15,6 +15,22 @@ if str(ROOT_DIR) not in sys.path:
 
 DATE_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
 URL_RE = re.compile(r"https?://[^\s)>\]}\"']+")
+REFUSAL_RE = re.compile(
+    r"("
+    r"답변할\s*수\s*없|"
+    r"확인할\s*수\s*없|"
+    r"제공할\s*수\s*없|"
+    r"제공하기\s*어렵|"
+    r"찾을\s*수\s*없|"
+    r"찾지\s*못|"
+    r"자료가\s*없|"
+    r"정보가\s*없|"
+    r"알\s*수\s*없|"
+    r"모르겠|"
+    r"범위\s*밖|"
+    r"관련\s*정보.*없"
+    r")"
+)
 
 
 DEFAULT_CASES_PATH = Path(__file__).with_name("rag_eval_cases.json")
@@ -76,7 +92,7 @@ def validate_cases(cases: list[dict]) -> list[str]:
         "answer_must_contain_any",
         "answer_must_contain_all",
     ]
-    bool_fields = ["requires_source_url", "requires_date"]
+    bool_fields = ["requires_source_url", "requires_date", "expects_refusal"]
 
     for idx, case in enumerate(cases, start=1):
         case_id = str(case.get("id", "") or "")
@@ -106,12 +122,16 @@ def validate_cases(cases: list[dict]) -> list[str]:
 
         if kind == "search":
             has_expected_source = bool(case.get("expected_url_contains") or case.get("expected_title_contains"))
-            if not has_expected_source:
+            if not has_expected_source and not case.get("expects_refusal", False):
                 errors.append(f"{prefix}:missing_expected_source")
             if case.get("requires_source_url") and not case.get("expected_url_contains"):
                 errors.append(f"{prefix}:requires_source_without_expected_url")
 
-        if not (case.get("answer_must_contain_any") or case.get("answer_must_contain_all")):
+        if not (
+            case.get("answer_must_contain_any")
+            or case.get("answer_must_contain_all")
+            or case.get("expects_refusal", False)
+        ):
             errors.append(f"{prefix}:missing_answer_expectation")
     return errors
 
@@ -145,6 +165,10 @@ def contains_any(text: str, needles: list[str]) -> bool:
 
 def contains_all(text: str, needles: list[str]) -> bool:
     return all(needle in text for needle in needles)
+
+
+def is_refusal_answer(text: str) -> bool:
+    return bool(REFUSAL_RE.search(text or ""))
 
 
 def urls_from_hits(hits) -> list[str]:
@@ -211,7 +235,11 @@ def evaluate_search_case(case: dict, top_k: int, answer_top_k: int) -> dict:
             "top1_title_match": False,
             "answer_keyword_match": False,
             "source_url_match": False if case.get("requires_source_url", False) else True,
+            "source_url_required": bool(case.get("requires_source_url", False)),
             "date_match": True,
+            "refused": False,
+            "expected_refusal": bool(case.get("expects_refusal", False)),
+            "refusal_match": not bool(case.get("expects_refusal", False)),
             "hallucination_detected": False,
             "hallucination_flags": [],
             "expected_url_rank": None,
@@ -256,6 +284,9 @@ def evaluate_search_case(case: dict, top_k: int, answer_top_k: int) -> dict:
     answer_any = contains_any(answer, case.get("answer_must_contain_any", []))
     answer_all = contains_all(answer, case.get("answer_must_contain_all", []))
     date_pass = bool(DATE_RE.search(answer)) if case.get("requires_date", False) else True
+    refused = is_refusal_answer(answer)
+    expected_refusal = bool(case.get("expects_refusal", False))
+    refusal_match = refused if expected_refusal else not refused
     hallu = hallucination_flags(answer, hits, expected_urls)
 
     return {
@@ -268,7 +299,11 @@ def evaluate_search_case(case: dict, top_k: int, answer_top_k: int) -> dict:
         "top1_title_match": title_matches(hits, case.get("expected_title_contains", [])),
         "answer_keyword_match": answer_any and answer_all,
         "source_url_match": source_url_match,
+        "source_url_required": bool(case.get("requires_source_url", False)),
         "date_match": date_pass,
+        "refused": refused,
+        "expected_refusal": expected_refusal,
+        "refusal_match": refusal_match,
         "hallucination_detected": bool(hallu),
         "hallucination_flags": hallu,
         "expected_url_rank": url_rank,
@@ -285,10 +320,11 @@ def evaluate_search_case(case: dict, top_k: int, answer_top_k: int) -> dict:
         "passed": all([
             not retrieval_error,
             not answer_error,
-            top3_url_match if expected_urls else True,
+            top3_url_match if expected_urls and not expected_refusal else True,
             answer_any and answer_all,
             source_url_match,
             date_pass,
+            refusal_match,
             not hallu,
         ]),
     }
@@ -311,7 +347,11 @@ def evaluate_schedule_case(case: dict, top_k: int) -> dict:
             "top1_title_match": None,
             "answer_keyword_match": False,
             "source_url_match": True,
+            "source_url_required": False,
             "date_match": False if case.get("requires_date", False) else True,
+            "refused": False,
+            "expected_refusal": bool(case.get("expects_refusal", False)),
+            "refusal_match": not bool(case.get("expects_refusal", False)),
             "hallucination_detected": False,
             "hallucination_flags": [],
             "expected_url_rank": None,
@@ -339,6 +379,9 @@ def evaluate_schedule_case(case: dict, top_k: int) -> dict:
     answer_any = contains_any(answer, case.get("answer_must_contain_any", []))
     answer_all = contains_all(answer, case.get("answer_must_contain_all", []))
     date_pass = bool(DATE_RE.search(answer)) if case.get("requires_date", False) else True
+    refused = is_refusal_answer(answer)
+    expected_refusal = bool(case.get("expects_refusal", False))
+    refusal_match = refused if expected_refusal else not refused
 
     return {
         "id": case.get("id"),
@@ -350,7 +393,11 @@ def evaluate_schedule_case(case: dict, top_k: int) -> dict:
         "top1_title_match": None,
         "answer_keyword_match": answer_any and answer_all,
         "source_url_match": True,
+        "source_url_required": False,
         "date_match": date_pass,
+        "refused": refused,
+        "expected_refusal": expected_refusal,
+        "refusal_match": refusal_match,
         "hallucination_detected": False,
         "hallucination_flags": [],
         "expected_url_rank": None,
@@ -363,7 +410,7 @@ def evaluate_schedule_case(case: dict, top_k: int) -> dict:
         },
         "retrieval_latency_ms": latency_ms,
         "answer_latency_ms": 0.0,
-        "passed": all([not error, answer_any and answer_all, date_pass]),
+        "passed": all([not error, answer_any and answer_all, date_pass, refusal_match]),
     }
 
 
@@ -374,26 +421,53 @@ def pct(numerator: int, denominator: int) -> float:
 def summarize(results: list[dict]) -> dict:
     search_results = [r for r in results if r["kind"] == "search"]
     schedule_results = [r for r in results if r["kind"] == "schedule"]
+    source_required_results = [r for r in search_results if r.get("source_url_required")]
     latencies = [float(r.get("retrieval_latency_ms", 0.0)) for r in results]
     answer_latencies = [float(r.get("answer_latency_ms", 0.0)) for r in search_results]
+    passed = sum(1 for r in results if r["passed"])
+    failed = sum(1 for r in results if not r["passed"])
 
-    summary = {
-        "total": len(results),
-        "passed": sum(1 for r in results if r["passed"]),
-        "failed": sum(1 for r in results if not r["passed"]),
-        "pass_rate": pct(sum(1 for r in results if r["passed"]), len(results)),
-        "search_total": len(search_results),
-        "schedule_total": len(schedule_results),
-        "top1_url_accuracy": pct(sum(1 for r in search_results if r["top1_url_match"]), len(search_results)),
-        "top3_url_accuracy": pct(sum(1 for r in search_results if r["top3_url_match"]), len(search_results)),
-        "top1_title_accuracy": pct(sum(1 for r in search_results if r["top1_title_match"]), len(search_results)),
-        "answer_keyword_pass_rate": pct(sum(1 for r in results if r["answer_keyword_match"]), len(results)),
-        "source_url_pass_rate": pct(sum(1 for r in search_results if r["source_url_match"]), len(search_results)),
-        "date_pass_rate": pct(sum(1 for r in results if r["date_match"]), len(results)),
-        "hallucination_proxy_rate": pct(
+    metrics = {
+        "recall_at_1": pct(sum(1 for r in search_results if r["top1_url_match"]), len(search_results)),
+        "recall_at_3": pct(sum(1 for r in search_results if r["top3_url_match"]), len(search_results)),
+        "source_url_pass_rate": pct(
+            sum(1 for r in source_required_results if r["source_url_match"]),
+            len(source_required_results),
+        ),
+        "unofficial_url_hallucination_rate": pct(
             sum(1 for r in search_results if r["hallucination_detected"]),
             len(search_results),
         ),
+        "refusal_rate": pct(sum(1 for r in results if r.get("refused")), len(results)),
+        "refusal_expectation_pass_rate": pct(sum(1 for r in results if r.get("refusal_match")), len(results)),
+    }
+
+    summary = {
+        "schema_version": 1,
+        "suite": "rag_retrieval",
+        "service": "chatbot",
+        "status": "passed" if failed == 0 else "failed",
+        "total": len(results),
+        "passed": passed,
+        "failed": failed,
+        "skipped": 0,
+        "pass_rate": pct(passed, len(results)),
+        "search_total": len(search_results),
+        "schedule_total": len(schedule_results),
+        "top1_url_accuracy": metrics["recall_at_1"],
+        "top3_url_accuracy": metrics["recall_at_3"],
+        "recall_at_1": metrics["recall_at_1"],
+        "recall_at_3": metrics["recall_at_3"],
+        "top1_title_accuracy": pct(sum(1 for r in search_results if r["top1_title_match"]), len(search_results)),
+        "answer_keyword_pass_rate": pct(sum(1 for r in results if r["answer_keyword_match"]), len(results)),
+        "source_url_pass_rate": metrics["source_url_pass_rate"],
+        "date_pass_rate": pct(sum(1 for r in results if r["date_match"]), len(results)),
+        "hallucination_proxy_rate": metrics["unofficial_url_hallucination_rate"],
+        "unofficial_url_hallucination_rate": metrics["unofficial_url_hallucination_rate"],
+        "refusal_rate": metrics["refusal_rate"],
+        "refusal_expectation_pass_rate": metrics["refusal_expectation_pass_rate"],
+        "metrics": metrics,
+        "errors": [],
         "avg_retrieval_latency_ms": round(statistics.mean(latencies), 2) if latencies else 0.0,
         "p95_retrieval_latency_ms": round(statistics.quantiles(latencies, n=20)[18], 2) if len(latencies) >= 20 else 0.0,
         "avg_answer_latency_ms": round(statistics.mean(answer_latencies), 2) if answer_latencies else 0.0,
@@ -403,11 +477,26 @@ def summarize(results: list[dict]) -> dict:
     for category in sorted({r["category"] for r in results}):
         items = [r for r in results if r["category"] == category]
         searches = [r for r in items if r["kind"] == "search"]
+        source_required = [r for r in searches if r.get("source_url_required")]
         by_category[category] = {
             "total": len(items),
+            "passed": sum(1 for r in items if r["passed"]),
+            "failed": sum(1 for r in items if not r["passed"]),
             "pass_rate": pct(sum(1 for r in items if r["passed"]), len(items)),
+            "recall_at_1": pct(sum(1 for r in searches if r["top1_url_match"]), len(searches)),
+            "recall_at_3": pct(sum(1 for r in searches if r["top3_url_match"]), len(searches)),
             "top3_url_accuracy": pct(sum(1 for r in searches if r["top3_url_match"]), len(searches)),
             "answer_keyword_pass_rate": pct(sum(1 for r in items if r["answer_keyword_match"]), len(items)),
+            "source_url_pass_rate": pct(
+                sum(1 for r in source_required if r["source_url_match"]),
+                len(source_required),
+            ),
+            "unofficial_url_hallucination_rate": pct(
+                sum(1 for r in searches if r["hallucination_detected"]),
+                len(searches),
+            ),
+            "refusal_rate": pct(sum(1 for r in items if r.get("refused")), len(items)),
+            "refusal_expectation_pass_rate": pct(sum(1 for r in items if r.get("refusal_match")), len(items)),
         }
     summary["by_category"] = by_category
     return summary
@@ -476,6 +565,8 @@ def main() -> int:
                 reasons.append("source_url")
             if not r["date_match"]:
                 reasons.append("date")
+            if not r.get("refusal_match", True):
+                reasons.append("refusal")
             if r["hallucination_detected"]:
                 reasons.append("hallucination_proxy")
             for stage, error in (r.get("errors") or {}).items():
