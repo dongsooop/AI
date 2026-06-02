@@ -395,7 +395,7 @@ def metadata_direct_answer(query: str) -> dict | None:
 def confident_search_answer(query: str, top_k: int = 3) -> dict | None:
     """Return a compact source-grounded answer when retrieval confidence is strong enough."""
     direct = _doit_direct_answer(query)
-    if direct:
+    if direct and not any(k in query for k in CONTACT_KWS):
         return direct
 
     hits = hybrid_search(query, top_k=max(top_k, 3))
