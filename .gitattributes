@@ -14,3 +14,10 @@
 *.pt binary
 *.pth binary
 *.onnx binary
+*.safetensors binary
+*.bin         binary
+*.h5          binary
+*.hdf5        binary
+*.db          binary
+*.sqlite      binary
+*.sqlite3     binary
