@@ -150,7 +150,7 @@
 - OCR 변경은 service -> OCR engine -> timetable parsing 흐름으로 확인합니다.
 - 텍스트 필터 변경은 규칙 기반과 ML 기반 양쪽을 함께 봅니다.
 
-RAG 변경은 품질 지표를 함께 봅니다. `tests/regression/reports/rag_eval_report.json` 같은 로컬 평가 리포트가 있으면 summary를 읽고, 없으면 `bash scripts/check_rag_eval.sh` 실행 가능 여부를 판단합니다. 리뷰 결과에는 최소한 전체 통과율, top1/top3 URL 정확도, 답변 키워드 통과율, 출처 URL 통과율, 날짜 통과율, hallucination proxy rate, 평균/p95 retrieval latency를 요약합니다. 리포트가 없거나 실행하지 못했다면 남은 리스크에 명확히 남깁니다.
+RAG 변경은 품질 지표를 함께 봅니다. `RAG_EVAL_REPORT_PATH`로 지정한 파일 또는 `bash scripts/check_rag_eval.sh` 출력의 `rag_eval_report=<path>` 리포트가 있으면 summary를 읽습니다. `scripts/check_rag_eval.sh`의 기본 RAG 리포트 위치는 `tests/reports/chatbot/rag_eval_report.json`이며, 다른 서비스 평가는 `tests/reports/<service>/` 아래 리포트를 사용합니다. 리뷰 결과에는 최소한 전체 통과율, top1/top3 URL 정확도, top1 제목 정확도, 답변 키워드 통과율, 출처 URL 통과율, 날짜 통과율, hallucination proxy rate, 평균/p95 retrieval latency를 요약합니다. 리포트가 없거나 실행하지 못했다면 남은 리스크에 명확히 남깁니다.
 
 ### 4단계. 공개 가능 상태인지 리뷰
 

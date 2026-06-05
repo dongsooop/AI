@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-REPORT_PATH="${RAG_EVAL_REPORT_PATH:-/tmp/rag_eval_report.json}"
+REPORT_PATH="${RAG_EVAL_REPORT_PATH:-tests/reports/chatbot/rag_eval_report.json}"
 CONDA_ENV="${RAG_EVAL_CONDA_ENV:-dl_study}"
 
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \

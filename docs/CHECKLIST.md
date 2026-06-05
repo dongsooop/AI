@@ -84,7 +84,7 @@ RAG 검색/응답 품질에 영향을 주는 변경이라면 추가로 다음을
 - 출처 URL이 필요한 답변은 공식 학교 도메인 또는 검색 근거 URL을 유지하는지 확인합니다.
 - 학사일정 답변은 날짜, 기간, 학기 구분이 `schedule_index.py`/학사일정 데이터와 일치하는지 확인합니다.
 - `model/artifacts/` 파일은 직접 수정하지 않고, 스키마나 인덱싱 변경이 있으면 생성 로직과 재생성 절차를 함께 확인합니다.
-- `tests/regression/reports/rag_eval_report.json` 같은 로컬 평가 리포트가 있으면 summary를 읽고 리뷰 결과에 핵심 지표를 요약합니다. 없으면 `scripts/check_rag_eval.sh` 또는 관련 회귀 명령 실행 여부를 남은 리스크에 기록합니다.
+- `RAG_EVAL_REPORT_PATH`로 지정한 파일 또는 `scripts/check_rag_eval.sh` 출력의 `rag_eval_report=<path>` 리포트가 있으면 summary를 읽고 리뷰 결과에 핵심 지표를 요약합니다. 기본 RAG 리포트 위치는 `tests/reports/chatbot/rag_eval_report.json`이고, 다른 서비스 평가는 `tests/reports/<service>/` 아래 리포트를 사용합니다. 리포트가 없으면 관련 회귀 명령 실행 여부를 남은 리스크에 기록합니다.
 
 특히 다음을 중점적으로 봅니다.
 
