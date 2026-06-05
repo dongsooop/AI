@@ -1,16 +1,13 @@
 import datetime as dt
-import asyncio
 import hashlib
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
 from pathlib import Path
 from typing import Optional
 
 import httpx
 from cachetools import TTLCache
-from openai import OpenAI
 from psycopg2 import pool as pg_pool
 from pydantic import BaseModel
 from sshtunnel import SSHTunnelForwarder
@@ -21,6 +18,7 @@ from core.settings import get_settings
 from LLM.OSS.formatter import (
     scrub_non_contact,
 )
+from LLM.OSS.llm_client import call_oss_async
 from LLM.OSS.modes import (
     COUNCIL_KWS,
     GOVERNANCE_REMOVE_RE,
@@ -52,10 +50,6 @@ _cache_lock = threading.Lock()
 _ssh_tunnel: Optional[SSHTunnelForwarder] = None
 _db_pool: Optional[pg_pool.ThreadedConnectionPool] = None
 _log_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="chatbot_log")
-_oss_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="chatbot_oss")
-
-_client: Optional[OpenAI] = None
-_client_lock = threading.Lock()
 
 PROFANITY_GUARD_TEXT = "부적절한 표현이 포함되어 답변하기 어려워요. 질문을 순화해서 다시 입력해 주세요."
 
@@ -187,56 +181,6 @@ def _log_tool_route(user_text: str, mode: str, stage: str, result: ToolResult) -
         bool(result.text.strip()),
         result.reason,
     )
-
-
-def _get_oss_client() -> OpenAI:
-    global _client
-    if _client is not None:
-        return _client
-
-    with _client_lock:
-        if _client is None:
-            if not settings.oss_api_key or not settings.oss_model:
-                raise ConfigurationError("OSS_API_KEY and OSS_MODEL are required")
-            client_kwargs = {"api_key": settings.oss_api_key}
-            if settings.oss_base_url:
-                client_kwargs["base_url"] = settings.oss_base_url
-            _client = OpenAI(**client_kwargs)
-            logger.info("oss_client_initialized base_url=%s", bool(settings.oss_base_url))
-    return _client
-
-
-def call_oss(messages: list[dict[str, str]], **kwargs) -> str:
-    if not any(message.get("role") == "system" for message in messages):
-        messages = [{
-            "role": "system",
-            "content": (
-                "Reasoning: low\n한국어로 단 한 문장으로만 답하라.\n"
-                "연락처/전화/번호/문의 요청이 없는 한 전화번호나 이메일, URL을 임의로 만들지 말고 포함하지 마라.\n"
-                "모르면 모른다고 답하라."
-            ),
-        }] + messages
-    try:
-        client = _get_oss_client()
-    except ConfigurationError:
-        raise
-    try:
-        response = _get_oss_client().chat.completions.create(
-            model=settings.oss_model,
-            messages=messages,
-            temperature=kwargs.get("temperature", 0.3),
-            max_tokens=kwargs.get("max_tokens", 64),
-            timeout=kwargs.get("timeout", 45),
-        )
-        return (response.choices[0].message.content or "").strip()
-    except Exception:
-        logger.warning("oss_call_failed", exc_info=True)
-        return ""
-
-
-async def call_oss_async(messages: list[dict[str, str]], **kwargs) -> str:
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_oss_executor, partial(call_oss, messages, **kwargs))
 
 
 async def should_block_profanity(user_text: str) -> bool:
