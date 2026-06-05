@@ -15,6 +15,8 @@ REQUIRED_SECTIONS = [
     "Docker/의존성 이슈",
     "환경변수 또는 배포 설정 불일치",
     "남은 리스크 또는 미검증 항목",
+    "발견 사항별 severity(critical/high/medium/low)와 근거",
+    "RAG 변경 시 rag_eval_report summary 또는 미실행 사유",
     ".github/pull_request_template.md 형식의 PR 본문 초안",
     "type: english summary 형식의 커밋 메시지 후보 3개",
 ]
