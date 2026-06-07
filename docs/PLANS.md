@@ -74,6 +74,7 @@
 │   │   ├── Open_AI_OSS.py          # 챗봇 메인 오케스트레이션
 │   │   ├── service.py              # 챗봇 서비스 연결부
 │   │   ├── llm_client.py           # OSS/OpenAI 호환 LLM client 생성 및 호출
+│   │   ├── chat_log_store.py       # 챗봇 DB 로그 저장 및 DB/SSH pool 관리
 │   │   ├── tools.py                # 비용 우선 deterministic tool routing
 │   │   ├── formatter.py            # 응답 포맷팅
 │   │   ├── modes.py                # 챗봇 모드 정의
@@ -150,6 +151,7 @@
 - `LLM/OSS/Open_AI_OSS.py`
 - `LLM/OSS/service.py`
 - `LLM/OSS/llm_client.py`
+- `LLM/OSS/chat_log_store.py`
 - `LLM/OSS/tools.py`
 - `LLM/OSS/formatter.py`
 - `LLM/OSS/modes.py`
