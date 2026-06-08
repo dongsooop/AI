@@ -95,10 +95,14 @@ def init_db_pool() -> None:
 
 
 def shutdown_db_pool() -> None:
+    global _db_pool, _ssh_tunnel
+    _log_executor.shutdown(wait=True)
     if _db_pool:
         _db_pool.closeall()
+        _db_pool = None
     if _ssh_tunnel:
         _ssh_tunnel.stop()
+        _ssh_tunnel = None
     logger.info("chatbot_db_pool_shutdown")
 
 

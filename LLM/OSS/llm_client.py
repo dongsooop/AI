@@ -60,6 +60,9 @@ def call_oss(messages: list[dict[str, str]], **kwargs) -> str:
             max_tokens=kwargs.get("max_tokens", 64),
             timeout=kwargs.get("timeout", 45),
         )
+        if not response.choices:
+            logger.warning("oss_call_empty_choices")
+            return ""
         return (response.choices[0].message.content or "").strip()
     except Exception:
         logger.warning("oss_call_failed", exc_info=True)
