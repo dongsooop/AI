@@ -105,6 +105,7 @@ User Query → Greeting/Intent Detection → Hybrid Search (BM25 + embeddings)
 | ----------------------------------------- | ----------------------------------------------- |
 | `OSS_BASE_URL`                            | Ollama server URL (`http://localhost:11434/v1`) |
 | `OSS_MODEL`                               | LLM model name (`gpt-oss:20b`)                  |
+| `CHATBOT_LOG_DB_REQUIRED`                 | Fail chatbot startup if log DB is unavailable (`0` by default) |
 | `SECRET_KEY` / `ALGORITHM`                | JWT auth (HS512)                                |
 | `DB_NAME/USER/PASSWORD`                   | PostgreSQL credentials                          |
 | `DATA_JSON`                               | School info corpus path                         |

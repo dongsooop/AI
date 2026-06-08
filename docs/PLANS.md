@@ -73,6 +73,7 @@
 │   ├── OSS/
 │   │   ├── Open_AI_OSS.py          # 챗봇 메인 오케스트레이션
 │   │   ├── service.py              # 챗봇 서비스 연결부
+│   │   ├── lifecycle.py            # 챗봇 startup/shutdown 런타임 초기화
 │   │   ├── llm_client.py           # OSS/OpenAI 호환 LLM client 생성 및 호출
 │   │   ├── chat_log_store.py       # 챗봇 DB 로그 저장 및 DB/SSH pool 관리
 │   │   ├── tools.py                # 비용 우선 deterministic tool routing
@@ -150,6 +151,7 @@
 
 - `LLM/OSS/Open_AI_OSS.py`
 - `LLM/OSS/service.py`
+- `LLM/OSS/lifecycle.py`
 - `LLM/OSS/llm_client.py`
 - `LLM/OSS/chat_log_store.py`
 - `LLM/OSS/tools.py`
@@ -222,6 +224,7 @@
 ## 운영상 알아둘 점
 
 - 챗봇은 `OSS_BASE_URL`을 통한 Ollama 호환 API 접근에 의존합니다.
+- 챗봇 로그 DB는 기본적으로 best-effort로 초기화합니다. `CHATBOT_LOG_DB_REQUIRED=1`이면 로그 DB 연결 실패 시 startup을 실패 처리합니다.
 - 시간표 분석은 한국어 지원이 포함된 Tesseract OCR에 의존합니다.
 - 일부 챗봇 인덱싱 유틸은 KoNLPy/JPype1 사용을 위해 Java가 필요합니다.
 - 인증은 `.env`의 JWT 관련 값을 사용합니다.

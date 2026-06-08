@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from core.logging import get_logger
 from core.settings import get_settings
-from LLM.OSS.chat_log_store import init_db_pool, log_chatbot, shutdown_db_pool
+from LLM.OSS.chat_log_store import log_chatbot
 from LLM.OSS.formatter import (
     scrub_non_contact,
 )
