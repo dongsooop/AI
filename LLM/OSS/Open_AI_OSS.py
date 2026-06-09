@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from core.auth import verify_jwt_token
-from LLM.OSS.service import ChatReq, chat_with_oss, init_db_pool, shutdown_db_pool
+from LLM.OSS.service import ChatReq, chat_with_oss
 
 
 router = APIRouter()

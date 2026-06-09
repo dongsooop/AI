@@ -1,26 +1,20 @@
 import datetime as dt
-import asyncio
 import hashlib
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
-from functools import partial
-from pathlib import Path
 from typing import Optional
 
 import httpx
 from cachetools import TTLCache
-from openai import OpenAI
-from psycopg2 import pool as pg_pool
 from pydantic import BaseModel
-from sshtunnel import SSHTunnelForwarder
 
-from core.exceptions import ConfigurationError
 from core.logging import get_logger
 from core.settings import get_settings
+from LLM.OSS.chat_log_store import log_chatbot
 from LLM.OSS.formatter import (
     scrub_non_contact,
 )
+from LLM.OSS.llm_client import call_oss_async
 from LLM.OSS.modes import (
     COUNCIL_KWS,
     GOVERNANCE_REMOVE_RE,
@@ -49,14 +43,6 @@ _CACHE_GENERAL: TTLCache = TTLCache(maxsize=500, ttl=3600)
 _CACHE_SKIP = frozenset({"oss", "greet", "whoami", "relation", "guard"})
 _cache_lock = threading.Lock()
 
-_ssh_tunnel: Optional[SSHTunnelForwarder] = None
-_db_pool: Optional[pg_pool.ThreadedConnectionPool] = None
-_log_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="chatbot_log")
-_oss_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="chatbot_oss")
-
-_client: Optional[OpenAI] = None
-_client_lock = threading.Lock()
-
 PROFANITY_GUARD_TEXT = "부적절한 표현이 포함되어 답변하기 어려워요. 질문을 순화해서 다시 입력해 주세요."
 
 
@@ -64,112 +50,6 @@ class ChatReq(BaseModel):
     text: Optional[str] = None
     messages: Optional[list[dict[str, str]]] = None
     engine: Optional[str] = None
-
-
-def init_db_pool() -> None:
-    global _ssh_tunnel, _db_pool
-    ssh_host = settings.ssh_host
-    db_kwargs = dict(
-        dbname=settings.db_name,
-        user=settings.db_user,
-        password=settings.db_password,
-        connect_timeout=3,
-        options="-c statement_timeout=5000",
-    )
-    connection_errors: list[Exception] = []
-    if ssh_host:
-        try:
-            if not settings.ssh_user:
-                raise ConfigurationError("SSH_USER is required when SSH_HOST is set")
-            if not settings.ssh_key_path:
-                raise ConfigurationError("SSH_KEY_PATH is required when SSH_HOST is set")
-            ssh_key_path = Path(settings.ssh_key_path).expanduser()
-            if not ssh_key_path.exists():
-                raise ConfigurationError(f"SSH key file does not exist: {ssh_key_path}")
-            _ssh_tunnel = SSHTunnelForwarder(
-                (ssh_host, 22),
-                ssh_username=settings.ssh_user,
-                ssh_pkey=str(ssh_key_path),
-                remote_bind_address=(settings.ssh_db_host, settings.ssh_db_port),
-            )
-            _ssh_tunnel.start()
-            tunnel_db_kwargs = dict(db_kwargs, host="localhost", port=_ssh_tunnel.local_bind_port)
-            _db_pool = pg_pool.ThreadedConnectionPool(minconn=1, maxconn=5, **tunnel_db_kwargs)
-            logger.info(
-                "chatbot_db_pool_initialized ssh_tunnel=%s db_host=%s db_port=%s",
-                True,
-                tunnel_db_kwargs["host"],
-                tunnel_db_kwargs["port"],
-            )
-            return
-        except ConfigurationError as exc:
-            connection_errors.append(exc)
-            if settings.db_host is None:
-                raise
-            logger.warning("chatbot_ssh_db_config_invalid fallback_to_direct=true error=%s", exc)
-        except Exception as exc:
-            connection_errors.append(exc)
-            if _ssh_tunnel:
-                _ssh_tunnel.stop()
-                _ssh_tunnel = None
-            if settings.db_host is None:
-                raise ConfigurationError(f"SSH database connection failed: {exc}") from exc
-            logger.warning("chatbot_ssh_db_connect_failed fallback_to_direct=true error=%s", exc)
-
-    hosts = (settings.db_host, ) if settings.db_host else ("localhost",)
-    for host in hosts:
-        if not host:
-            continue
-        direct_db_kwargs = dict(db_kwargs, host=host, port=settings.db_port)
-        try:
-            _db_pool = pg_pool.ThreadedConnectionPool(minconn=1, maxconn=5, **direct_db_kwargs)
-            logger.info(
-                "chatbot_db_pool_initialized ssh_tunnel=%s db_host=%s db_port=%s",
-                False,
-                direct_db_kwargs["host"],
-                direct_db_kwargs["port"],
-            )
-            return
-        except Exception as exc:
-            connection_errors.append(exc)
-            logger.warning(
-                "chatbot_direct_db_connect_failed db_host=%s db_port=%s error=%s",
-                host,
-                settings.db_port,
-                exc,
-            )
-
-    raise ConfigurationError(f"Database connection failed: {connection_errors[-1]}")
-
-
-def shutdown_db_pool() -> None:
-    if _db_pool:
-        _db_pool.closeall()
-    if _ssh_tunnel:
-        _ssh_tunnel.stop()
-    logger.info("chatbot_db_pool_shutdown")
-
-
-def _log_chatbot(query: str, mode: str, response: str, url: Optional[str], cache_hit: bool, latency_ms: int) -> None:
-    if _db_pool is None:
-        return
-    conn = None
-    try:
-        conn = _db_pool.getconn()
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO chatbot_logs (query, mode, response, url, cache_hit, latency_ms)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (query, mode, response, url, cache_hit, latency_ms),
-                )
-    except Exception as exc:
-        logger.warning("chatbot_log_write_failed: %s", exc, exc_info=True)
-    finally:
-        if conn and _db_pool:
-            _db_pool.putconn(conn)
 
 
 def _log_tool_route(user_text: str, mode: str, stage: str, result: ToolResult) -> None:
@@ -187,56 +67,6 @@ def _log_tool_route(user_text: str, mode: str, stage: str, result: ToolResult) -
         bool(result.text.strip()),
         result.reason,
     )
-
-
-def _get_oss_client() -> OpenAI:
-    global _client
-    if _client is not None:
-        return _client
-
-    with _client_lock:
-        if _client is None:
-            if not settings.oss_api_key or not settings.oss_model:
-                raise ConfigurationError("OSS_API_KEY and OSS_MODEL are required")
-            client_kwargs = {"api_key": settings.oss_api_key}
-            if settings.oss_base_url:
-                client_kwargs["base_url"] = settings.oss_base_url
-            _client = OpenAI(**client_kwargs)
-            logger.info("oss_client_initialized base_url=%s", bool(settings.oss_base_url))
-    return _client
-
-
-def call_oss(messages: list[dict[str, str]], **kwargs) -> str:
-    if not any(message.get("role") == "system" for message in messages):
-        messages = [{
-            "role": "system",
-            "content": (
-                "Reasoning: low\n한국어로 단 한 문장으로만 답하라.\n"
-                "연락처/전화/번호/문의 요청이 없는 한 전화번호나 이메일, URL을 임의로 만들지 말고 포함하지 마라.\n"
-                "모르면 모른다고 답하라."
-            ),
-        }] + messages
-    try:
-        client = _get_oss_client()
-    except ConfigurationError:
-        raise
-    try:
-        response = _get_oss_client().chat.completions.create(
-            model=settings.oss_model,
-            messages=messages,
-            temperature=kwargs.get("temperature", 0.3),
-            max_tokens=kwargs.get("max_tokens", 64),
-            timeout=kwargs.get("timeout", 45),
-        )
-        return (response.choices[0].message.content or "").strip()
-    except Exception:
-        logger.warning("oss_call_failed", exc_info=True)
-        return ""
-
-
-async def call_oss_async(messages: list[dict[str, str]], **kwargs) -> str:
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_oss_executor, partial(call_oss, messages, **kwargs))
 
 
 async def should_block_profanity(user_text: str) -> bool:
@@ -295,7 +125,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
 
     if await should_block_profanity(user_text):
         latency = int((time.monotonic() - start) * 1000)
-        _log_executor.submit(_log_chatbot, user_text, "guard", PROFANITY_GUARD_TEXT, None, False, latency)
+        log_chatbot(user_text, "guard", PROFANITY_GUARD_TEXT, None, False, latency)
         return {"engine": "guard", "text": PROFANITY_GUARD_TEXT}
 
     if GOVERNANCE_REMOVE_RE.search(user_text) and GOVERNANCE_TARGET_RE.search(user_text):
@@ -320,7 +150,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
         if cached is not None:
             latency = int((time.monotonic() - start) * 1000)
             response = dict(cached)
-            _log_executor.submit(_log_chatbot, user_text, mode, response.get("text", ""), response.get("url"), True, latency)
+            log_chatbot(user_text, mode, response.get("text", ""), response.get("url"), True, latency)
             return response
 
     def cache_and_return(response: dict) -> dict:
@@ -329,7 +159,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
             with _cache_lock:
                 cache[cache_key] = response
         latency = int((time.monotonic() - start) * 1000)
-        _log_executor.submit(_log_chatbot, user_text, mode, response.get("text", ""), response.get("url"), False, latency)
+        log_chatbot(user_text, mode, response.get("text", ""), response.get("url"), False, latency)
         return response
 
     if mode == "rule_book":
@@ -379,7 +209,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
                 output = scrub_non_contact(output)
             if output:
                 latency = int((time.monotonic() - start) * 1000)
-                _log_executor.submit(_log_chatbot, user_text, "oss", output, None, False, latency)
+                log_chatbot(user_text, "oss", output, None, False, latency)
                 return {"engine": "oss", "text": output}
 
             fallback = run_empty_oss_fallback_tools(user_text)
@@ -387,13 +217,13 @@ async def chat_with_oss(req: ChatReq) -> dict:
             if fallback.handled:
                 response = fallback.to_response()
                 latency = int((time.monotonic() - start) * 1000)
-                _log_executor.submit(_log_chatbot, user_text, response["engine"], response["text"], response.get("url"), False, latency)
+                log_chatbot(user_text, response["engine"], response["text"], response.get("url"), False, latency)
                 return response
 
             if len(user_text) <= 2 or GREETING_RE.search(user_text):
                 latency = int((time.monotonic() - start) * 1000)
                 output = "안녕하세요, 무엇을 도와드릴까요?"
-                _log_executor.submit(_log_chatbot, user_text, "greet", output, None, False, latency)
+                log_chatbot(user_text, "greet", output, None, False, latency)
                 return {"engine": "greet", "text": output}
 
             return cache_and_return({
@@ -411,7 +241,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
             if fallback.handled:
                 response = fallback.to_response()
                 latency = int((time.monotonic() - start) * 1000)
-                _log_executor.submit(_log_chatbot, user_text, response["engine"], response["text"], response.get("url"), False, latency)
+                log_chatbot(user_text, response["engine"], response["text"], response.get("url"), False, latency)
                 return response
 
             if len(user_text) <= 2 or GREETING_RE.search(user_text):
@@ -419,7 +249,7 @@ async def chat_with_oss(req: ChatReq) -> dict:
 
         if output:
             latency = int((time.monotonic() - start) * 1000)
-            _log_executor.submit(_log_chatbot, user_text, "oss", output, None, False, latency)
+            log_chatbot(user_text, "oss", output, None, False, latency)
             return {"engine": "oss", "text": output}
         
         if grounded_fallback is not None and not grounded_fallback.text.strip():
@@ -450,5 +280,5 @@ async def chat_with_oss(req: ChatReq) -> dict:
         fused = text if looks_like_topic(user_text) else "좋아요, 무엇을 이야기해 볼까요?"
 
     latency = int((time.monotonic() - start) * 1000)
-    _log_executor.submit(_log_chatbot, user_text, mode, fused, None, False, latency)
+    log_chatbot(user_text, mode, fused, None, False, latency)
     return {"engine": mode, "text": fused}
