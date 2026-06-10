@@ -86,9 +86,6 @@ def load_embeddings(path: Path) -> np.ndarray:
 
 
 def load_bm25(path: Path, tok_path: Path, search_df: pd.DataFrame, tokenizer) -> BM25Okapi:
-    if path.exists():
-        with open(path, "rb") as f:
-            return pickle.load(f)
 
     if tok_path.exists():
         logger.warning(
