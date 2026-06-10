@@ -1,3 +1,4 @@
+import logging
 import os
 import pickle
 from dataclasses import dataclass
@@ -14,6 +15,8 @@ from LLM.sub_model.index_utils import get_tokenizer, load_json_gz
 from LLM.sub_model.query_index_schema import normalize_search_df_schema
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 THIS_DIR = Path(__file__).resolve().parent
 ROOT_DIR = THIS_DIR.parent.parent
@@ -88,8 +91,19 @@ def load_bm25(path: Path, tok_path: Path, search_df: pd.DataFrame, tokenizer) ->
             return pickle.load(f)
 
     if tok_path.exists():
+        logger.warning(
+            "query_index_bm25_pickle_missing fallback=tokenized_corpus bm25_file=%s tokenized_file=%s",
+            path.name,
+            tok_path.name,
+        )
         tokenized_corpus = load_json_gz(str(tok_path))
     else:
+        logger.warning(
+            "query_index_bm25_pickle_missing fallback=runtime_tokenize bm25_file=%s tokenized_file=%s documents=%s",
+            path.name,
+            tok_path.name,
+            len(search_df),
+        )
         tokenized_corpus = [
             tokenizer(t)
             for t in search_df["text_for_bm25"].astype(str).tolist()
