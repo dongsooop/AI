@@ -89,6 +89,7 @@
 │   │       └── __init__.py
 │   ├── sub_model/
 │   │   ├── query_index.py          # 하이브리드 검색
+│   │   ├── query_index_loader.py   # 검색 인덱스 환경 경로 해석 및 아티팩트 로딩
 │   │   ├── schedule_index.py       # 학사일정 인덱싱
 │   │   ├── schedule_rules.py       # 학사일정 태그/검색 키워드 규칙
 │   │   ├── index_utils.py          # 한국어 NLP/청킹 유틸
@@ -177,6 +178,7 @@
 - 문서는 `intro`, `department`, `policy`, `history`, `privacy`, `contact`, `table_like`, `page` 같은 검색용 타입으로 분류합니다.
 - `build_index.py`는 `chunk_document()` 결과를 사용해 `text_for_embedding`, `text_for_bm25`, `text_for_answer`를 분리 저장합니다.
 - `search_df.parquet`에는 `breadcrumb`, `leaf_title`, `section_title`, `has_phone`, `has_date`, `has_credit`, `has_policy_keyword`, `is_privacy_old` 같은 메타데이터를 함께 저장합니다.
+- `query_index_loader.py`는 환경변수 기반 경로 해석, 검색 아티팩트 로딩, BM25 fallback 생성을 담당합니다.
 - `query_index.py`는 기존 `build_answer()` 인터페이스를 유지하되, 새 컬럼이 있으면 메타데이터 기반 가중치와 답변용 본문을 우선 사용하고 구버전 아티팩트에는 `text` 기반으로 fallback 합니다.
 - `model/artifacts/` 아래 파일은 생성 산출물이므로 직접 편집하지 않고 `LLM/sub_model/build_index.py`로 재생성합니다.
 

@@ -1,6 +1,9 @@
-import os, re, json, pickle, numpy as np, pandas as pd
-from pathlib import Path
+import re
 from functools import lru_cache
+
+import numpy as np
+import pandas as pd
+
 from LLM.patterns import (
     BOARD_URL_PATTERN,
     DASH_CHARS_PATTERN,
@@ -16,17 +19,7 @@ from LLM.patterns import (
     UNIT_QUERY_SUFFIX_PATTERN,
     UNIT_SUFFIX_RE,
 )
-from sentence_transformers import SentenceTransformer
-from rank_bm25 import BM25Okapi
-from LLM.sub_model.index_utils import get_tokenizer, load_json_gz  # 서버용
-from LLM.sub_model.query_index_schema import normalize_search_df_schema
-# from index_utils import get_tokenizer, load_json_gz
-from dotenv import load_dotenv
-
-load_dotenv()
-
-THIS_DIR = Path(__file__).resolve().parent
-ROOT_DIR = THIS_DIR.parent.parent
+from LLM.sub_model.query_index_loader import load_query_index_resources
 
 # 졸업학점 관련 키워드 복원 (학교 기본 정보 포함)
 GRAD_KWS = ["졸업학점", "졸업 학점", "졸업요건", "졸업요구학점", "이수학점", "졸업 이수학점"]
@@ -449,55 +442,25 @@ def _extract_3yr_from_tables(text: str):
             out["major_min"] = {"old": old_v, "new": new_v}
     return out
 
-def env_path(name: str) -> Path:
-    val = os.getenv(name, "").strip()
-    if not val:
-        raise FileNotFoundError(f"{name} environment empty.")
-    s = os.path.expandvars(val)
-    p = Path(s)
-    if not p.is_absolute():
-        p = (ROOT_DIR / p)
-    return p.resolve()
-
-def load_list_from_txt(path: Path) -> list:
-    with open(path, "r", encoding="utf-8") as f:
-        return [line.strip() for line in f if line.strip()]
-
-DATA_JSON        = env_path("DATA_JSON")
-ART_DIR          = env_path("ART_DIR")
-SEARCH_DF_PATH   = env_path("SEARCH_DF_PATH")
-EMB_PATH         = env_path("EMB_PATH")
-BM25_PATH        = env_path("BM25_PATH")
-TOK_PATH         = env_path("TOK_PATH")
-CONTACTS_CSV     = env_path("CONTACTS_CSV")
-META_PATH        = env_path("META_PATH")
-CONTACT_KWS      = load_list_from_txt(env_path("CONTACT_KWS_PATH"))
-
-embeddings = np.load(EMB_PATH, mmap_mode="r").astype(np.float32)
-row_norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-row_norms[row_norms == 0] = 1.0
-embeddings = embeddings / row_norms
+_index_resources = load_query_index_resources()
+DATA_JSON        = _index_resources.paths.data_json
+ART_DIR          = _index_resources.paths.art_dir
+SEARCH_DF_PATH   = _index_resources.paths.search_df_path
+EMB_PATH         = _index_resources.paths.emb_path
+BM25_PATH        = _index_resources.paths.bm25_path
+TOK_PATH         = _index_resources.paths.tok_path
+CONTACTS_CSV     = _index_resources.paths.contacts_csv
+META_PATH        = _index_resources.paths.meta_path
+CONTACT_KWS      = _index_resources.contact_kws
+embeddings       = _index_resources.embeddings
 
 UNIT_TOK_RE = re.compile(HANGUL_TOKEN_PATTERN)
 
-model_name = "intfloat/multilingual-e5-base"
-model = SentenceTransformer(model_name)
-
-search_df = normalize_search_df_schema(pd.read_parquet(SEARCH_DF_PATH))
-
-tokenize_kor = get_tokenizer()
-
-if BM25_PATH.exists():
-    with open(BM25_PATH, 'rb') as f:
-        bm25 = pickle.load(f)
-else:
-    if TOK_PATH.exists():
-        tokenized_courpus = load_json_gz(str(TOK_PATH))
-    else:
-        tokenized_courpus = [tokenize_kor(t) for t in search_df["text_for_bm25"].astype(str).tolist()]
-    bm25 = BM25Okapi(tokenized_courpus)
-
-
+model_name   = _index_resources.model_name
+model        = _index_resources.model
+search_df    = _index_resources.search_df
+tokenize_kor = _index_resources.tokenizer
+bm25         = _index_resources.bm25
 
 @lru_cache(maxsize=512)
 def embed_query(q: str):
