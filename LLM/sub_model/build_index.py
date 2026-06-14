@@ -325,12 +325,13 @@ ART_DIR.mkdir(parents=True, exist_ok=True)
 
 search_df.to_parquet(SEARCH_DF_PATH, index=False)
 np.save(EMB_PATH, embeddings)
+dump_json_gz(tokenized_corpus, str(TOK_PATH))
 
 try:
     with open(BM25_PATH, "wb") as f:
         pickle.dump(bm25, f, protocol=pickle.HIGHEST_PROTOCOL)
-except Exception:
-    dump_json_gz(tokenized_corpus, str(TOK_PATH))
+except Exception as exc:
+    print(f"⚠️ BM25 pickle 저장 실패(토큰 코퍼스는 저장됨): {exc}")
 
 if not contact_docs.empty:
     contact_docs.to_csv(CONTACTS_CSV, index=False, encoding="utf-8-sig")
@@ -348,6 +349,7 @@ meta = {
         "search_df": str(SEARCH_DF_PATH),
         "embeddings": str(EMB_PATH),
         "bm25": str(BM25_PATH),
+        "tokenized_corpus": str(TOK_PATH),
         "tokens_backup": str(TOK_PATH),
         "contacts_csv": str(CONTACTS_CSV),
     }
@@ -360,5 +362,6 @@ print(f"✅ 학교 기본 정보 인덱스 구축 완료 → {ART_DIR}")
 print(f"   - search_df : {SEARCH_DF_PATH.name}")
 print(f"   - embeddings: {EMB_PATH.name}")
 print(f"   - bm25      : {BM25_PATH.name}")
+print(f"   - tokens    : {TOK_PATH.name}")
 if not contact_docs.empty:
     print(f"   - contacts  : {CONTACTS_CSV.name}")

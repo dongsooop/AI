@@ -1,6 +1,5 @@
 import logging
 import os
-import pickle
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -89,14 +88,14 @@ def load_bm25(path: Path, tok_path: Path, search_df: pd.DataFrame, tokenizer) ->
 
     if tok_path.exists():
         logger.warning(
-            "query_index_bm25_pickle_missing fallback=tokenized_corpus bm25_file=%s tokenized_file=%s",
+            "query_index_bm25_rebuild fallback=tokenized_corpus bm25_file=%s tokenized_file=%s",
             path.name,
             tok_path.name,
         )
         tokenized_corpus = load_json_gz(str(tok_path))
     else:
         logger.warning(
-            "query_index_bm25_pickle_missing fallback=runtime_tokenize bm25_file=%s tokenized_file=%s documents=%s",
+            "query_index_bm25_rebuild fallback=runtime_tokenize bm25_file=%s tokenized_file=%s documents=%s",
             path.name,
             tok_path.name,
             len(search_df),
