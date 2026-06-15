@@ -142,6 +142,20 @@ async def start_queue_workers() -> None:
     logger.info("timetable_workers_started concurrency=%d", _WORKER_CONCURRENCY)
 
 
+def get_timetable_readiness() -> dict[str, object]:
+    running_workers = sum(1 for task in _WORKER_TASKS if not task.done())
+    ready = bool(SPRING_TIMETABLE_URL) and running_workers >= _WORKER_CONCURRENCY
+    return {
+        "status": "ready" if ready else "not_ready",
+        "required": True,
+        "spring_url_configured": bool(SPRING_TIMETABLE_URL),
+        "workers_expected": _WORKER_CONCURRENCY,
+        "workers_running": running_workers,
+        "queue_size": _job_queue.qsize(),
+        "queue_max_size": _job_queue.maxsize,
+    }
+
+
 async def enqueue_timetable_analysis(request: Request, file: UploadFile, user_id: str):
     if user_id in _active_users:
         raise ServiceUnavailableError("Already processing", code="timetable_already_processing")

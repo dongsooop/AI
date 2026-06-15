@@ -45,6 +45,27 @@ def load_english_bad_words(file_path: Path) -> set[str]:
 ENGLISH_BAD_WORDS = load_english_bad_words(ENGLISH_BAD_WORDS_PATH)
 
 
+def get_text_filter_readiness() -> dict[str, object]:
+    required_files = [
+        MODEL_PATH / "config.json",
+        MODEL_PATH / "tokenizer_config.json",
+        MODEL_PATH / "vocab.txt",
+    ]
+    has_model_weights = (MODEL_PATH / "model.safetensors").exists() or (MODEL_PATH / "pytorch_model.bin").exists()
+    missing = [str(path) for path in required_files if not path.exists()]
+    if not has_model_weights:
+        missing.append(str(MODEL_PATH / "model.safetensors|pytorch_model.bin"))
+
+    ready = not missing and ENGLISH_BAD_WORDS_PATH.exists()
+    return {
+        "status": "ready" if ready else "not_ready",
+        "required": True,
+        "model_path": str(MODEL_PATH),
+        "missing_files": missing,
+        "english_dictionary": ENGLISH_BAD_WORDS_PATH.exists(),
+    }
+
+
 def get_device() -> torch.device:
     if torch.backends.mps.is_available():
         return torch.device("mps")
