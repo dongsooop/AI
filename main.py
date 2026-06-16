@@ -23,6 +23,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 MAX_FILE_SIZE = 3 * 1024 * 1024
+READY_RESPONSES = {
+    200: {"description": "Service dependencies are ready"},
+    503: {"description": "One or more service dependencies are not ready"},
+}
+
 
 @app.middleware("http")
 async def limit_upload_size(request: Request, call_next):
@@ -42,7 +47,7 @@ async def health():
     return {"status": "ok"}
 
 
-@app.get("/ready")
+@app.get("/ready", responses=READY_RESPONSES)
 async def ready():
     components = {
         "text_filter": get_text_filter_readiness(),
@@ -55,6 +60,7 @@ async def ready():
     }
     status_code = status.HTTP_200_OK if is_ready else status.HTTP_503_SERVICE_UNAVAILABLE
     return JSONResponse(status_code=status_code, content=payload)
+
 
 # 라우터 등록
 app.include_router(text_filter_router)

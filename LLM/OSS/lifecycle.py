@@ -41,23 +41,28 @@ async def startup_chatbot_runtime() -> None:
 
 
 def shutdown_chatbot_runtime() -> None:
-    global _startup_complete
+    global _startup_complete, _startup_error_code, _log_db_error_code
     shutdown_db_pool()
     _startup_complete = False
+    _startup_error_code = None
+    _log_db_error_code = None
 
 
 def get_chatbot_runtime_readiness() -> dict[str, object]:
     components: dict[str, dict[str, object]] = {}
 
     rule_index = get_index()
-    rule_book_ready = bool(getattr(rule_index, "_built", False)) and bool(rule_index.chunks)
+    rule_book_chunks = getattr(rule_index, "chunks", None) or []
+    rule_book_ready = bool(getattr(rule_index, "_built", False)) and bool(rule_book_chunks)
     components["rule_book"] = {
         "status": "ready" if rule_book_ready else "not_ready",
         "required": True,
-        "chunks": len(rule_index.chunks),
+        "chunks": len(rule_book_chunks),
     }
 
     try:
+        # Keep this lazy import here: LLM.OSS.tools imports query_index during normal
+        # request routing, while readiness must tolerate import/runtime failures.
         from LLM.sub_model import query_index
 
         search_rows = len(query_index.search_df)
