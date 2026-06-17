@@ -2,9 +2,6 @@ name: RAG Full Evaluation
 
 on:
   workflow_dispatch:
-  schedule:
-    # GitHub cron is UTC. This runs at 23:00 KST on the 20th of every month.
-    - cron: "0 14 20 * *"
 
 permissions:
   contents: read
@@ -20,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           clean: false
           persist-credentials: false
@@ -66,7 +63,6 @@ jobs:
             echo "## RAG Full Evaluation"
             echo ""
             echo "- Triggered by: \`${{ github.event_name }}\`"
-            echo "- Schedule: monthly on the 20th at 23:00 KST"
             echo "- Runner: self-hosted"
             echo "- Local full report: \`$RAG_EVAL_REPORT_PATH\`"
             echo "- Uploaded summary: \`$RAG_EVAL_SUMMARY_PATH\`"
@@ -125,7 +121,7 @@ jobs:
 
       - name: Upload sanitized RAG summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: "rag-eval-summary-${{ steps.report-paths.outputs.report_date }}"
           path: "${{ steps.report-paths.outputs.summary_path }}"
