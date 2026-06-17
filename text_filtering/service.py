@@ -43,6 +43,38 @@ def load_english_bad_words(file_path: Path) -> set[str]:
 
 
 ENGLISH_BAD_WORDS = load_english_bad_words(ENGLISH_BAD_WORDS_PATH)
+_text_filter_ready_cache: dict[str, object] | None = None
+
+
+def get_text_filter_readiness() -> dict[str, object]:
+    global _text_filter_ready_cache
+    if _text_filter_ready_cache and _text_filter_ready_cache["status"] == "ready":
+        return _text_filter_ready_cache
+
+    required_files = [
+        MODEL_PATH / "config.json",
+        MODEL_PATH / "tokenizer_config.json",
+        MODEL_PATH / "vocab.txt",
+    ]
+    model_weight_candidates = [
+        MODEL_PATH / "model.safetensors",
+        MODEL_PATH / "pytorch_model.bin",
+    ]
+    model_weights_found = any(path.exists() for path in model_weight_candidates)
+    missing = [str(path) for path in required_files if not path.exists()]
+
+    ready = not missing and model_weights_found and ENGLISH_BAD_WORDS_PATH.exists()
+    result = {
+        "status": "ready" if ready else "not_ready",
+        "required": True,
+        "model_path": str(MODEL_PATH),
+        "missing_files": missing,
+        "model_weights_found": model_weights_found,
+        "model_weight_candidates": [str(path) for path in model_weight_candidates],
+        "english_dictionary": ENGLISH_BAD_WORDS_PATH.exists(),
+    }
+    _text_filter_ready_cache = result
+    return result
 
 
 def get_device() -> torch.device:

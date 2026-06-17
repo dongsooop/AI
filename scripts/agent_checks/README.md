@@ -26,6 +26,12 @@ Inspect committed branch changes against a base ref:
 python scripts/agent_checks/run_agent_preflight.py --base main
 ```
 
+Allow advisory warnings while still failing execution errors:
+
+```bash
+python scripts/agent_checks/run_agent_preflight.py --base main --warnings-ok
+```
+
 The same target options are supported by individual check scripts.
 
 ## Exit Codes
@@ -37,3 +43,4 @@ The same target options are supported by individual check scripts.
 | `2` | A check could not run because of an execution error. |
 
 Warnings are advisory. Review the output and decide whether the branch needs changes before publishing.
+Use `--warnings-ok` for lightweight CI gates that should display advisory warnings without blocking the PR.

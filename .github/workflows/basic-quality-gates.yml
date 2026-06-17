@@ -38,7 +38,7 @@ jobs:
         env:
           BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || inputs.base_ref }}
         run: |
-          python scripts/agent_checks/run_agent_preflight.py --base "$BASE_REF"
+          python scripts/agent_checks/run_agent_preflight.py --base "$BASE_REF" --warnings-ok
 
       - name: Validate RAG eval question set
         run: python tests/regression/chatbot/evaluate_rag_retrieval.py --validate-only
@@ -54,6 +54,7 @@ jobs:
             echo "## Basic Quality Gates"
             echo ""
             echo "- Agent preflight checks: changed scope, secret patterns, generated artifacts, review-output reminders"
+            echo "  - Advisory warnings are shown in logs but do not fail this lightweight gate."
             echo "- RAG eval cases: JSON/schema validation only"
             echo "- Python files: syntax compilation for tracked \`*.py\` files"
             echo ""

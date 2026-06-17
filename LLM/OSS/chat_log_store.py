@@ -106,6 +106,10 @@ def shutdown_db_pool() -> None:
     logger.info("chatbot_db_pool_shutdown")
 
 
+def is_db_pool_initialized() -> bool:
+    return _db_pool is not None
+
+
 def _write_chatbot_log(
     query: str,
     mode: str,

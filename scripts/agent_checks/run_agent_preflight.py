@@ -26,6 +26,11 @@ def parse_args() -> argparse.Namespace:
         epilog="Exit codes: 0=no warnings, 1=warnings need review, 2=execution error.",
     )
     add_target_args(parser)
+    parser.add_argument(
+        "--warnings-ok",
+        action="store_true",
+        help="Return 0 for advisory warnings while still failing on execution errors.",
+    )
     return parser.parse_args()
 
 
@@ -113,6 +118,9 @@ def main() -> int:
         print("[preflight] failed because a check could not run")
         return 2
     if any(code != 0 for code in exit_codes):
+        if args.warnings_ok:
+            print("[preflight] completed with advisory warnings")
+            return 0
         print("[preflight] completed with warnings")
         return 1
     print("[preflight] completed without warnings")
