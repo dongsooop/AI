@@ -13,6 +13,7 @@ __pycache__
 hs_err_pid*.log
 tests/regression/**/reports/
 tests/reports/**/*.json
+!tests/reports/chatbot/*-rag_eval_summary.json
 
 # Local dependencies
 requirements.txt

@@ -1,0 +1,128 @@
+name: RAG Full Evaluation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rag-full-evaluation
+  cancel-in-progress: false
+
+jobs:
+  rag-full-evaluation:
+    runs-on: self-hosted
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          clean: false
+          persist-credentials: false
+
+      - name: Prepare report paths
+        id: report-paths
+        run: |
+          report_date="$(TZ=Asia/Seoul date +%F)"
+          report_path="tests/reports/chatbot/rag_eval_report.json"
+          summary_path="tests/reports/chatbot/${report_date}-rag_eval_summary.json"
+
+          mkdir -p tests/reports/chatbot
+          rm -f "$report_path" "$summary_path"
+
+          echo "RAG_EVAL_REPORT_DATE=$report_date" >> "$GITHUB_ENV"
+          echo "RAG_EVAL_REPORT_PATH=$report_path" >> "$GITHUB_ENV"
+          echo "RAG_EVAL_SUMMARY_PATH=$summary_path" >> "$GITHUB_ENV"
+          echo "report_date=$report_date" >> "$GITHUB_OUTPUT"
+          echo "summary_path=$summary_path" >> "$GITHUB_OUTPUT"
+
+      - name: Check self-hosted RAG prerequisites
+        env:
+          RAG_EVAL_CONDA_ENV: dl_study
+        run: |
+          command -v conda
+          conda run -n "$RAG_EVAL_CONDA_ENV" python --version
+
+          test -f model/artifacts/search_df.parquet
+          test -f model/artifacts/embeddings.npy
+          test -f model/artifacts/bm25.pkl
+          test -f model/artifacts/tokenized_corpus.json.gz
+          test -f model/artifacts/contact_docs.csv
+
+      - name: Run full RAG evaluation
+        env:
+          RAG_EVAL_CONDA_ENV: dl_study
+        run: bash scripts/check_rag_eval.sh
+
+      - name: Write sanitized report summary
+        if: always()
+        run: |
+          {
+            echo "## RAG Full Evaluation"
+            echo ""
+            echo "- Triggered by: \`${{ github.event_name }}\`"
+            echo "- Runner: self-hosted"
+            echo "- Local full report: \`$RAG_EVAL_REPORT_PATH\`"
+            echo "- Uploaded summary: \`$RAG_EVAL_SUMMARY_PATH\`"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -f "$RAG_EVAL_REPORT_PATH" ]; then
+            python - "$RAG_EVAL_REPORT_PATH" "$RAG_EVAL_SUMMARY_PATH" "$RAG_EVAL_REPORT_DATE" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          report_path = Path(sys.argv[1])
+          summary_path = Path(sys.argv[2])
+          report_date = sys.argv[3]
+
+          with open(report_path, "r", encoding="utf-8") as f:
+              report = json.load(f)
+          summary = dict(report.get("summary", {}))
+          summary.pop("errors", None)
+
+          safe_report = {
+              "schema_version": 1,
+              "suite": "rag_retrieval_summary",
+              "service": "chatbot",
+              "report_date_kst": report_date,
+              "source_report": report_path.name,
+              "summary": summary,
+          }
+          summary_path.parent.mkdir(parents=True, exist_ok=True)
+          summary_path.write_text(json.dumps(safe_report, ensure_ascii=False, indent=2), encoding="utf-8")
+
+          fields = [
+              ("Total", "total"),
+              ("Passed", "passed"),
+              ("Failed", "failed"),
+              ("Pass rate", "pass_rate"),
+              ("Top3 URL accuracy", "top3_url_accuracy"),
+              ("Source URL pass rate", "source_url_pass_rate"),
+              ("Hallucination proxy rate", "hallucination_proxy_rate"),
+              ("Average retrieval latency ms", "avg_retrieval_latency_ms"),
+              ("P95 retrieval latency ms", "p95_retrieval_latency_ms"),
+          ]
+
+          print("| Metric | Value |")
+          print("| --- | ---: |")
+          for label, key in fields:
+              if key in summary:
+                  print(f"| {label} | {summary[key]} |")
+          print("")
+          print("Detailed queries and answers are kept only in the self-hosted runner workspace.")
+          PY
+          else
+            echo "RAG report was not generated." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload sanitized RAG summary
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: "rag-eval-summary-${{ steps.report-paths.outputs.report_date }}"
+          path: "${{ steps.report-paths.outputs.summary_path }}"
+          if-no-files-found: warn
