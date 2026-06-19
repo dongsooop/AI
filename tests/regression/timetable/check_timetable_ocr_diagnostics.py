@@ -185,7 +185,7 @@ def evaluate_case(case: Dict[str, Any], cv2, np, ocr_engine) -> Dict[str, Any]:
     ocr = diagnostics.get("ocr", {})
     metrics = {
         "grid_detection_success": grid_detection_success(grid, expected),
-        "extracted_course_count": diagnostics.get("schedule_count", 0),
+        "extracted_course_count": len(schedules),
         "empty_cell_ratio": empty_cell_ratio(ocr),
         "ocr_confidence": ocr.get("average_confidence"),
         "fallback_cell_count": ocr.get("fallback_cells", 0),
