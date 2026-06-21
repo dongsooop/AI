@@ -39,6 +39,18 @@ python tests/regression/timetable/check_timetable_ocr_diagnostics.py
 
 카테고리별 결과는 `summary.by_category`에 `passed`, `failed`, `pass_rate`와 함께 같은 제품 지표 일부를 저장합니다. 현재 RAG 평가는 `LLM.sub_model.query_index.build_answer()`와 `schedule_search()`를 직접 호출하므로, API/LLM 라우팅 전체의 거절 정책 평가는 별도 API 회귀 테스트에서 다룹니다.
 
+### Timetable OCR Diagnostics Metrics
+
+`tests/regression/timetable/check_timetable_ocr_diagnostics.py`는 `tests/regression/timetable/timetable_ocr_diagnostic_cases.json`의 케이스를 읽어 시간표 OCR 진단 리포트를 생성합니다.
+
+- `grid_detection_success_rate`: 케이스별 최소 격자 라인 기준을 통과한 비율
+- `extracted_course_count`: 추출된 시간표 항목 수
+- `average_empty_cell_ratio`: OCR 대상 셀 중 텍스트가 없는 셀 비율 평균
+- `average_ocr_confidence`: 진단 OCR confidence 평균
+- `fallback_cell_count`: fallback OCR 경로가 선택된 셀 수
+
+`cv2`, `pytesseract`, Tesseract 런타임이 없는 환경에서는 실패 대신 `status: "skipped"` 리포트를 기본 경로에 기록합니다.
+
 ## Common JSON Summary
 
 각 리포트는 가능한 한 아래 summary 형식을 따릅니다. 상세 지표는 suite마다 다를 수 있으므로 `metrics` 안에 둡니다.
@@ -54,8 +66,11 @@ python tests/regression/timetable/check_timetable_ocr_diagnostics.py
   "failed": 0,
   "skipped": 0,
   "metrics": {
-    "average_confidence": 87.33,
-    "fallback_cells": 1
+    "grid_detection_success_rate": 1.0,
+    "extracted_course_count": 4,
+    "average_empty_cell_ratio": 0.0,
+    "average_ocr_confidence": 87.33,
+    "fallback_cell_count": 78
   },
   "errors": []
 }

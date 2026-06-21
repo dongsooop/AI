@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "suite": "timetable_ocr_diagnostics",
+  "cases": [
+    {
+      "id": "synthetic_low_confidence_fallback",
+      "name": "Synthetic timetable grid with fallback OCR candidate",
+      "input": {
+        "type": "synthetic_grid",
+        "synthetic_grid": {
+          "width": 1000,
+          "height": 1600,
+          "x_start": 80,
+          "x_stop": 921,
+          "x_step": 140,
+          "x_end": 920,
+          "y_start": 80,
+          "y_stop": 1481,
+          "y_step": 100,
+          "y_end": 1480,
+          "line_thickness": 3,
+          "vertical_line_thickness": 1,
+          "horizontal_line_thickness": 3,
+          "horizontal_x_start": 0,
+          "horizontal_x_end": 999,
+          "label": {
+            "text": "class",
+            "x": 380,
+            "y": 410,
+            "scale": 1.0,
+            "thickness": 2
+          }
+        }
+      },
+      "mock_ocr": {
+        "primary": {
+          "lines": [
+            "자료구조"
+          ],
+          "confidence": [
+            42.0
+          ]
+        },
+        "fallback": {
+          "lines": [
+            "자료구조",
+            "김교수",
+            "B101"
+          ],
+          "confidence": [
+            87.0,
+            90.0,
+            85.0
+          ]
+        }
+      },
+      "expected": {
+        "min_x_lines": 3,
+        "min_y_lines": 3,
+        "min_extracted_course_count": 1,
+        "min_fallback_cell_count": 1,
+        "min_ocr_confidence": 80.0,
+        "max_empty_cell_ratio": 0.1
+      }
+    }
+  ]
+}
