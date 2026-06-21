@@ -1,0 +1,44 @@
+{
+  "cases": [
+    {
+      "id": "clear_korean_profanity_01",
+      "category": "clear_korean_profanity",
+      "text": "이런 씨발 같은 상황은 너무 화가 납니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "normal_sentence_01",
+      "category": "normal_sentence",
+      "text": "오늘 수업 자료를 확인하고 과제를 제출했습니다.",
+      "expected": {
+        "has_profanity": false
+      }
+    },
+    {
+      "id": "normal_sentence_02",
+      "category": "normal_sentence",
+      "text": "동아리 모집 안내를 보고 친구와 함께 신청했습니다.",
+      "expected": {
+        "has_profanity": false
+      }
+    },
+    {
+      "id": "english_profanity_01",
+      "category": "english_profanity",
+      "text": "That was a shit idea.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "korean_variant_spacing_01",
+      "category": "korean_variant_spacing",
+      "text": "시 발 이라고 띄어 써도 상대에게 불쾌감을 줄 수 있습니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    }
+  ]
+}
