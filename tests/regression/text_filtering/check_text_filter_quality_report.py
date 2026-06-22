@@ -206,11 +206,15 @@ def main() -> int:
     validation_errors = validate_cases(cases)
 
     if validation_errors:
+        failed_case_ids = {
+            (err.split(":", 1)[0] if ":" in err else err)
+            for err in validation_errors
+        }
         summary = make_summary(
             status="failed",
             total=len(cases),
             passed=0,
-            failed=len(validation_errors),
+            failed=len(failed_case_ids),
             skipped=0,
             metrics={},
             errors=validation_errors,
