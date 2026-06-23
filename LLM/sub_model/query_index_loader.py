@@ -43,6 +43,7 @@ class QueryIndexResources:
     search_df: pd.DataFrame
     tokenizer: Callable[[str], list[str]]
     bm25: BM25Okapi
+    bm25_fallback_tier: str
     model_name: str
     model: SentenceTransformer
 
@@ -84,9 +85,14 @@ def load_embeddings(path: Path) -> np.ndarray:
     return embeddings / row_norms
 
 
+def resolve_bm25_fallback_tier(tok_path: Path) -> str:
+    return "tokenized_corpus" if tok_path.exists() else "runtime_tokenize"
+
+
 def load_bm25(path: Path, tok_path: Path, search_df: pd.DataFrame, tokenizer) -> BM25Okapi:
 
-    if tok_path.exists():
+    fallback_tier = resolve_bm25_fallback_tier(tok_path)
+    if fallback_tier == "tokenized_corpus":
         logger.warning(
             "query_index_bm25_rebuild fallback=tokenized_corpus bm25_file=%s tokenized_file=%s",
             path.name,
@@ -122,6 +128,7 @@ def load_query_index_resources(
         search_df=search_df,
         tokenizer=tokenizer,
         bm25=load_bm25(paths.bm25_path, paths.tok_path, search_df, tokenizer),
+        bm25_fallback_tier=resolve_bm25_fallback_tier(paths.tok_path),
         model_name=model_name,
         model=SentenceTransformer(model_name),
     )

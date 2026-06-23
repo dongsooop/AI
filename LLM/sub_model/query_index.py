@@ -1,9 +1,17 @@
 import re
+import time
 from functools import lru_cache
 
 import numpy as np
 import pandas as pd
 
+from core.logging import (
+    RuntimeComponent,
+    RuntimeOperation,
+    RuntimeStatus,
+    get_logger,
+    runtime_log_message,
+)
 from LLM.patterns import (
     BOARD_URL_PATTERN,
     DASH_CHARS_PATTERN,
@@ -20,6 +28,9 @@ from LLM.patterns import (
     UNIT_SUFFIX_RE,
 )
 from LLM.sub_model.query_index_loader import load_query_index_resources
+
+
+logger = get_logger(__name__)
 
 # 졸업학점 관련 키워드 복원 (학교 기본 정보 포함)
 GRAD_KWS = ["졸업학점", "졸업 학점", "졸업요건", "졸업요구학점", "이수학점", "졸업 이수학점"]
@@ -461,6 +472,7 @@ model        = _index_resources.model
 search_df    = _index_resources.search_df
 tokenize_kor = _index_resources.tokenizer
 bm25         = _index_resources.bm25
+bm25_fallback_tier = _index_resources.bm25_fallback_tier
 
 @lru_cache(maxsize=512)
 def embed_query(q: str):
@@ -474,54 +486,90 @@ def _minmax(x):
 # 최신성 점수 함수 제거됨 (학교 기본 정보만 제공)
 
 def hybrid_search(query, top_k=8, alpha=DEFAULT_DENSE_WEIGHT, contact_boost=CONTACT_DOC_BOOST):
+    start = time.monotonic()
     query = _normalize_doit_query(query)
 
-    qv = embed_query(query)
-    dense_raw = embeddings @ qv
-    bm25_raw  = bm25.get_scores(tokenize_kor(query))
-    base = alpha * _minmax(dense_raw) + (1 - alpha) * _minmax(bm25_raw)
+    try:
+        qv = embed_query(query)
+        dense_raw = embeddings @ qv
+        bm25_raw  = bm25.get_scores(tokenize_kor(query))
+        base = alpha * _minmax(dense_raw) + (1 - alpha) * _minmax(bm25_raw)
 
-    bonus = np.zeros(len(search_df))
-    doc_type = search_df["doc_type"].astype(str)
-    query_text = query or ""
+        bonus = np.zeros(len(search_df))
+        doc_type = search_df["doc_type"].astype(str)
+        query_text = query or ""
 
-    if any(k in query_text for k in CONTACT_KWS):
-        is_contact = (doc_type == "contact").astype(float).to_numpy()
-        phone_text = search_df["phone"].astype(str).str.strip()
-        email_text = search_df["email"].astype(str).str.strip()
-        has_phone = (
-            search_df["has_phone"].astype(bool)
-            | (phone_text.ne("") & phone_text.ne("없음"))
-        ).astype(float).to_numpy()
-        has_email = (
-            search_df["has_email"].astype(bool)
-            | (email_text.ne("") & email_text.ne("없음"))
-        ).astype(float).to_numpy()
-        bonus = contact_boost * (is_contact + PHONE_EMAIL_BONUS_RATIO*has_phone + PHONE_EMAIL_BONUS_RATIO*has_email)
+        if any(k in query_text for k in CONTACT_KWS):
+            is_contact = (doc_type == "contact").astype(float).to_numpy()
+            phone_text = search_df["phone"].astype(str).str.strip()
+            email_text = search_df["email"].astype(str).str.strip()
+            has_phone = (
+                search_df["has_phone"].astype(bool)
+                | (phone_text.ne("") & phone_text.ne("없음"))
+            ).astype(float).to_numpy()
+            has_email = (
+                search_df["has_email"].astype(bool)
+                | (email_text.ne("") & email_text.ne("없음"))
+            ).astype(float).to_numpy()
+            bonus = contact_boost * (is_contact + PHONE_EMAIL_BONUS_RATIO*has_phone + PHONE_EMAIL_BONUS_RATIO*has_email)
 
-    if _looks_like_grad_query(query_text) or POLICY_QUERY_RE.search(query_text):
-        is_policy = doc_type.isin(["policy", "table_like"]).astype(float).to_numpy()
-        has_policy = search_df["has_policy_keyword"].astype(float).to_numpy()
-        has_credit = search_df["has_credit"].astype(float).to_numpy()
-        bonus += 0.08 * is_policy + 0.05 * has_policy + 0.12 * has_credit
+        if _looks_like_grad_query(query_text) or POLICY_QUERY_RE.search(query_text):
+            is_policy = doc_type.isin(["policy", "table_like"]).astype(float).to_numpy()
+            has_policy = search_df["has_policy_keyword"].astype(float).to_numpy()
+            has_credit = search_df["has_credit"].astype(float).to_numpy()
+            bonus += 0.08 * is_policy + 0.05 * has_policy + 0.12 * has_credit
 
-    if INTRO_QUERY_RE.search(query_text):
-        is_intro = doc_type.isin(["intro", "department", "history"]).astype(float).to_numpy()
-        bonus += 0.05 * is_intro
+        if INTRO_QUERY_RE.search(query_text):
+            is_intro = doc_type.isin(["intro", "department", "history"]).astype(float).to_numpy()
+            bonus += 0.05 * is_intro
 
-    if not PRIVACY_QUERY_RE.search(query_text):
-        is_privacy = doc_type.eq("privacy").astype(float).to_numpy()
-        is_old_privacy = search_df["is_privacy_old"].astype(float).to_numpy()
-        bonus -= 0.12 * is_privacy + 0.18 * is_old_privacy
+        if not PRIVACY_QUERY_RE.search(query_text):
+            is_privacy = doc_type.eq("privacy").astype(float).to_numpy()
+            is_old_privacy = search_df["is_privacy_old"].astype(float).to_numpy()
+            bonus -= 0.12 * is_privacy + 0.18 * is_old_privacy
 
-    scores = base + bonus
-    out = search_df.copy()
-    out["score"] = scores
-    if "url" in out.columns:
-        rep_idx = out.groupby(["url","doc_type"], dropna=False)["score"].idxmax()
-        out = out.loc[rep_idx]
-    out = out.sort_values(["score"], ascending=[False], na_position="last").head(top_k)
-    return out.reset_index(drop=True)
+        scores = base + bonus
+        out = search_df.copy()
+        out["score"] = scores
+        if "url" in out.columns:
+            rep_idx = out.groupby(["url","doc_type"], dropna=False)["score"].idxmax()
+            out = out.loc[rep_idx]
+        out = out.sort_values(["score"], ascending=[False], na_position="last").head(top_k)
+        result = out.reset_index(drop=True)
+    except Exception:
+        logger.info(
+            runtime_log_message(
+                "chatbot_retrieval_runtime",
+                component=RuntimeComponent.CHATBOT,
+                operation=RuntimeOperation.RETRIEVAL,
+                status=RuntimeStatus.FAILED,
+                duration_ms=int((time.monotonic() - start) * 1000),
+                result_count=0,
+                fallback=True,
+                fallback_reason="retrieval_exception",
+                error_code="retrieval_failed",
+                requested_top_k=top_k,
+                bm25_fallback_tier=bm25_fallback_tier,
+            )
+        )
+        raise
+
+    logger.info(
+        runtime_log_message(
+            "chatbot_retrieval_runtime",
+            component=RuntimeComponent.CHATBOT,
+            operation=RuntimeOperation.RETRIEVAL,
+            status=RuntimeStatus.SUCCESS,
+            duration_ms=int((time.monotonic() - start) * 1000),
+            result_count=len(result),
+            fallback=bm25_fallback_tier != "pickle",
+            fallback_reason=bm25_fallback_tier,
+            error_code=None,
+            requested_top_k=top_k,
+            bm25_fallback_tier=bm25_fallback_tier,
+        )
+    )
+    return result
 
 def build_answer(query, top_k=6):
     direct = _doit_direct_answer(query)

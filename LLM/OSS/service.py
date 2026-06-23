@@ -8,7 +8,13 @@ import httpx
 from cachetools import TTLCache
 from pydantic import BaseModel
 
-from core.logging import get_logger
+from core.logging import (
+    RuntimeComponent,
+    RuntimeOperation,
+    RuntimeStatus,
+    get_logger,
+    runtime_log_message,
+)
 from core.settings import get_settings
 from LLM.OSS.chat_log_store import log_chatbot
 from LLM.OSS.formatter import (
@@ -52,12 +58,23 @@ class ChatReq(BaseModel):
     engine: Optional[str] = None
 
 
+def _query_hash(user_text: str) -> str:
+    return hashlib.sha256((user_text or "").encode("utf-8")).hexdigest()[:12]
+
+
+def _elapsed_ms(start: float) -> int:
+    return int((time.monotonic() - start) * 1000)
+
+
+def _is_direct_answer_route(result: ToolResult | None) -> bool:
+    return bool(result and result.name in {"metadata_direct_answer", "confident_search_answer"})
+
+
 def _log_tool_route(user_text: str, mode: str, stage: str, result: ToolResult) -> None:
-    query_hash = hashlib.sha256((user_text or "").encode("utf-8")).hexdigest()[:12]
     logger.info(
         "chatbot_tool_route query_hash=%s mode=%s stage=%s tool=%s engine=%s confidence=%.2f "
         "llm_required=%s has_text=%s reason=%s",
-        query_hash,
+        _query_hash(user_text),
         mode,
         stage,
         result.name,
@@ -66,6 +83,40 @@ def _log_tool_route(user_text: str, mode: str, stage: str, result: ToolResult) -
         result.llm_required,
         bool(result.text.strip()),
         result.reason,
+    )
+
+
+def _log_chatbot_summary(
+    user_text: str,
+    start: float,
+    mode: str,
+    response: dict,
+    *,
+    cache_hit: bool = False,
+    direct_answer_route: bool = False,
+    fallback: bool = False,
+    fallback_reason: str | None = None,
+    status: RuntimeStatus = RuntimeStatus.SUCCESS,
+    error_code: str | None = None,
+) -> None:
+    text = str(response.get("text", "") or "")
+    logger.info(
+        runtime_log_message(
+            "chatbot_request_summary",
+            component=RuntimeComponent.CHATBOT,
+            operation=RuntimeOperation.REQUEST,
+            status=status,
+            duration_ms=_elapsed_ms(start),
+            result_count=1 if text else 0,
+            fallback=fallback,
+            fallback_reason=fallback_reason,
+            error_code=error_code,
+            query_hash=_query_hash(user_text),
+            mode=mode,
+            engine=response.get("engine", "none"),
+            cache_hit=cache_hit,
+            direct_answer_route=direct_answer_route,
+        )
     )
 
 
@@ -126,17 +177,23 @@ async def chat_with_oss(req: ChatReq) -> dict:
     if await should_block_profanity(user_text):
         latency = int((time.monotonic() - start) * 1000)
         log_chatbot(user_text, "guard", PROFANITY_GUARD_TEXT, None, False, latency)
-        return {"engine": "guard", "text": PROFANITY_GUARD_TEXT}
+        response = {"engine": "guard", "text": PROFANITY_GUARD_TEXT}
+        _log_chatbot_summary(user_text, start, "guard", response)
+        return response
 
     if GOVERNANCE_REMOVE_RE.search(user_text) and GOVERNANCE_TARGET_RE.search(user_text):
-        return {
+        response = {
             "engine": "guard",
             "text": "해당 요청은 도움을 드리기 어려워요; 공식 절차나 문의는 학생자치기구 페이지의 연락처를 이용해 주세요.",
         }
+        _log_chatbot_summary(user_text, start, "guard", response)
+        return response
 
     mode = req.engine or decide_mode(user_text)
     if mode == "oss" and len(compact_user_text) <= 2:
-        return {"engine": "greet", "text": "네, 무엇을 도와드릴까요?"}
+        response = {"engine": "greet", "text": "네, 무엇을 도와드릴까요?"}
+        _log_chatbot_summary(user_text, start, mode, response)
+        return response
     normalized = " ".join(user_text.strip().split())
     relative_date_scope = ""
     if looks_like_schedule(user_text) and any(keyword in user_text for keyword in RELATIVE_DATE_KEYWORDS):
@@ -151,46 +208,73 @@ async def chat_with_oss(req: ChatReq) -> dict:
             latency = int((time.monotonic() - start) * 1000)
             response = dict(cached)
             log_chatbot(user_text, mode, response.get("text", ""), response.get("url"), True, latency)
+            _log_chatbot_summary(user_text, start, mode, response, cache_hit=True)
             return response
 
-    def cache_and_return(response: dict) -> dict:
+    def cache_and_return(
+        response: dict,
+        *,
+        direct_answer_route: bool = False,
+        fallback: bool = False,
+        fallback_reason: str | None = None,
+    ) -> dict:
         if mode not in _CACHE_SKIP:
             cache = _CACHE_RULE_BOOK if mode == "rule_book" else _CACHE_GENERAL
             with _cache_lock:
                 cache[cache_key] = response
         latency = int((time.monotonic() - start) * 1000)
         log_chatbot(user_text, mode, response.get("text", ""), response.get("url"), False, latency)
+        _log_chatbot_summary(
+            user_text,
+            start,
+            mode,
+            response,
+            direct_answer_route=direct_answer_route,
+            fallback=fallback,
+            fallback_reason=fallback_reason,
+        )
         return response
 
     if mode == "rule_book":
         answer = await run_rule_book(user_text)
         return cache_and_return({"engine": "rule_book", "text": answer})
     if mode == "greet":
-        return {"engine": "greet", "text": "안녕하세요, 무엇을 도와드릴까요?"}
+        response = {"engine": "greet", "text": "안녕하세요, 무엇을 도와드릴까요?"}
+        _log_chatbot_summary(user_text, start, mode, response)
+        return response
     if mode == "whoami":
-        return {"engine": "whoami", "text": f"{settings.service_name}의 {settings.bot_name}입니다."}
+        response = {"engine": "whoami", "text": f"{settings.service_name}의 {settings.bot_name}입니다."}
+        _log_chatbot_summary(user_text, start, mode, response)
+        return response
     if mode == "relation":
-        return {
+        response = {
             "engine": "relation",
             "text": f"우리는 {settings.org_name} 정보를 함께 해결하는 대화 파트너이고, 저는 {settings.service_name}의 {settings.bot_name}입니다.",
         }
+        _log_chatbot_summary(user_text, start, mode, response)
+        return response
 
     tool_result = run_mode_tools(mode, user_text)
     _log_tool_route(user_text, mode, "mode_tools", tool_result)
     if tool_result.resolved:
-        return cache_and_return(tool_result.to_response())
+        return cache_and_return(tool_result.to_response(), direct_answer_route=_is_direct_answer_route(tool_result))
 
     grounded_fallback: ToolResult | None = None
     if mode == "oss":
         fast_path = run_oss_fast_path_tools(user_text)
         _log_tool_route(user_text, mode, "oss_fast_path", fast_path)
         if fast_path.resolved:
-            return cache_and_return(fast_path.to_response())
+            return cache_and_return(fast_path.to_response(), direct_answer_route=_is_direct_answer_route(fast_path))
 
         grounded_fallback = run_final_fallback_tools(mode, user_text)
         _log_tool_route(user_text, mode, "oss_grounded_fallback", grounded_fallback)
         if grounded_fallback.resolved:
-            return cache_and_return(grounded_fallback.to_response())
+            return cache_and_return(
+                grounded_fallback.to_response(),
+                direct_answer_route=_is_direct_answer_route(grounded_fallback),
+                fallback=True,
+                fallback_reason=grounded_fallback.reason,
+            )
 
         if grounded_fallback.llm_required and grounded_fallback.text.strip():
             output = await call_oss_async(
@@ -210,7 +294,16 @@ async def chat_with_oss(req: ChatReq) -> dict:
             if output:
                 latency = int((time.monotonic() - start) * 1000)
                 log_chatbot(user_text, "oss", output, None, False, latency)
-                return {"engine": "oss", "text": output}
+                response = {"engine": "oss", "text": output}
+                _log_chatbot_summary(
+                    user_text,
+                    start,
+                    mode,
+                    response,
+                    fallback=True,
+                    fallback_reason=grounded_fallback.reason,
+                )
+                return response
 
             fallback = run_empty_oss_fallback_tools(user_text)
             _log_tool_route(user_text, mode, "oss_grounded_empty_fallback", fallback)
@@ -218,18 +311,36 @@ async def chat_with_oss(req: ChatReq) -> dict:
                 response = fallback.to_response()
                 latency = int((time.monotonic() - start) * 1000)
                 log_chatbot(user_text, response["engine"], response["text"], response.get("url"), False, latency)
+                _log_chatbot_summary(
+                    user_text,
+                    start,
+                    mode,
+                    response,
+                    direct_answer_route=_is_direct_answer_route(fallback),
+                    fallback=True,
+                    fallback_reason=fallback.reason,
+                )
                 return response
 
             if len(user_text) <= 2 or GREETING_RE.search(user_text):
                 latency = int((time.monotonic() - start) * 1000)
                 output = "안녕하세요, 무엇을 도와드릴까요?"
                 log_chatbot(user_text, "greet", output, None, False, latency)
-                return {"engine": "greet", "text": output}
+                response = {"engine": "greet", "text": output}
+                _log_chatbot_summary(
+                    user_text,
+                    start,
+                    mode,
+                    response,
+                    fallback=True,
+                    fallback_reason="empty_llm_greeting",
+                )
+                return response
 
             return cache_and_return({
                 "engine": "oss",
                 "text": "관련 근거를 충분히 확인하지 못했어요. 질문을 조금 더 구체적으로 다시 입력해 주세요.",
-            })
+            }, fallback=True, fallback_reason="grounded_llm_empty")
 
         output = await call_oss_async(messages_for_oss)
         if not any(keyword in user_text for keyword in ("연락처", "전화", "번호", "문의")) and not any(keyword in user_text for keyword in COUNCIL_KWS):
@@ -242,6 +353,15 @@ async def chat_with_oss(req: ChatReq) -> dict:
                 response = fallback.to_response()
                 latency = int((time.monotonic() - start) * 1000)
                 log_chatbot(user_text, response["engine"], response["text"], response.get("url"), False, latency)
+                _log_chatbot_summary(
+                    user_text,
+                    start,
+                    mode,
+                    response,
+                    direct_answer_route=_is_direct_answer_route(fallback),
+                    fallback=True,
+                    fallback_reason=fallback.reason,
+                )
                 return response
 
             if len(user_text) <= 2 or GREETING_RE.search(user_text):
@@ -250,18 +370,32 @@ async def chat_with_oss(req: ChatReq) -> dict:
         if output:
             latency = int((time.monotonic() - start) * 1000)
             log_chatbot(user_text, "oss", output, None, False, latency)
-            return {"engine": "oss", "text": output}
+            response = {"engine": "oss", "text": output}
+            _log_chatbot_summary(
+                user_text,
+                start,
+                mode,
+                response,
+                fallback=output == "안녕하세요, 무엇을 도와드릴까요?",
+                fallback_reason="empty_llm_greeting" if output == "안녕하세요, 무엇을 도와드릴까요?" else None,
+            )
+            return response
         
         if grounded_fallback is not None and not grounded_fallback.text.strip():
             return cache_and_return({
                 "engine": "oss",
                 "text": "관련 근거를 충분히 확인하지 못했어요. 질문을 조금 더 구체적으로 다시 입력해주세요."
-            })
+            }, fallback=True, fallback_reason="empty_rag_context")
 
     fallback = grounded_fallback or run_final_fallback_tools(mode, user_text)
     _log_tool_route(user_text, mode, "final_fallback", fallback)
     if fallback.resolved:
-        return cache_and_return(fallback.to_response())
+        return cache_and_return(
+            fallback.to_response(),
+            direct_answer_route=_is_direct_answer_route(fallback),
+            fallback=True,
+            fallback_reason=fallback.reason,
+        )
 
     fused = await call_oss_async(
         [
@@ -281,4 +415,13 @@ async def chat_with_oss(req: ChatReq) -> dict:
 
     latency = int((time.monotonic() - start) * 1000)
     log_chatbot(user_text, mode, fused, None, False, latency)
-    return {"engine": mode, "text": fused}
+    response = {"engine": mode, "text": fused}
+    _log_chatbot_summary(
+        user_text,
+        start,
+        mode,
+        response,
+        fallback=True,
+        fallback_reason=fallback.reason if fallback else None,
+    )
+    return response
