@@ -4,6 +4,7 @@
 
 - `chatbot/`: OSS 챗봇, RAG 검색 품질, query-index 호환성, tool routing 회귀 테스트
 - `timetable/`: 시간표 OCR, 이미지 품질 진단, 셀/그리드 분석 회귀 테스트
+- `text_filtering/`: 텍스트 필터링 품질, 정상 문장 오탐/비속어 미탐 회귀 테스트
 
 대표 실행 명령:
 
@@ -12,6 +13,7 @@ python tests/regression/chatbot/evaluate_rag_retrieval.py --validate-only
 python tests/regression/chatbot/evaluate_rag_retrieval.py
 python tests/regression/chatbot/check_chatbot_tool_routing.py
 python tests/regression/timetable/check_timetable_ocr_diagnostics.py
+python tests/regression/text_filtering/check_text_filter_quality_report.py
 ```
 
 ## Evaluation Metrics Policy
@@ -50,6 +52,19 @@ python tests/regression/timetable/check_timetable_ocr_diagnostics.py
 - `fallback_cell_count`: fallback OCR 경로가 선택된 셀 수
 
 `cv2`, `pytesseract`, Tesseract 런타임이 없는 환경에서는 실패 대신 `status: "skipped"` 리포트를 기본 경로에 기록합니다.
+
+### Text Filtering Quality Metrics
+
+`tests/regression/text_filtering/check_text_filter_quality_report.py`는 `tests/regression/text_filtering/text_filter_quality_cases.json`의 케이스를 읽어 기존 텍스트 필터 판정 로직을 평가합니다.
+
+- `false_positive_count`: 정상 문장을 비속어로 판정한 케이스 수
+- `false_negative_count`: 비속어 문장을 정상으로 판정한 케이스 수
+- `pass_rate`: 전체 golden case 기대값과 실제 결과가 일치한 비율
+- `ml_filter_pass_rate`: 현재 ML 기반 판정 경로 기준 통과율
+- `rule_endpoint_pass_rate`: 현재 `/text_filter_rule` API 계약의 공유 판정 경로 기준 통과율
+
+이 스크립트는 `analyze_text_labels()`만 호출하므로 테스트 문장을 `data/bad_text_sample.txt`에 append하지 않습니다. 모델 파일 또는 의존성이 없는 환경에서는 실패 대신 `status: "skipped"` 리포트를 기본 경로에 기록합니다.
+기본 실행은 품질 리포트를 기록하고 종료 코드는 0으로 유지합니다. 품질 실패를 게이트로 쓰려면 `--strict`를 함께 사용합니다.
 
 ## Common JSON Summary
 
