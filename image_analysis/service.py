@@ -1,4 +1,5 @@
 import asyncio
+import time
 import uuid
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -19,9 +20,15 @@ from core.exceptions import (
     ServiceUnavailableError,
     UnauthorizedError,
 )
-from core.logging import get_logger
+from core.logging import (
+    RuntimeComponent,
+    RuntimeOperation,
+    RuntimeStatus,
+    get_logger,
+    runtime_log_message,
+)
 from core.settings import get_settings
-from image_analysis.ocr_engine import extract_schedule_fixed_scaled
+from image_analysis.ocr_engine import extract_schedule_runtime_report
 
 
 logger = get_logger(__name__)
@@ -106,6 +113,7 @@ async def _queue_worker() -> None:
     loop = asyncio.get_running_loop()
     while True:
         job_id, user_id, img, token, appcheck_token = await _job_queue.get()
+        start = time.monotonic()
         job = _job_store.get(job_id)
         if job is None:
             _active_users.discard(user_id)
@@ -114,7 +122,10 @@ async def _queue_worker() -> None:
 
         job["status"] = JobStatus.RUNNING
         try:
-            result = await loop.run_in_executor(_PROCESS_EXECUTOR, extract_schedule_fixed_scaled, img)
+            report = await loop.run_in_executor(_PROCESS_EXECUTOR, extract_schedule_runtime_report, img)
+            result = report.get("schedules", [])
+            diagnostics = report.get("diagnostics", {})
+            _log_timetable_runtime(job_id, start, diagnostics, len(result))
             if result:
                 await _post_to_spring(result, token, appcheck_token)
                 job["status"] = JobStatus.DONE
@@ -125,12 +136,54 @@ async def _queue_worker() -> None:
         except Exception as exc:
             job["status"] = JobStatus.ERROR
             job["error"] = str(exc)
+            logger.error(
+                runtime_log_message(
+                    "timetable_job_runtime",
+                    component=RuntimeComponent.OCR,
+                    operation=RuntimeOperation.REQUEST,
+                    status=RuntimeStatus.FAILED,
+                    duration_ms=int((time.monotonic() - start) * 1000),
+                    result_count=0,
+                    fallback=True,
+                    fallback_reason="worker_exception",
+                    error_code=type(exc).__name__,
+                    job_id=job_id,
+                )
+            )
             logger.exception("timetable_job_failed job_id=%s", job_id, exc_info=exc)
         finally:
             _active_users.discard(user_id)
             _job_store.pop(job_id, None)
             _job_queue.task_done()
             _cleanup_old_jobs()
+
+
+def _log_timetable_runtime(job_id: str, start: float, diagnostics: dict[str, Any], result_count: int) -> None:
+    ocr = diagnostics.get("ocr", {})
+    runtime = diagnostics.get("runtime", {})
+    failure_reason = diagnostics.get("failure_reason")
+    fallback_cell_count = int(ocr.get("fallback_cells", 0) or 0)
+    logger.info(
+        runtime_log_message(
+            "timetable_job_runtime",
+            component=RuntimeComponent.OCR,
+            operation=RuntimeOperation.REQUEST,
+            status=RuntimeStatus.SUCCESS if not failure_reason else RuntimeStatus.FALLBACK,
+            duration_ms=int((time.monotonic() - start) * 1000),
+            result_count=result_count,
+            fallback=bool(failure_reason) or fallback_cell_count > 0,
+            fallback_reason=failure_reason,
+            error_code=None,
+            job_id=job_id,
+            grid_detection_duration_ms=runtime.get("grid_detection_duration_ms", 0),
+            ocr_duration_ms=runtime.get("ocr_duration_ms", 0),
+            engine_total_duration_ms=runtime.get("total_duration_ms", 0),
+            extracted_cell_count=ocr.get("accepted_cells", 0),
+            total_cell_count=ocr.get("total_cells", 0),
+            text_cell_count=ocr.get("text_cells", 0),
+            ocr_fallback_cell_count=fallback_cell_count,
+        )
+    )
 
 
 async def start_queue_workers() -> None:
