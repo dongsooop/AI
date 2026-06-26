@@ -36,12 +36,13 @@ def _log_rule_filter_runtime(
     fallback_reason: str | None = None,
     error_code: str | None = None,
 ) -> None:
+    runtime_status = RuntimeStatus.FALLBACK if fallback and status == RuntimeStatus.SUCCESS else status
     logger.info(
         runtime_log_message(
             "text_filter_rule_runtime",
             component=RuntimeComponent.TEXT_FILTERING,
             operation=RuntimeOperation.RULE_FILTER,
-            status=status,
+            status=runtime_status,
             duration_ms=int((time.monotonic() - start) * 1000),
             result_count=result_count,
             fallback=fallback,

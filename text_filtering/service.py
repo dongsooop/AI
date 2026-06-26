@@ -1,3 +1,4 @@
+import hashlib
 import re
 import time
 from functools import lru_cache
@@ -146,12 +147,13 @@ def _log_ml_filter_runtime(
     english_rule_override_count: int = 0,
     field_count: int = 1,
 ) -> None:
+    runtime_status = RuntimeStatus.FALLBACK if fallback and status == RuntimeStatus.SUCCESS else status
     logger.info(
         runtime_log_message(
             "text_filter_ml_runtime",
             component=RuntimeComponent.TEXT_FILTERING,
             operation=RuntimeOperation.ML_FILTER,
-            status=status,
+            status=runtime_status,
             duration_ms=int((time.monotonic() - start) * 1000),
             result_count=result_count,
             fallback=fallback,
@@ -172,13 +174,18 @@ def _is_model_unavailable() -> bool:
         return True
 
 
+def _sanitized_pending_log_line(sentence: str, label_num: int, sentence_index: int) -> str:
+    text_hash = hashlib.sha256(sentence.encode("utf-8")).hexdigest()[:12]
+    return f"text_hash={text_hash} text_length={len(sentence)} sentence_index={sentence_index}|{label_num}\n"
+
+
 def analyze_field(field_name: str, text: str, should_log: bool = False) -> dict[str, Any]:
     results: list[dict[str, str]] = []
     has_profanity = False
     log_lines: list[str] = []
     english_rule_override_count = 0
 
-    for sentence in split_sentences(text):
+    for sentence_index, sentence in enumerate(split_sentences(text), start=1):
         label_num, label_text = predict(sentence)
         if label_text == "정상" and contains_english_profanity(sentence):
             label_text = "비속어"
@@ -187,7 +194,7 @@ def analyze_field(field_name: str, text: str, should_log: bool = False) -> dict[
 
         results.append({"sentence": sentence, "label": label_text})
         if should_log:
-            log_lines.append(f"{sentence}|{label_num}\n")
+            log_lines.append(_sanitized_pending_log_line(sentence, label_num, sentence_index))
         if label_text == "비속어":
             has_profanity = True
 
