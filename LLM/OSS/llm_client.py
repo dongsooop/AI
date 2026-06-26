@@ -1,5 +1,6 @@
 import asyncio
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Optional
@@ -7,7 +8,13 @@ from typing import Optional
 from openai import OpenAI
 
 from core.exceptions import ConfigurationError
-from core.logging import get_logger
+from core.logging import (
+    RuntimeComponent,
+    RuntimeOperation,
+    RuntimeStatus,
+    get_logger,
+    runtime_log_message,
+)
 from core.settings import get_settings
 
 
@@ -52,6 +59,7 @@ def call_oss(messages: list[dict[str, str]], **kwargs) -> str:
     except ConfigurationError:
         raise
 
+    start = time.monotonic()
     try:
         response = client.chat.completions.create(
             model=settings.oss_model,
@@ -61,10 +69,56 @@ def call_oss(messages: list[dict[str, str]], **kwargs) -> str:
             timeout=kwargs.get("timeout", 45),
         )
         if not response.choices:
+            logger.warning(
+                runtime_log_message(
+                    "chatbot_llm_runtime",
+                    component=RuntimeComponent.CHATBOT,
+                    operation=RuntimeOperation.LLM,
+                    status=RuntimeStatus.FALLBACK,
+                    duration_ms=int((time.monotonic() - start) * 1000),
+                    result_count=0,
+                    fallback=True,
+                    fallback_reason="empty_choices",
+                    error_code=None,
+                    model=settings.oss_model,
+                    empty_response=True,
+                )
+            )
             logger.warning("oss_call_empty_choices")
             return ""
-        return (response.choices[0].message.content or "").strip()
+        output = (response.choices[0].message.content or "").strip()
+        logger.info(
+            runtime_log_message(
+                "chatbot_llm_runtime",
+                component=RuntimeComponent.CHATBOT,
+                operation=RuntimeOperation.LLM,
+                status=RuntimeStatus.SUCCESS if output else RuntimeStatus.FALLBACK,
+                duration_ms=int((time.monotonic() - start) * 1000),
+                result_count=1 if output else 0,
+                fallback=not bool(output),
+                fallback_reason=None if output else "empty_response",
+                error_code=None,
+                model=settings.oss_model,
+                empty_response=not bool(output),
+            )
+        )
+        return output
     except Exception:
+        logger.warning(
+            runtime_log_message(
+                "chatbot_llm_runtime",
+                component=RuntimeComponent.CHATBOT,
+                operation=RuntimeOperation.LLM,
+                status=RuntimeStatus.FAILED,
+                duration_ms=int((time.monotonic() - start) * 1000),
+                result_count=0,
+                fallback=True,
+                fallback_reason="llm_exception",
+                error_code="oss_call_failed",
+                model=settings.oss_model,
+                empty_response=True,
+            )
+        )
         logger.warning("oss_call_failed", exc_info=True)
         return ""
 

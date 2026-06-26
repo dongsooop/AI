@@ -1,5 +1,6 @@
 import logging
 import os
+import pickle
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -43,6 +44,7 @@ class QueryIndexResources:
     search_df: pd.DataFrame
     tokenizer: Callable[[str], list[str]]
     bm25: BM25Okapi
+    bm25_fallback_tier: str
     model_name: str
     model: SentenceTransformer
 
@@ -84,16 +86,41 @@ def load_embeddings(path: Path) -> np.ndarray:
     return embeddings / row_norms
 
 
-def load_bm25(path: Path, tok_path: Path, search_df: pd.DataFrame, tokenizer) -> BM25Okapi:
+def load_bm25(path: Path, tok_path: Path, search_df: pd.DataFrame, tokenizer) -> tuple[BM25Okapi, str]:
+    if path.exists():
+        try:
+            with open(path, "rb") as f:
+                return pickle.load(f), "pickle"
+        except Exception as exc:
+            logger.warning(
+                "query_index_bm25_pickle_load_failed fallback=tokenized_or_runtime bm25_file=%s error=%s",
+                path.name,
+                type(exc).__name__,
+            )
 
     if tok_path.exists():
-        logger.warning(
-            "query_index_bm25_rebuild fallback=tokenized_corpus bm25_file=%s tokenized_file=%s",
-            path.name,
-            tok_path.name,
-        )
-        tokenized_corpus = load_json_gz(str(tok_path))
+        try:
+            fallback_tier = "tokenized_corpus"
+            logger.warning(
+                "query_index_bm25_rebuild fallback=tokenized_corpus bm25_file=%s tokenized_file=%s",
+                path.name,
+                tok_path.name,
+            )
+            tokenized_corpus = load_json_gz(str(tok_path))
+        except Exception as exc:
+            fallback_tier = "runtime_tokenize"
+            logger.warning(
+                "query_index_bm25_tokenized_load_failed fallback=runtime_tokenize bm25_file=%s tokenized_file=%s error=%s",
+                path.name,
+                tok_path.name,
+                type(exc).__name__,
+            )
+            tokenized_corpus = [
+                tokenizer(t)
+                for t in search_df["text_for_bm25"].astype(str).tolist()
+            ]
     else:
+        fallback_tier = "runtime_tokenize"
         logger.warning(
             "query_index_bm25_rebuild fallback=runtime_tokenize bm25_file=%s tokenized_file=%s documents=%s",
             path.name,
@@ -104,7 +131,7 @@ def load_bm25(path: Path, tok_path: Path, search_df: pd.DataFrame, tokenizer) ->
             tokenizer(t)
             for t in search_df["text_for_bm25"].astype(str).tolist()
         ]
-    return BM25Okapi(tokenized_corpus)
+    return BM25Okapi(tokenized_corpus), fallback_tier
 
 
 def load_query_index_resources(
@@ -114,6 +141,7 @@ def load_query_index_resources(
     paths = paths or load_query_index_paths()
     search_df = normalize_search_df_schema(pd.read_parquet(paths.search_df_path))
     tokenizer = get_tokenizer()
+    bm25, bm25_fallback_tier = load_bm25(paths.bm25_path, paths.tok_path, search_df, tokenizer)
 
     return QueryIndexResources(
         paths=paths,
@@ -121,7 +149,8 @@ def load_query_index_resources(
         embeddings=load_embeddings(paths.emb_path),
         search_df=search_df,
         tokenizer=tokenizer,
-        bm25=load_bm25(paths.bm25_path, paths.tok_path, search_df, tokenizer),
+        bm25=bm25,
+        bm25_fallback_tier=bm25_fallback_tier,
         model_name=model_name,
         model=SentenceTransformer(model_name),
     )

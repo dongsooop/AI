@@ -2,12 +2,26 @@ from datetime import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
+import logging
 import re
+import time as perf_time
 import cv2
 import numpy as np
 import pytesseract
 from PIL import Image
 
+from core.logging import (
+    RuntimeComponent,
+    RuntimeOperation,
+    RuntimeStatus,
+    configure_logging,
+    get_logger,
+    runtime_log_message,
+)
+
+
+logger = get_logger(__name__)
+OCR_WORKER_SERVICE_NAME = "main-api"
 
 WEEKDAYS_FILE = Path("data/weekdays.txt")
 TIME_SLOTS_FILE = Path("data/time_slots.txt")
@@ -33,6 +47,15 @@ TRIM_OUTER, TRIM_X_GAP, TRIM_Y_GAP = True, 20, 15
 OCR_THREAD_WORKERS = 8
 LOW_OCR_CONFIDENCE = 55.0
 MAX_REJECTED_CELLS_IN_DIAGNOSTICS = 120
+
+
+def configure_ocr_worker_logging() -> None:
+    configure_logging(OCR_WORKER_SERVICE_NAME)
+
+
+def _ensure_ocr_engine_logging() -> None:
+    if not logging.getLogger().handlers:
+        configure_ocr_worker_logging()
 
 
 def _clean_ocr_lines(text: str) -> List[str]:
@@ -412,6 +435,7 @@ def _extract_schedule_core(
     debug_dir: Optional[Path] = None,
     diagnostics_enabled: bool = False,
 ) -> Dict[str, Any]:
+    start = perf_time.monotonic()
     diagnostics: Dict[str, Any] = {
         "image_quality": assess_image_quality(img) if diagnostics_enabled else {},
         "grid": {},
@@ -424,9 +448,15 @@ def _extract_schedule_core(
             "low_confidence_cells": 0,
             "average_confidence": None,
         },
+        "runtime": {
+            "grid_detection_duration_ms": 0,
+            "ocr_duration_ms": 0,
+            "total_duration_ms": 0,
+        },
         "debug_images": {},
     }
 
+    grid_start = perf_time.monotonic()
     base_gray = _make_base_gray(img)
     x_lines, vertical_mask = _vertical_lines(base_gray)
     x_lines = _prune_x_lines(x_lines, base_gray)
@@ -442,6 +472,7 @@ def _extract_schedule_core(
         if len(y_lines) > 2 and (y_lines[-1] - y_lines[-2] < TRIM_Y_GAP):
             y_lines = y_lines[:-1]
 
+    diagnostics["runtime"]["grid_detection_duration_ms"] = int((perf_time.monotonic() - grid_start) * 1000)
     diagnostics["grid"] = {
         "x_line_count": len(x_lines),
         "y_line_count": len(y_lines),
@@ -455,12 +486,16 @@ def _extract_schedule_core(
 
     if len(x_lines) - 1 < 3 or len(y_lines) - 1 < 3:
         diagnostics["failure_reason"] = "insufficient_grid_lines"
+        diagnostics["runtime"]["total_duration_ms"] = int((perf_time.monotonic() - start) * 1000)
+        _log_ocr_engine_runtime(diagnostics, 0)
         return {"schedules": [], "diagnostics": diagnostics}
 
     weekdays = _load_list_from_txt(WEEKDAYS_FILE)
     time_slots = _load_list_from_txt(TIME_SLOTS_FILE)
     if not weekdays or not time_slots:
         diagnostics["failure_reason"] = "missing_weekdays_or_time_slots"
+        diagnostics["runtime"]["total_duration_ms"] = int((perf_time.monotonic() - start) * 1000)
+        _log_ocr_engine_runtime(diagnostics, 0)
         return {"schedules": [], "diagnostics": diagnostics}
 
     tasks: List[bytes] = []
@@ -468,8 +503,7 @@ def _extract_schedule_core(
     for row, col, roi_gray in _iterate_cells_autogrid(base_gray, x_lines, y_lines):
         if row == 0:
             continue
-        if diagnostics_enabled:
-            diagnostics["ocr"]["total_cells"] += 1
+        diagnostics["ocr"]["total_cells"] += 1
         ok, buf = cv2.imencode(".png", roi_gray)
         if not ok:
             if diagnostics_enabled:
@@ -479,6 +513,7 @@ def _extract_schedule_core(
         meta_map.append((row, col))
 
     ocr_results: List[Dict[str, Any]] = []
+    ocr_start = perf_time.monotonic()
     if tasks:
         max_workers = min(OCR_THREAD_WORKERS, len(tasks)) or 1
         ocr_func = _ocr_diagnostic_task if diagnostics_enabled else _ocr_task
@@ -493,6 +528,7 @@ def _extract_schedule_core(
                         "config": "psm6",
                         "fallback_used": False,
                     })
+    diagnostics["runtime"]["ocr_duration_ms"] = int((perf_time.monotonic() - ocr_start) * 1000)
 
     raw_cells: List[dict] = []
     confidence_values: List[float] = []
@@ -502,8 +538,7 @@ def _extract_schedule_core(
             if diagnostics_enabled:
                 _reject_cell(diagnostics["ocr"]["rejected_cells"], row, col, "empty_ocr", ocr_result)
             continue
-        if diagnostics_enabled:
-            diagnostics["ocr"]["text_cells"] += 1
+        diagnostics["ocr"]["text_cells"] += 1
         confidence = ocr_result.get("confidence")
         if diagnostics_enabled and confidence is not None:
             confidence_values.append(float(confidence))
@@ -542,9 +577,13 @@ def _extract_schedule_core(
         diagnostics["ocr"]["accepted_cells"] = len(raw_cells)
         if confidence_values:
             diagnostics["ocr"]["average_confidence"] = round(float(np.mean(confidence_values)), 2)
+    else:
+        diagnostics["ocr"]["accepted_cells"] = len(raw_cells)
 
     if not raw_cells:
         diagnostics["failure_reason"] = "no_valid_cells"
+        diagnostics["runtime"]["total_duration_ms"] = int((perf_time.monotonic() - start) * 1000)
+        _log_ocr_engine_runtime(diagnostics, 0)
         return {"schedules": [], "diagnostics": diagnostics}
 
     schedule_rows: List[dict] = []
@@ -592,6 +631,8 @@ def _extract_schedule_core(
 
     if not schedule_rows:
         diagnostics["failure_reason"] = "no_mapped_schedule_rows"
+        diagnostics["runtime"]["total_duration_ms"] = int((perf_time.monotonic() - start) * 1000)
+        _log_ocr_engine_runtime(diagnostics, 0)
         return {"schedules": [], "diagnostics": diagnostics}
 
     merged = _merge_adjacent_same_name(schedule_rows)
@@ -599,11 +640,43 @@ def _extract_schedule_core(
     del vertical_mask
     del horizontal_mask
     diagnostics["schedule_count"] = len(merged)
+    diagnostics["runtime"]["total_duration_ms"] = int((perf_time.monotonic() - start) * 1000)
+    _log_ocr_engine_runtime(diagnostics, len(merged))
     return {"schedules": merged, "diagnostics": diagnostics}
+
+
+def _log_ocr_engine_runtime(diagnostics: Dict[str, Any], schedule_count: int) -> None:
+    _ensure_ocr_engine_logging()
+    failure_reason = diagnostics.get("failure_reason")
+    ocr = diagnostics.get("ocr", {})
+    runtime = diagnostics.get("runtime", {})
+    logger.info(
+        runtime_log_message(
+            "timetable_ocr_engine_runtime",
+            component=RuntimeComponent.OCR,
+            operation=RuntimeOperation.OCR,
+            status=RuntimeStatus.SUCCESS if not failure_reason else RuntimeStatus.FALLBACK,
+            duration_ms=runtime.get("total_duration_ms", 0),
+            result_count=schedule_count,
+            fallback=bool(failure_reason) or int(ocr.get("fallback_cells", 0) or 0) > 0,
+            fallback_reason=failure_reason,
+            error_code=None,
+            grid_detection_duration_ms=runtime.get("grid_detection_duration_ms", 0),
+            ocr_duration_ms=runtime.get("ocr_duration_ms", 0),
+            extracted_cell_count=ocr.get("accepted_cells", 0),
+            total_cell_count=ocr.get("total_cells", 0),
+            text_cell_count=ocr.get("text_cells", 0),
+            ocr_fallback_cell_count=ocr.get("fallback_cells", 0),
+        )
+    )
 
 
 def extract_schedule_fixed_scaled(img: np.ndarray) -> List[dict]:
     return _extract_schedule_core(img, diagnostics_enabled=False)["schedules"]
+
+
+def extract_schedule_runtime_report(img: np.ndarray) -> Dict[str, Any]:
+    return _extract_schedule_core(img, diagnostics_enabled=False)
 
 
 def extract_schedule_with_diagnostics(img: np.ndarray, debug_dir: Optional[Path] = None) -> Dict[str, Any]:
