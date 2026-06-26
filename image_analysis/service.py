@@ -28,7 +28,7 @@ from core.logging import (
     runtime_log_message,
 )
 from core.settings import get_settings
-from image_analysis.ocr_engine import extract_schedule_runtime_report
+from image_analysis.ocr_engine import configure_ocr_worker_logging, extract_schedule_runtime_report
 
 
 logger = get_logger(__name__)
@@ -40,6 +40,7 @@ _PROCESS_CONTEXT = mp.get_context("spawn")
 _PROCESS_EXECUTOR = ProcessPoolExecutor(
     max_workers=_WORKER_CONCURRENCY,
     mp_context=_PROCESS_CONTEXT,
+    initializer=configure_ocr_worker_logging,
 )
 _WORKER_TASKS: set[asyncio.Task] = set()
 

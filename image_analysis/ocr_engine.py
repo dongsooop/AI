@@ -2,6 +2,7 @@ from datetime import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
+import logging
 import re
 import time as perf_time
 import cv2
@@ -13,12 +14,14 @@ from core.logging import (
     RuntimeComponent,
     RuntimeOperation,
     RuntimeStatus,
+    configure_logging,
     get_logger,
     runtime_log_message,
 )
 
 
 logger = get_logger(__name__)
+OCR_WORKER_SERVICE_NAME = "main-api"
 
 WEEKDAYS_FILE = Path("data/weekdays.txt")
 TIME_SLOTS_FILE = Path("data/time_slots.txt")
@@ -44,6 +47,15 @@ TRIM_OUTER, TRIM_X_GAP, TRIM_Y_GAP = True, 20, 15
 OCR_THREAD_WORKERS = 8
 LOW_OCR_CONFIDENCE = 55.0
 MAX_REJECTED_CELLS_IN_DIAGNOSTICS = 120
+
+
+def configure_ocr_worker_logging() -> None:
+    configure_logging(OCR_WORKER_SERVICE_NAME)
+
+
+def _ensure_ocr_engine_logging() -> None:
+    if not logging.getLogger().handlers:
+        configure_ocr_worker_logging()
 
 
 def _clean_ocr_lines(text: str) -> List[str]:
@@ -634,6 +646,7 @@ def _extract_schedule_core(
 
 
 def _log_ocr_engine_runtime(diagnostics: Dict[str, Any], schedule_count: int) -> None:
+    _ensure_ocr_engine_logging()
     failure_reason = diagnostics.get("failure_reason")
     ocr = diagnostics.get("ocr", {})
     runtime = diagnostics.get("runtime", {})
