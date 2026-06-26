@@ -99,13 +99,26 @@ def load_bm25(path: Path, tok_path: Path, search_df: pd.DataFrame, tokenizer) ->
             )
 
     if tok_path.exists():
-        fallback_tier = "tokenized_corpus"
-        logger.warning(
-            "query_index_bm25_rebuild fallback=tokenized_corpus bm25_file=%s tokenized_file=%s",
-            path.name,
-            tok_path.name,
-        )
-        tokenized_corpus = load_json_gz(str(tok_path))
+        try:
+            fallback_tier = "tokenized_corpus"
+            logger.warning(
+                "query_index_bm25_rebuild fallback=tokenized_corpus bm25_file=%s tokenized_file=%s",
+                path.name,
+                tok_path.name,
+            )
+            tokenized_corpus = load_json_gz(str(tok_path))
+        except Exception as exc:
+            fallback_tier = "runtime_tokenize"
+            logger.warning(
+                "query_index_bm25_tokenized_load_failed fallback=runtime_tokenize bm25_file=%s tokenized_file=%s error=%s",
+                path.name,
+                tok_path.name,
+                type(exc).__name__,
+            )
+            tokenized_corpus = [
+                tokenizer(t)
+                for t in search_df["text_for_bm25"].astype(str).tolist()
+            ]
     else:
         fallback_tier = "runtime_tokenize"
         logger.warning(
