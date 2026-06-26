@@ -50,9 +50,12 @@ def _format_log_value(value: Any) -> str:
     text = str(value).replace("\n", " ").replace("\r", " ").strip()
     if not text:
         return "none"
-    return text.replace(" ", "_")
+    return text.replace(" ", "_").replace("=", ":")
 
 
 def runtime_log_message(event: str, **fields: Any) -> str:
-    ordered_fields = {"event": event, **fields}
-    return " ".join(f"{key}={_format_log_value(value)}" for key, value in ordered_fields.items())
+    all_fields = {"event": event, **fields}
+    ordered_keys = [k for k in RUNTIME_LOG_FIELDS if k in all_fields]
+    extra_keys = [k for k in all_fields.keys() if k not in RUNTIME_LOG_FIELDS]
+    keys = ordered_keys + extra_keys
+    return " ".join(f"{key}={_format_log_value(all_fields[key])}" for key in keys)
