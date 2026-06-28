@@ -142,6 +142,8 @@ def extract_run_metrics(report: Dict[str, Any]) -> Dict[str, Any]:
         "text_cell_count": int(ocr.get("text_cells", 0) or 0),
         "skipped_empty_cell_count": int(ocr.get("skipped_empty_cells", 0) or 0),
         "fallback_cell_count": int(ocr.get("fallback_cells", 0) or 0),
+        "runtime_fallback_candidate_count": int(ocr.get("runtime_fallback_candidates", 0) or 0),
+        "runtime_fallback_attempted_cell_count": int(ocr.get("runtime_fallback_attempted_cells", 0) or 0),
     }
 
 
@@ -171,6 +173,8 @@ def summarize_runs(runs: List[Dict[str, Any]]) -> Dict[str, Any]:
         "text_cell_count": first_run.get("text_cell_count"),
         "skipped_empty_cell_count": first_run.get("skipped_empty_cell_count"),
         "fallback_cell_count": first_run.get("fallback_cell_count"),
+        "runtime_fallback_candidate_count": first_run.get("runtime_fallback_candidate_count"),
+        "runtime_fallback_attempted_cell_count": first_run.get("runtime_fallback_attempted_cell_count"),
     }
 
 
@@ -287,6 +291,9 @@ def aggregate_metrics(case_results: List[Dict[str, Any]]) -> Dict[str, Any]:
         "total_cell_count": sum(int(run.get("total_cell_count", 0)) for run in runs),
         "ocr_task_cell_count": sum(int(run.get("ocr_task_cell_count", 0)) for run in runs),
         "skipped_empty_cell_count": sum(int(run.get("skipped_empty_cell_count", 0)) for run in runs),
+        "fallback_cell_count": sum(int(run.get("fallback_cell_count", 0)) for run in runs),
+        "runtime_fallback_candidate_count": sum(int(run.get("runtime_fallback_candidate_count", 0)) for run in runs),
+        "runtime_fallback_attempted_cell_count": sum(int(run.get("runtime_fallback_attempted_cell_count", 0)) for run in runs),
         "failure_count": len(failure_reasons),
         "failure_reasons": sorted(set(failure_reasons)),
         "skipped_case_count": sum(1 for result in case_results if result.get("status") == "skipped"),
