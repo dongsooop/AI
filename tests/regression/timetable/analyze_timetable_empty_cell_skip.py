@@ -142,6 +142,8 @@ def prepare_cell_candidates(img, cv2, ocr_engine) -> Dict[str, Any]:
             "row": row,
             "col": col + 1,
             "foreground_density": ocr_engine._foreground_density(roi_gray),
+            "text_component_count": ocr_engine._text_component_count(roi_gray),
+            "text_presence": ocr_engine._has_text_presence(roi_gray),
             "ocr_status": "not_run",
         }
         ok, buf = cv2.imencode(".png", roi_gray)
@@ -254,6 +256,13 @@ def evaluate_case(case: Dict[str, Any], thresholds: List[float], sample_limit: i
     accepted_count = sum(1 for cell in cells if cell.get("ocr_status") == "accepted")
     empty_count = sum(1 for cell in cells if cell.get("ocr_status") == "empty")
     text_count = sum(1 for cell in cells if cell.get("ocr_status") not in {"empty", "roi_encode_failed", "not_run"})
+    text_presence_skipped = [cell for cell in cells if not cell.get("text_presence")]
+    text_presence_skipped_accepted = [cell for cell in text_presence_skipped if cell.get("ocr_status") == "accepted"]
+    text_presence_skipped_text = [
+        cell
+        for cell in text_presence_skipped
+        if cell.get("ocr_status") not in {"empty", "roi_encode_failed", "not_run"}
+    ]
     safe_thresholds = [
         item["threshold"]
         for item in threshold_results
@@ -277,6 +286,11 @@ def evaluate_case(case: Dict[str, Any], thresholds: List[float], sample_limit: i
             "empty_cell_count": empty_count,
             "best_safe_threshold_no_accepted_loss": max(safe_thresholds) if safe_thresholds else None,
             "best_safe_threshold_no_text_loss": max(no_text_loss_thresholds) if no_text_loss_thresholds else None,
+            "text_presence_would_skip_cell_count": len(text_presence_skipped),
+            "text_presence_would_skip_cell_ratio": round(len(text_presence_skipped) / len(cells), 4) if cells else 0.0,
+            "text_presence_would_skip_accepted_cell_count": len(text_presence_skipped_accepted),
+            "text_presence_would_skip_text_cell_count": len(text_presence_skipped_text),
+            "text_presence_estimated_ocr_task_count": max(0, len(cells) - len(text_presence_skipped)),
         },
         "threshold_results": threshold_results,
     })
@@ -325,6 +339,22 @@ def aggregate_metrics(case_results: List[Dict[str, Any]], thresholds: List[float
         "best_safe_threshold_no_accepted_loss": max(safe_thresholds) if safe_thresholds else None,
         "best_safe_threshold_no_text_loss": max(no_text_loss_thresholds) if no_text_loss_thresholds else None,
         "threshold_summary": threshold_summary,
+        "text_presence_would_skip_cell_count": sum(
+            int(result.get("metrics", {}).get("text_presence_would_skip_cell_count", 0))
+            for result in passed_results
+        ),
+        "text_presence_would_skip_accepted_cell_count": sum(
+            int(result.get("metrics", {}).get("text_presence_would_skip_accepted_cell_count", 0))
+            for result in passed_results
+        ),
+        "text_presence_would_skip_text_cell_count": sum(
+            int(result.get("metrics", {}).get("text_presence_would_skip_text_cell_count", 0))
+            for result in passed_results
+        ),
+        "text_presence_estimated_ocr_task_count": sum(
+            int(result.get("metrics", {}).get("text_presence_estimated_ocr_task_count", 0))
+            for result in passed_results
+        ),
         "skipped_case_count": sum(1 for result in case_results if result.get("status") == "skipped"),
     }
 

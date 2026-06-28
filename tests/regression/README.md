@@ -85,13 +85,14 @@ python tests/regression/timetable/measure_timetable_ocr_baseline.py --profile oc
 
 ### Timetable OCR Empty-Cell Skip Analysis
 
-`tests/regression/timetable/analyze_timetable_empty_cell_skip.py`는 빈 셀 OCR 스킵을 운영에 적용하기 전에 셀 foreground density threshold 후보를 dry-run으로 분석합니다. 현재 격자/ROI/OCR 판정 함수를 그대로 사용하되 런타임 동작은 바꾸지 않고, threshold별로 OCR 전에 스킵했을 셀 수와 이미 accepted로 판정되는 셀이 스킵 후보에 포함되는지 기록합니다.
+`tests/regression/timetable/analyze_timetable_empty_cell_skip.py`는 빈 셀 OCR 스킵을 운영에 적용하기 전에 셀 foreground density threshold와 text-presence detector 후보를 dry-run으로 분석합니다. 현재 격자/ROI/OCR 판정 함수를 그대로 사용하되 런타임 동작은 바꾸지 않고, threshold별로 OCR 전에 스킵했을 셀 수와 이미 accepted로 판정되는 셀이 스킵 후보에 포함되는지 기록합니다.
 
 - `would_skip_cell_count`: threshold 적용 시 OCR 전에 건너뛰었을 셀 수
 - `would_skip_accepted_cell_count`: 현재 OCR에서 accepted인 셀이 스킵 후보에 들어간 수
 - `would_skip_text_cell_count`: 현재 OCR에서 비어 있지 않은 셀이 스킵 후보에 들어간 수
 - `best_safe_threshold_no_accepted_loss`: 샘플 기준 accepted 셀 손실이 없는 가장 높은 threshold
 - `best_safe_threshold_no_text_loss`: 샘플 기준 OCR 텍스트 셀 손실이 없는 가장 높은 threshold
+- `text_presence_estimated_ocr_task_count`: OpenCV text-presence detector 적용 시 예상 OCR 대상 셀 수
 
 기본 리포트는 `tests/reports/timetable/timetable_ocr_empty_cell_skip_analysis.json`에 저장됩니다. 이 리포트에서 `would_skip_accepted_cell_count`가 0인 보수적 threshold를 확인한 뒤에만 운영 OCR 스킵 로직을 적용합니다.
 

@@ -50,6 +50,7 @@ MAX_REJECTED_CELLS_IN_DIAGNOSTICS = 120
 EMPTY_CELL_FOREGROUND_DENSITY_THRESHOLD = 0.005
 MAX_RUNTIME_FALLBACK_CELLS = 5
 EMPTY_FALLBACK_FOREGROUND_DENSITY_THRESHOLD = 0.05
+MIN_TEXT_COMPONENTS_IN_CELL = 1
 
 
 def configure_ocr_worker_logging() -> None:
@@ -319,10 +320,10 @@ def assess_image_quality(img_bgr: np.ndarray) -> Dict[str, Any]:
     }
 
 
-def _foreground_density(roi_gray: np.ndarray) -> float:
+def _cell_foreground_mask(roi_gray: np.ndarray) -> np.ndarray:
     height, width = roi_gray.shape[:2]
     if height <= 0 or width <= 0:
-        return 0.0
+        return np.zeros((0, 0), dtype=np.uint8)
 
     margin_y = max(1, int(height * 0.06))
     margin_x = max(1, int(width * 0.06))
@@ -334,15 +335,51 @@ def _foreground_density(roi_gray: np.ndarray) -> float:
     if min(dark_mask.shape[:2]) >= 2:
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
         dark_mask = cv2.morphologyEx(dark_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    return dark_mask
 
+
+def _foreground_density(roi_gray: np.ndarray) -> float:
+    dark_mask = _cell_foreground_mask(roi_gray)
     area = dark_mask.shape[0] * dark_mask.shape[1]
     if area <= 0:
         return 0.0
     return round(float(cv2.countNonZero(dark_mask)) / float(area), 6)
 
 
+def _text_component_count(roi_gray: np.ndarray) -> int:
+    dark_mask = _cell_foreground_mask(roi_gray)
+    if dark_mask.size == 0:
+        return 0
+
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(dark_mask, connectivity=8)
+    height, width = dark_mask.shape[:2]
+    area = height * width
+    text_components = 0
+    for label in range(1, count):
+        x, y, component_width, component_height, component_area = stats[label]
+        if component_area < 4:
+            continue
+        if component_area > area * 0.18:
+            continue
+        if component_width > width * 0.75 or component_height > height * 0.75:
+            continue
+        if component_width < 2 or component_height < 2:
+            continue
+        aspect_ratio = component_width / max(component_height, 1)
+        if aspect_ratio > 12.0 or aspect_ratio < 0.08:
+            continue
+        text_components += 1
+    return text_components
+
+
+def _has_text_presence(roi_gray: np.ndarray) -> bool:
+    if _foreground_density(roi_gray) <= EMPTY_CELL_FOREGROUND_DENSITY_THRESHOLD:
+        return False
+    return _text_component_count(roi_gray) >= MIN_TEXT_COMPONENTS_IN_CELL
+
+
 def _is_empty_cell_candidate(roi_gray: np.ndarray) -> bool:
-    return _foreground_density(roi_gray) <= EMPTY_CELL_FOREGROUND_DENSITY_THRESHOLD
+    return not _has_text_presence(roi_gray)
 
 
 def _save_grid_debug_image(base_gray: np.ndarray, x_lines: List[int], y_lines: List[int], output_path: Path) -> None:
@@ -530,6 +567,7 @@ def _extract_schedule_core(
             "ocr_task_cells": 0,
             "skipped_empty_cells": 0,
             "empty_cell_skip_threshold": EMPTY_CELL_FOREGROUND_DENSITY_THRESHOLD,
+            "min_text_components_in_cell": MIN_TEXT_COMPONENTS_IN_CELL,
             "runtime_fallback_limit": MAX_RUNTIME_FALLBACK_CELLS,
             "runtime_fallback_candidates": 0,
             "runtime_fallback_attempted_cells": 0,
