@@ -14,6 +14,7 @@ python tests/regression/chatbot/evaluate_rag_retrieval.py
 python tests/regression/chatbot/check_chatbot_tool_routing.py
 python tests/regression/timetable/check_timetable_ocr_diagnostics.py
 python tests/regression/timetable/measure_timetable_ocr_baseline.py
+python tests/regression/timetable/analyze_timetable_empty_cell_skip.py
 python tests/regression/text_filtering/check_text_filter_quality_report.py
 ```
 
@@ -62,6 +63,7 @@ python tests/regression/text_filtering/check_text_filter_quality_report.py
 - `average_grid_detection_duration_ms`, `max_grid_detection_duration_ms`: 격자 검출 시간 기준선
 - `average_ocr_duration_ms`, `max_ocr_duration_ms`: Tesseract OCR 시간 기준선
 - `total_extracted_schedule_count`: 추출된 시간표 항목 수 합계
+- `ocr_task_cell_count`, `skipped_empty_cell_count`: 실제 Tesseract 대상 셀 수와 빈 셀 스킵 수
 - `failure_count`, `failure_reasons`: 실패 사유 관측치
 
 기본 리포트는 `tests/reports/timetable/timetable_ocr_performance_baseline.json`에 저장됩니다. `data/`가 로컬/운영 샘플 영역이라 이미지 파일이 없는 케이스는 전체 실패 대신 개별 `skipped` 케이스로 기록합니다. OCI에서는 부하를 낮추기 위해 기본 `--repeat 1`을 권장하고, 안정적인 비교가 필요할 때만 반복 횟수를 늘립니다.
@@ -79,6 +81,18 @@ python tests/regression/timetable/measure_timetable_ocr_baseline.py --profile oc
 ```
 
 정확한 OCI 기준선은 실제 OCI 서버에서 측정한 `production` 프로필 결과를 우선합니다. `oci-constrained`는 로컬에서 성능 회귀 위험을 보수적으로 보는 보조 지표입니다.
+
+### Timetable OCR Empty-Cell Skip Analysis
+
+`tests/regression/timetable/analyze_timetable_empty_cell_skip.py`는 빈 셀 OCR 스킵을 운영에 적용하기 전에 셀 foreground density threshold 후보를 dry-run으로 분석합니다. 현재 격자/ROI/OCR 판정 함수를 그대로 사용하되 런타임 동작은 바꾸지 않고, threshold별로 OCR 전에 스킵했을 셀 수와 이미 accepted로 판정되는 셀이 스킵 후보에 포함되는지 기록합니다.
+
+- `would_skip_cell_count`: threshold 적용 시 OCR 전에 건너뛰었을 셀 수
+- `would_skip_accepted_cell_count`: 현재 OCR에서 accepted인 셀이 스킵 후보에 들어간 수
+- `would_skip_text_cell_count`: 현재 OCR에서 비어 있지 않은 셀이 스킵 후보에 들어간 수
+- `best_safe_threshold_no_accepted_loss`: 샘플 기준 accepted 셀 손실이 없는 가장 높은 threshold
+- `best_safe_threshold_no_text_loss`: 샘플 기준 OCR 텍스트 셀 손실이 없는 가장 높은 threshold
+
+기본 리포트는 `tests/reports/timetable/timetable_ocr_empty_cell_skip_analysis.json`에 저장됩니다. 이 리포트에서 `would_skip_accepted_cell_count`가 0인 보수적 threshold를 확인한 뒤에만 운영 OCR 스킵 로직을 적용합니다.
 
 ### Text Filtering Quality Metrics
 
