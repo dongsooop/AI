@@ -6,6 +6,27 @@
 
 <img width="975" height="456" alt="image" src="https://github.com/user-attachments/assets/bafe1cd2-f0ec-484d-9317-b484c3d7dfe5" />
 
+# 🤖 AI Backend
+
+동숲의 AI 백엔드는 **학생이 직접 입력하고 확인해야 했던 반복 작업을 자동화**하는 데 초점을 맞춰 설계했습니다.
+시간표 이미지는 일정 데이터로, 학교 정보 질문은 근거 기반 답변으로, 커뮤니티 문장은 안전한 게시 환경을 위한 필터링 결과로 변환합니다.
+
+<div align="center">
+  <img src="https://img.shields.io/badge/RAG-LLM%20Chatbot-111827?style=for-the-badge" height="24px"/>
+  <img src="https://img.shields.io/badge/OCR-Timetable%20Parser-2563EB?style=for-the-badge" height="24px"/>
+  <img src="https://img.shields.io/badge/NLP-Text%20Filtering-059669?style=for-the-badge" height="24px"/>
+  <img src="https://img.shields.io/badge/Quality-Regression%20Report-F97316?style=for-the-badge" height="24px"/>
+</div>
+
+<br/>
+
+| AI 영역                   | 해결한 문제                                                       | 구현 포인트                                                                          |
+| ------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 🧠 학교 정보 RAG 챗봇     | 공지사항, 학사일정, 연락처처럼 흩어진 학교 정보를 대화형으로 조회 | BM25 + semantic search 기반 Hybrid Search, RAG context 구성, Ollama gpt-oss:20b 연동 |
+| 📅 시간표 OCR 분석        | 학생이 시간표를 직접 입력해야 하는 불편함 감소                    | OpenCV 격자 검출, Tesseract OCR, 셀 분리, 강의명/교수명/강의실/교시 매핑             |
+| 🛡️ 커뮤니티 텍스트 필터링 | 게시글/채팅에서 부적절한 표현을 사전에 감지                       | ELECTRA 기반 문장 분류, 규칙 기반 필터, 한국어 띄어쓰기/변형 표현 대응               |
+| 📊 AI 품질 검증           | 모델 응답을 감으로 확인하지 않고 재현 가능한 기준으로 점검        | 질문 세트, Recall@k, 출처 URL 검증, JSON 리포트, 경량/전체 회귀 스크립트             |
+
 # 🚀 핵심 기능
 
 ## 💘 과팅
@@ -44,10 +65,23 @@ Kakao map 기반 학교 주변 1Km 이내 식당을 확인할 수 있습니다.
 
 ## 📅 시간표 관리
 
-- 시간표 이미지를 업로드하면 AI가 자동으로 인식하여 일정을 등록합니다.
+- 시간표 이미지를 업로드하면 OCR과 OpenCV 기반 분석 로직이 강의명, 교수명, 강의실, 요일/교시 정보를 추출해 일정을 자동 등록합니다.
+- 이미지 품질 차이를 고려해 격자 검출, 셀 분리, 텍스트 보정 과정을 거쳐 Spring Boot 서버가 사용할 수 있는 시간표 데이터로 변환합니다.
 - 캘린더 UI를 통해 학업 일정을 추가 및 관리할 수 있습니다.
 
 <img alt="시간표 관리" height="600" src="https://github.com/user-attachments/assets/a6662139-ec4b-4cbe-8103-0ab52e1a9aed">
+
+<br />
+<br />
+
+## 🛡️ AI 텍스트 필터링
+
+커뮤니티 게시글과 채팅 문장을 분석해 부적절한 표현을 사전에 감지합니다.
+파인튜닝된 ELECTRA 모델과 규칙 기반 필터를 함께 사용해 한국어/영어 비속어, 띄어쓰기 변형, 우회 표현을 안정적으로 처리합니다.
+
+- ML 기반 필터와 규칙 기반 필터를 분리해 운영 환경에서 필요한 방식으로 선택할 수 있습니다.
+- 한국어 문장 특성을 고려해 단순 키워드 매칭보다 문맥 기반 판별을 우선합니다.
+- 회귀 케이스와 품질 리포트로 false positive/false negative를 지속적으로 확인합니다.
 
 <br />
 <br />
@@ -65,9 +99,21 @@ Kakao map 기반 학교 주변 1Km 이내 식당을 확인할 수 있습니다.
 
 ## 🤖 AI 챗봇
 
-학교 관련 궁금한 점을 챗봇에게 질문하면 실시간 답변을 받을 수 있습니다.
+학교 관련 궁금한 점을 챗봇에게 질문하면 학교 데이터에서 근거를 검색한 뒤 실시간 답변을 받을 수 있습니다.
+챗봇은 공지사항, 학사일정, 연락처, 장학금, 수강신청, 졸업 요건 등 학교 정보에 특화된 RAG 흐름으로 동작합니다.
 
 <img alt="챗봇" height="600" src="https://github.com/user-attachments/assets/fcb669e1-4cce-4b81-8568-b2748e919d2f">
+
+### 챗봇 처리 흐름
+
+```text
+사용자 질문
+→ 인사/의도 감지
+→ 학교 문서 Hybrid Search(BM25 + semantic search)
+→ RAG context 구성
+→ Ollama 기반 gpt-oss:20b 응답 생성
+→ 안전 필터 및 출처 기반 응답 반환
+```
 
 ### RAG 품질 평가
 
@@ -90,21 +136,21 @@ python tests/regression/chatbot/evaluate_rag_retrieval.py --out tests/reports/ch
 python tests/regression/chatbot/run_chatbot_regression.py --url http://127.0.0.1:8010/chatbot
 ```
 
-| 구분 | 질문 세트 | 검색 Recall@3 | 답변 근거성 | 비고 |
-| --- | ---: | ---: | ---: | --- |
-| 개선 전 기준선 | 30개 | 리포트 기준값 | 리포트 기준값 | `tests/reports/chatbot/rag_eval_report.json` 또는 저장된 baseline 리포트 |
-| 현재 브랜치 | 30개 | `summary.top3_url_accuracy` | `summary.source_url_pass_rate` | `tests/regression/chatbot/evaluate_rag_retrieval.py` 실행 결과로 갱신 |
-| CI 경량 회귀 | synthetic + schema | 통과/실패 | 통과/실패 | 무거운 임베딩 모델 다운로드 없이 PR에서 빠르게 검증 |
+| 구분           |          질문 세트 |               검색 Recall@3 |                    답변 근거성 | 비고                                                                     |
+| -------------- | -----------------: | --------------------------: | -----------------------------: | ------------------------------------------------------------------------ |
+| 개선 전 기준선 |               30개 |               리포트 기준값 |                  리포트 기준값 | `tests/reports/chatbot/rag_eval_report.json` 또는 저장된 baseline 리포트 |
+| 현재 브랜치    |               30개 | `summary.top3_url_accuracy` | `summary.source_url_pass_rate` | `tests/regression/chatbot/evaluate_rag_retrieval.py` 실행 결과로 갱신    |
+| CI 경량 회귀   | synthetic + schema |                   통과/실패 |                      통과/실패 | 무거운 임베딩 모델 다운로드 없이 PR에서 빠르게 검증                      |
 
 # ✌️ 작업 및 역할 분담
 
-| 이름   | 분담                                                                                                       |
-| ------ | ---------------------------------------------------------------------------------------------------------- |
-| 주성준 | <ul><li>메인 로직 설계</li><li>팀 리딩 및 커뮤니케이션</li><li>어플리케이션 배포</li></ul>                 |
-| 백승민 | <ul><li>서버 인프라 구축 </li><li>학식, 채팅, 신고, 검색기능 구현</li><li>편의성 파이프라인 구축</li></ul> |
-| 유제승 | <ul><li>언어 필터링 구현</li><li>AI 챗봇 LLM 구현</li> <li>OpenCV를 통한 이미지 분석 및 시간표 생성</li>   |
-| 우승원 | <ul><li>UI/UX 설계</li> <li>API 연동</li></ul>                                                             |
-| 전승빈 | <ul><li>UI/UX 설계</li> <li>API 연동</li></ul>                                                             |
+| 이름   | 분담                                                                                                                                                                                             |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 주성준 | <ul><li>메인 로직 설계</li><li>팀 리딩 및 커뮤니케이션</li><li>어플리케이션 배포</li></ul>                                                                                                       |
+| 백승민 | <ul><li>서버 인프라 구축 </li><li>학식, 채팅, 신고, 검색기능 구현</li><li>편의성 파이프라인 구축</li></ul>                                                                                       |
+| 유제승 | <ul><li>ELECTRA 기반 언어 필터링 구현</li><li>Ollama 기반 AI 챗봇 LLM/RAG 구현</li><li>OpenCV + OCR 기반 이미지 분석 및 시간표 생성</li><li>AI 품질 평가용 회귀 스크립트와 리포트 구성</li></ul> |
+| 우승원 | <ul><li>UI/UX 설계</li> <li>API 연동</li></ul>                                                                                                                                                   |
+| 전승빈 | <ul><li>UI/UX 설계</li> <li>API 연동</li></ul>                                                                                                                                                   |
 
 <br/>
 <br/>
@@ -144,6 +190,11 @@ python tests/regression/chatbot/run_chatbot_regression.py --url http://127.0.0.1
           <img src="https://img.shields.io/badge/opencv-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white" height="24px"/>
           <img src="https://img.shields.io/badge/scikitlearn-F7931E?style=for-the-badge&logo=scikitlearn&logoColor=white" height="24px"/>
           <img src="https://img.shields.io/badge/pytorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/Transformers-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black" height="24px"/>
+          <img src="https://img.shields.io/badge/SentenceTransformers-4B5563?style=for-the-badge&logo=huggingface&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/Tesseract%20OCR-2563EB?style=for-the-badge&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/KoNLPy-7C3AED?style=for-the-badge&logoColor=white" height="24px"/>
+          <img src="https://img.shields.io/badge/OpenAI%20SDK-412991?style=for-the-badge&logo=openai&logoColor=white" height="24px"/>
         </td>
     </tbody>
   </table>
