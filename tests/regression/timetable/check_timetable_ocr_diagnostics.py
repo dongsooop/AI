@@ -154,7 +154,7 @@ def grid_detection_success(grid: Dict[str, Any], expected: Dict[str, Any]) -> bo
 
 
 def empty_cell_ratio(ocr: Dict[str, Any]) -> Optional[float]:
-    total = int(ocr.get("total_cells", 0))
+    total = int(ocr.get("ocr_task_cells", 0) or ocr.get("total_cells", 0))
     if total <= 0:
         return None
     text_cells = int(ocr.get("text_cells", 0))
@@ -189,6 +189,7 @@ def evaluate_case(case: Dict[str, Any], cv2, np, ocr_engine) -> Dict[str, Any]:
         "empty_cell_ratio": empty_cell_ratio(ocr),
         "ocr_confidence": ocr.get("average_confidence"),
         "fallback_cell_count": ocr.get("fallback_cells", 0),
+        "skipped_empty_cell_count": ocr.get("skipped_empty_cells", 0),
         "accepted_cell_count": ocr.get("accepted_cells", 0),
         "rejected_cell_count": len(ocr.get("rejected_cells", [])),
         "low_confidence_cell_count": ocr.get("low_confidence_cells", 0),
@@ -241,6 +242,7 @@ def aggregate_metrics(case_results: List[Dict[str, Any]]) -> Dict[str, Any]:
         "average_empty_cell_ratio": round(sum(empty_ratios) / len(empty_ratios), 4) if empty_ratios else None,
         "average_ocr_confidence": round(sum(confidence_values) / len(confidence_values), 2) if confidence_values else None,
         "fallback_cell_count": sum(int(result["metrics"].get("fallback_cell_count", 0)) for result in case_results),
+        "skipped_empty_cell_count": sum(int(result["metrics"].get("skipped_empty_cell_count", 0)) for result in case_results),
         "accepted_cell_count": sum(int(result["metrics"].get("accepted_cell_count", 0)) for result in case_results),
         "rejected_cell_count": sum(int(result["metrics"].get("rejected_cell_count", 0)) for result in case_results),
     }

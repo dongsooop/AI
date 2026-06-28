@@ -47,6 +47,7 @@ TRIM_OUTER, TRIM_X_GAP, TRIM_Y_GAP = True, 20, 15
 OCR_THREAD_WORKERS = 8
 LOW_OCR_CONFIDENCE = 55.0
 MAX_REJECTED_CELLS_IN_DIAGNOSTICS = 120
+EMPTY_CELL_FOREGROUND_DENSITY_THRESHOLD = 0.005
 
 
 def configure_ocr_worker_logging() -> None:
@@ -259,6 +260,32 @@ def assess_image_quality(img_bgr: np.ndarray) -> Dict[str, Any]:
     }
 
 
+def _foreground_density(roi_gray: np.ndarray) -> float:
+    height, width = roi_gray.shape[:2]
+    if height <= 0 or width <= 0:
+        return 0.0
+
+    margin_y = max(1, int(height * 0.06))
+    margin_x = max(1, int(width * 0.06))
+    if height > margin_y * 2 and width > margin_x * 2:
+        roi_gray = roi_gray[margin_y:height - margin_y, margin_x:width - margin_x]
+
+    blurred = cv2.GaussianBlur(roi_gray, (3, 3), 0)
+    _, dark_mask = cv2.threshold(blurred, 205, 255, cv2.THRESH_BINARY_INV)
+    if min(dark_mask.shape[:2]) >= 2:
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        dark_mask = cv2.morphologyEx(dark_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+
+    area = dark_mask.shape[0] * dark_mask.shape[1]
+    if area <= 0:
+        return 0.0
+    return round(float(cv2.countNonZero(dark_mask)) / float(area), 6)
+
+
+def _is_empty_cell_candidate(roi_gray: np.ndarray) -> bool:
+    return _foreground_density(roi_gray) <= EMPTY_CELL_FOREGROUND_DENSITY_THRESHOLD
+
+
 def _save_grid_debug_image(base_gray: np.ndarray, x_lines: List[int], y_lines: List[int], output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     overlay = cv2.cvtColor(base_gray, cv2.COLOR_GRAY2BGR)
@@ -441,6 +468,9 @@ def _extract_schedule_core(
         "grid": {},
         "ocr": {
             "total_cells": 0,
+            "ocr_task_cells": 0,
+            "skipped_empty_cells": 0,
+            "empty_cell_skip_threshold": EMPTY_CELL_FOREGROUND_DENSITY_THRESHOLD,
             "text_cells": 0,
             "accepted_cells": 0,
             "rejected_cells": [],
@@ -504,6 +534,11 @@ def _extract_schedule_core(
         if row == 0:
             continue
         diagnostics["ocr"]["total_cells"] += 1
+        if _is_empty_cell_candidate(roi_gray):
+            diagnostics["ocr"]["skipped_empty_cells"] += 1
+            if diagnostics_enabled:
+                _reject_cell(diagnostics["ocr"]["rejected_cells"], row, col, "skipped_empty_cell")
+            continue
         ok, buf = cv2.imencode(".png", roi_gray)
         if not ok:
             if diagnostics_enabled:
@@ -511,6 +546,7 @@ def _extract_schedule_core(
             continue
         tasks.append(buf.tobytes())
         meta_map.append((row, col))
+        diagnostics["ocr"]["ocr_task_cells"] += 1
 
     ocr_results: List[Dict[str, Any]] = []
     ocr_start = perf_time.monotonic()
@@ -665,7 +701,9 @@ def _log_ocr_engine_runtime(diagnostics: Dict[str, Any], schedule_count: int) ->
             ocr_duration_ms=runtime.get("ocr_duration_ms", 0),
             extracted_cell_count=ocr.get("accepted_cells", 0),
             total_cell_count=ocr.get("total_cells", 0),
+            ocr_task_cell_count=ocr.get("ocr_task_cells", 0),
             text_cell_count=ocr.get("text_cells", 0),
+            skipped_empty_cell_count=ocr.get("skipped_empty_cells", 0),
             ocr_fallback_cell_count=ocr.get("fallback_cells", 0),
         )
     )

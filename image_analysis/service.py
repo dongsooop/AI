@@ -181,7 +181,9 @@ def _log_timetable_runtime(job_id: str, start: float, diagnostics: dict[str, Any
             engine_total_duration_ms=runtime.get("total_duration_ms", 0),
             extracted_cell_count=ocr.get("accepted_cells", 0),
             total_cell_count=ocr.get("total_cells", 0),
+            ocr_task_cell_count=ocr.get("ocr_task_cells", 0),
             text_cell_count=ocr.get("text_cells", 0),
+            skipped_empty_cell_count=ocr.get("skipped_empty_cells", 0),
             ocr_fallback_cell_count=fallback_cell_count,
         )
     )

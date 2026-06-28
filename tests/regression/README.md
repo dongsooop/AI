@@ -52,6 +52,7 @@ python tests/regression/text_filtering/check_text_filter_quality_report.py
 - `average_empty_cell_ratio`: OCR 대상 셀 중 텍스트가 없는 셀 비율 평균
 - `average_ocr_confidence`: 진단 OCR confidence 평균
 - `fallback_cell_count`: fallback OCR 경로가 선택된 셀 수
+- `skipped_empty_cell_count`: OCR 전에 빈 셀 후보로 건너뛴 셀 수
 
 `cv2`, `pytesseract`, Tesseract 런타임이 없는 환경에서는 실패 대신 `status: "skipped"` 리포트를 기본 경로에 기록합니다.
 
