@@ -13,6 +13,7 @@ python tests/regression/chatbot/evaluate_rag_retrieval.py --validate-only
 python tests/regression/chatbot/evaluate_rag_retrieval.py
 python tests/regression/chatbot/check_chatbot_tool_routing.py
 python tests/regression/timetable/check_timetable_ocr_diagnostics.py
+python tests/regression/timetable/measure_timetable_ocr_baseline.py
 python tests/regression/text_filtering/check_text_filter_quality_report.py
 ```
 
@@ -52,6 +53,32 @@ python tests/regression/text_filtering/check_text_filter_quality_report.py
 - `fallback_cell_count`: fallback OCR 경로가 선택된 셀 수
 
 `cv2`, `pytesseract`, Tesseract 런타임이 없는 환경에서는 실패 대신 `status: "skipped"` 리포트를 기본 경로에 기록합니다.
+
+### Timetable OCR Performance Baseline
+
+`tests/regression/timetable/measure_timetable_ocr_baseline.py`는 `tests/regression/timetable/timetable_ocr_performance_cases.json`의 실제 시간표 이미지 샘플을 읽어 현재 OCR 런타임 기준선을 기록합니다. 운영 경로와 가깝게 측정하기 위해 `extract_schedule_runtime_report()`를 호출하며, OCR 인식 로직은 변경하지 않습니다.
+
+- `average_total_duration_ms`, `max_total_duration_ms`, `p95_total_duration_ms`: 전체 처리 시간 기준선
+- `average_grid_detection_duration_ms`, `max_grid_detection_duration_ms`: 격자 검출 시간 기준선
+- `average_ocr_duration_ms`, `max_ocr_duration_ms`: Tesseract OCR 시간 기준선
+- `total_extracted_schedule_count`: 추출된 시간표 항목 수 합계
+- `failure_count`, `failure_reasons`: 실패 사유 관측치
+
+기본 리포트는 `tests/reports/timetable/timetable_ocr_performance_baseline.json`에 저장됩니다. `data/`가 로컬/운영 샘플 영역이라 이미지 파일이 없는 케이스는 전체 실패 대신 개별 `skipped` 케이스로 기록합니다. OCI에서는 부하를 낮추기 위해 기본 `--repeat 1`을 권장하고, 안정적인 비교가 필요할 때만 반복 횟수를 늘립니다.
+
+OCI 운영 서버와 비교할 때는 먼저 서버에서 기본 운영 프로필을 그대로 측정합니다.
+
+```bash
+python tests/regression/timetable/measure_timetable_ocr_baseline.py --profile production --repeat 1
+```
+
+로컬에서 OCI 제약에 가까운 보수적 기준선을 보고 싶을 때는 셀 OCR worker 수를 줄인 프로필을 사용합니다. 이 프로필은 현재 프로세스 안에서만 `image_analysis.ocr_engine.OCR_THREAD_WORKERS`를 2로 낮춰 측정하고, 운영 코드는 수정하지 않습니다.
+
+```bash
+python tests/regression/timetable/measure_timetable_ocr_baseline.py --profile oci-constrained --repeat 1
+```
+
+정확한 OCI 기준선은 실제 OCI 서버에서 측정한 `production` 프로필 결과를 우선합니다. `oci-constrained`는 로컬에서 성능 회귀 위험을 보수적으로 보는 보조 지표입니다.
 
 ### Text Filtering Quality Metrics
 
