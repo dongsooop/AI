@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dongsooop 이슈 템플릿"
+  short_description: "저장소 GitHub 이슈 양식에 맞춘 초안 작성"
+  default_prompt: "Dongsooop 작업 계획이나 버그 내용을 .github/ISSUE_TEMPLATE 양식에 맞춰 GitHub 이슈 초안으로 정리할 때 이 스킬을 사용합니다."
