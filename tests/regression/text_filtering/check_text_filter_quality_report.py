@@ -13,6 +13,7 @@ DEFAULT_CASES_PATH = ROOT_DIR / "tests" / "regression" / "text_filtering" / "tex
 DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "text_filtering" / "text_filter_quality_report.json"
 SUITE = "text_filter_quality"
 SERVICE = "text_filtering"
+BASELINE_PHASE = "1"
 
 
 def load_cases(path: Path) -> list[dict[str, Any]]:
@@ -21,6 +22,12 @@ def load_cases(path: Path) -> list[dict[str, Any]]:
     if not isinstance(cases, list) or not cases:
         raise ValueError(f"no text filtering cases found in {path}")
     return cases
+
+
+def load_case_metadata(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    metadata = payload.get("metadata", {})
+    return metadata if isinstance(metadata, dict) else {}
 
 
 def validate_cases(cases: list[dict[str, Any]]) -> list[str]:
@@ -52,6 +59,14 @@ def validate_cases(cases: list[dict[str, Any]]) -> list[str]:
     return errors
 
 
+def count_cases_by_category(cases: list[dict[str, Any]]) -> dict[str, int]:
+    by_category: dict[str, int] = {}
+    for case in cases:
+        category = str(case.get("category", "") or "uncategorized")
+        by_category[category] = by_category.get(category, 0) + 1
+    return by_category
+
+
 def write_report(out_path: Path, output: dict[str, Any]) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -81,6 +96,7 @@ def make_summary(
 
 
 def write_skipped_report(out_path: Path, reason: str, cases_path: Path) -> None:
+    metadata = load_case_metadata(cases_path)
     summary = make_summary(
         status="skipped",
         total=0,
@@ -94,6 +110,11 @@ def write_skipped_report(out_path: Path, reason: str, cases_path: Path) -> None:
         "schema_version": 1,
         "suite": SUITE,
         "service": SERVICE,
+        "baseline": {
+            "phase": BASELINE_PHASE,
+            "report_only": True,
+            "case_metadata": metadata,
+        },
         "summary": summary,
         "cases_path": str(cases_path),
         "skipped": {
@@ -202,8 +223,10 @@ def main() -> int:
 
     cases_path = Path(args.cases)
     out_path = Path(args.out)
+    case_metadata = load_case_metadata(cases_path)
     cases = load_cases(cases_path)
     validation_errors = validate_cases(cases)
+    case_category_counts = count_cases_by_category(cases)
 
     if validation_errors:
         failed_case_ids = {
@@ -223,6 +246,12 @@ def main() -> int:
             "schema_version": 1,
             "suite": SUITE,
             "service": SERVICE,
+            "baseline": {
+                "phase": BASELINE_PHASE,
+                "report_only": True,
+                "case_metadata": case_metadata,
+                "case_category_counts": case_category_counts,
+            },
             "summary": summary,
             "cases_path": str(cases_path),
             "case_results": [],
@@ -241,13 +270,24 @@ def main() -> int:
             passed=len(cases),
             failed=0,
             skipped=0,
-            metrics={"validated_case_count": len(cases)},
+            metrics={
+                "validated_case_count": len(cases),
+                "case_category_counts": case_category_counts,
+                "baseline_phase": BASELINE_PHASE,
+                "report_only": True,
+            },
             errors=[],
         )
         output = {
             "schema_version": 1,
             "suite": SUITE,
             "service": SERVICE,
+            "baseline": {
+                "phase": BASELINE_PHASE,
+                "report_only": True,
+                "case_metadata": case_metadata,
+                "case_category_counts": case_category_counts,
+            },
             "summary": summary,
             "cases_path": str(cases_path),
             "case_results": [],
@@ -273,13 +313,24 @@ def main() -> int:
         passed=passed,
         failed=failed,
         skipped=0,
-        metrics=aggregate_metrics(case_results),
+        metrics={
+            **aggregate_metrics(case_results),
+            "case_category_counts": case_category_counts,
+            "baseline_phase": BASELINE_PHASE,
+            "report_only": True,
+        },
         errors=errors,
     )
     output = {
         "schema_version": 1,
         "suite": SUITE,
         "service": SERVICE,
+        "baseline": {
+            "phase": BASELINE_PHASE,
+            "report_only": True,
+            "case_metadata": case_metadata,
+            "case_category_counts": case_category_counts,
+        },
         "summary": summary,
         "cases_path": str(cases_path),
         "case_results": case_results,
