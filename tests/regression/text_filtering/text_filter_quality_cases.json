@@ -53,6 +53,70 @@
       "expected": {
         "has_profanity": true
       }
+    },
+    {
+      "id": "korean_variant_spacing_02",
+      "category": "korean_variant_spacing",
+      "text": "씨 발처럼 일부러 띄어 쓰는 표현도 필터링 대상입니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "korean_initial_consonant_01",
+      "category": "korean_initial_consonant",
+      "text": "댓글에 ㅅㅂ 같은 초성 욕설을 남기면 안 됩니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "korean_special_character_01",
+      "category": "korean_special_character",
+      "text": "씨@발처럼 특수문자를 끼워 넣은 표현도 제재 대상입니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "korean_repeated_character_01",
+      "category": "korean_repeated_character",
+      "text": "씨이발처럼 글자를 늘려 쓰는 표현도 비속어로 봐야 합니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "english_variant_obfuscation_01",
+      "category": "english_variant_obfuscation",
+      "text": "That was a sh1t response.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "romanized_korean_profanity_01",
+      "category": "romanized_korean_profanity",
+      "text": "댓글에 sibal 같은 로마자 욕설을 쓰면 안 됩니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "korean_number_obfuscation_01",
+      "category": "korean_number_obfuscation",
+      "text": "ㅅ1발처럼 숫자를 섞은 표현도 필터링 대상입니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "normal_false_positive_guard_01",
+      "category": "normal_false_positive_guard",
+      "text": "이 논의의 시발점은 수업 공지 내용이었습니다.",
+      "expected": {
+        "has_profanity": false
+      }
     }
   ]
 }
