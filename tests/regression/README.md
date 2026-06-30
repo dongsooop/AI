@@ -15,6 +15,7 @@ python tests/regression/chatbot/check_chatbot_tool_routing.py
 python tests/regression/timetable/check_timetable_ocr_diagnostics.py
 python tests/regression/text_filtering/check_text_filter_quality_report.py
 python tests/regression/text_filtering/check_text_filter_normalization.py
+python tests/regression/text_filtering/check_text_filter_word_matcher.py
 ```
 
 ## Evaluation Metrics Policy
@@ -59,6 +60,7 @@ python tests/regression/text_filtering/check_text_filter_normalization.py
 `tests/regression/text_filtering/check_text_filter_quality_report.py`는 `tests/regression/text_filtering/text_filter_quality_cases.json`의 케이스를 읽어 기존 텍스트 필터 판정 로직을 평가합니다.
 현재 케이스 파일의 1차 목적은 단어 단위 shadow 탐지 작업 전에 운영 True/False 및 `has_profanity` 판정 기준선을 고정하는 것입니다.
 `tests/regression/text_filtering/check_text_filter_normalization.py`는 운영 판정과 연결하지 않은 정규화 후보 생성 helper만 검증합니다.
+`tests/regression/text_filtering/check_text_filter_word_matcher.py`는 정규화 후보 기반 단어 단위 match 근거 생성을 검증하며, 운영 API 판정에는 연결하지 않습니다.
 
 - `false_positive_count`: 정상 문장을 비속어로 판정한 케이스 수
 - `false_negative_count`: 비속어 문장을 정상으로 판정한 케이스 수
