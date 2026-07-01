@@ -67,6 +67,8 @@ python tests/regression/text_filtering/check_text_filter_word_matcher.py
 - `pass_rate`: 전체 golden case 기대값과 실제 결과가 일치한 비율
 - `ml_filter_pass_rate`: 현재 ML 기반 판정 경로 기준 통과율
 - `rule_endpoint_pass_rate`: 현재 `/text_filter_rule` API 계약의 공유 판정 경로 기준 통과율
+- `shadow_match_count`: 운영 판정에 연결하지 않은 단어 단위 detector match 수
+- `shadow_detected_false_negative_count`: 기존 모델이 놓친 비속어 케이스 중 shadow detector가 match 근거를 만든 수
 
 이 스크립트는 `analyze_text_labels()`만 호출하므로 테스트 문장을 `data/bad_text_sample.txt`에 append하지 않습니다. 모델 파일 또는 의존성이 없는 환경에서는 실패 대신 `status: "skipped"` 리포트를 기본 경로에 기록합니다.
 기본 실행은 품질 리포트를 기록하고 종료 코드는 0으로 유지합니다. 품질 실패를 게이트로 쓰려면 `--strict`를 함께 사용합니다.

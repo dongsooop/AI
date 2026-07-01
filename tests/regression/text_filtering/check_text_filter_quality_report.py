@@ -150,10 +150,13 @@ def load_text_filter_service(out_path: Path, cases_path: Path):
 
 
 def evaluate_case(case: dict[str, Any], text_filter_service) -> dict[str, Any]:
+    from text_filtering.word_matcher import detect_bad_word_match_dicts
+
     text = str(case.get("text", "") or "")
     expected_has_profanity = bool(case.get("expected", {}).get("has_profanity"))
     labels = text_filter_service.analyze_text_labels(text)
     actual_has_profanity = any(label == "비속어" for label in labels)
+    shadow_matches = detect_bad_word_match_dicts(text)
     passed = actual_has_profanity == expected_has_profanity
 
     errors: list[str] = []
@@ -174,8 +177,78 @@ def evaluate_case(case: dict[str, Any], text_filter_service) -> dict[str, Any]:
             "has_profanity": actual_has_profanity,
             "labels": labels,
         },
+        "shadow": {
+            "has_match": bool(shadow_matches),
+            "match_count": len(shadow_matches),
+            "matches": shadow_matches,
+        },
         "status": "passed" if passed else "failed",
         "errors": errors,
+    }
+
+
+def aggregate_shadow_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any]:
+    total = len(case_results)
+    shadow_matched_case_count = 0
+    shadow_match_count = 0
+    shadow_detected_false_negative_count = 0
+    shadow_false_positive_candidate_count = 0
+    shadow_true_positive_candidate_count = 0
+    pattern_counts: dict[str, int] = {}
+    by_category: dict[str, dict[str, Any]] = {}
+
+    for result in case_results:
+        category = str(result.get("category", "") or "uncategorized")
+        expected_has_profanity = bool(result.get("expected", {}).get("has_profanity"))
+        actual_has_profanity = bool(result.get("actual", {}).get("has_profanity"))
+        shadow = result.get("shadow", {})
+        matches = shadow.get("matches", []) if isinstance(shadow, dict) else []
+        match_count = len(matches)
+        has_match = match_count > 0
+
+        bucket = by_category.setdefault(
+            category,
+            {
+                "total": 0,
+                "shadow_matched": 0,
+                "shadow_unmatched": 0,
+                "shadow_false_positive_candidates": 0,
+                "shadow_detected_false_negatives": 0,
+            },
+        )
+        bucket["total"] += 1
+        if has_match:
+            shadow_matched_case_count += 1
+            bucket["shadow_matched"] += 1
+        else:
+            bucket["shadow_unmatched"] += 1
+
+        shadow_match_count += match_count
+        for match in matches:
+            pattern_id = str(match.get("pattern_id", "") or "unknown")
+            pattern_counts[pattern_id] = pattern_counts.get(pattern_id, 0) + 1
+
+        if expected_has_profanity and has_match:
+            shadow_true_positive_candidate_count += 1
+        if not expected_has_profanity and has_match:
+            shadow_false_positive_candidate_count += 1
+            bucket["shadow_false_positive_candidates"] += 1
+        if expected_has_profanity and not actual_has_profanity and has_match:
+            shadow_detected_false_negative_count += 1
+            bucket["shadow_detected_false_negatives"] += 1
+
+    for bucket in by_category.values():
+        bucket["shadow_match_rate"] = round(bucket["shadow_matched"] / bucket["total"], 4) if bucket["total"] else 0.0
+
+    return {
+        "shadow_match_count": shadow_match_count,
+        "shadow_matched_case_count": shadow_matched_case_count,
+        "shadow_match_rate": round(shadow_matched_case_count / total, 4) if total else 0.0,
+        "shadow_true_positive_candidate_count": shadow_true_positive_candidate_count,
+        "shadow_false_positive_candidate_count": shadow_false_positive_candidate_count,
+        "shadow_detected_false_negative_count": shadow_detected_false_negative_count,
+        "shadow_pattern_counts": pattern_counts,
+        "shadow_by_category": by_category,
     }
 
 
@@ -210,6 +283,7 @@ def aggregate_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any]:
         "rule_filter_pass_rate": None,
         "rule_endpoint_pass_rate": pass_rate,
         "by_category": by_category,
+        **aggregate_shadow_metrics(case_results),
     }
 
 
@@ -337,6 +411,7 @@ def main() -> int:
         "notes": [
             "This report calls analyze_text_labels() only, so test cases are not appended to data/bad_text_sample.txt.",
             "rule_endpoint_pass_rate is reported for the current API contract, which uses the shared ML-backed analyzer.",
+            "shadow matches are report-only word-level detector results and do not affect pass/fail status.",
         ],
     }
     write_report(out_path, output)
