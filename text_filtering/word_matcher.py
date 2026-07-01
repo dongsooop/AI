@@ -6,6 +6,7 @@ from text_filtering.normalization import normalize_text_variants
 
 
 MatchSeverity = Literal["high", "medium"]
+RuleStage = Literal["strong_candidate", "observe_only"]
 
 BENIGN_KOREAN_SUBSTRINGS = {
     "시발점",
@@ -23,6 +24,15 @@ LATIN_WORD_PATTERNS = {
     "english_shit": ("shit", "high"),
 }
 
+STRONG_RULE_CANDIDATE_PATTERN_IDS = {
+    "korean_sibal",
+    "korean_ssibal",
+    "korean_initial_s_b",
+    "korean_number_sibal",
+    "romanized_sibal",
+    "english_shit",
+}
+
 
 @dataclass(frozen=True)
 class WordMatch:
@@ -31,8 +41,10 @@ class WordMatch:
     normalized: str
     candidate_kind: str
     severity: MatchSeverity
+    rule_stage: RuleStage
+    strong_rule_candidate: bool
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
 
@@ -45,6 +57,26 @@ def _append_match_once(matches: list[WordMatch], seen: set[str], match: WordMatc
         return
     seen.add(match.pattern_id)
     matches.append(match)
+
+
+def _make_word_match(
+    *,
+    pattern_id: str,
+    matched_text: str,
+    normalized: str,
+    candidate_kind: str,
+    severity: MatchSeverity,
+) -> WordMatch:
+    is_strong_candidate = pattern_id in STRONG_RULE_CANDIDATE_PATTERN_IDS
+    return WordMatch(
+        pattern_id=pattern_id,
+        matched_text=matched_text,
+        normalized=normalized,
+        candidate_kind=candidate_kind,
+        severity=severity,
+        rule_stage="strong_candidate" if is_strong_candidate else "observe_only",
+        strong_rule_candidate=is_strong_candidate,
+    )
 
 
 def _find_korean_compact_matches(variants: dict[str, str]) -> list[WordMatch]:
@@ -67,7 +99,7 @@ def _find_korean_compact_matches(variants: dict[str, str]) -> list[WordMatch]:
             _append_match_once(
                 matches,
                 seen,
-                WordMatch(
+                _make_word_match(
                     pattern_id=pattern_id,
                     matched_text=term,
                     normalized=candidate,
@@ -98,7 +130,7 @@ def _find_latin_word_matches(variants: dict[str, str]) -> list[WordMatch]:
             _append_match_once(
                 matches,
                 seen,
-                WordMatch(
+                _make_word_match(
                     pattern_id=pattern_id,
                     matched_text=term,
                     normalized=candidate,

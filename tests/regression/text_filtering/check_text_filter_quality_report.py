@@ -194,7 +194,12 @@ def aggregate_shadow_metrics(case_results: list[dict[str, Any]]) -> dict[str, An
     shadow_detected_false_negative_count = 0
     shadow_false_positive_candidate_count = 0
     shadow_true_positive_candidate_count = 0
+    shadow_strong_rule_candidate_match_count = 0
+    shadow_strong_rule_candidate_case_count = 0
+    shadow_strong_rule_detected_false_negative_count = 0
+    shadow_strong_rule_false_positive_candidate_count = 0
     pattern_counts: dict[str, int] = {}
+    strong_rule_pattern_counts: dict[str, int] = {}
     by_category: dict[str, dict[str, Any]] = {}
 
     for result in case_results:
@@ -205,6 +210,9 @@ def aggregate_shadow_metrics(case_results: list[dict[str, Any]]) -> dict[str, An
         matches = shadow.get("matches", []) if isinstance(shadow, dict) else []
         match_count = len(matches)
         has_match = match_count > 0
+        strong_matches = [match for match in matches if match.get("strong_rule_candidate") is True]
+        strong_match_count = len(strong_matches)
+        has_strong_match = strong_match_count > 0
 
         bucket = by_category.setdefault(
             category,
@@ -214,6 +222,9 @@ def aggregate_shadow_metrics(case_results: list[dict[str, Any]]) -> dict[str, An
                 "shadow_unmatched": 0,
                 "shadow_false_positive_candidates": 0,
                 "shadow_detected_false_negatives": 0,
+                "shadow_strong_rule_matched": 0,
+                "shadow_strong_rule_false_positive_candidates": 0,
+                "shadow_strong_rule_detected_false_negatives": 0,
             },
         )
         bucket["total"] += 1
@@ -227,6 +238,13 @@ def aggregate_shadow_metrics(case_results: list[dict[str, Any]]) -> dict[str, An
         for match in matches:
             pattern_id = str(match.get("pattern_id", "") or "unknown")
             pattern_counts[pattern_id] = pattern_counts.get(pattern_id, 0) + 1
+            if match.get("strong_rule_candidate") is True:
+                shadow_strong_rule_candidate_match_count += 1
+                strong_rule_pattern_counts[pattern_id] = strong_rule_pattern_counts.get(pattern_id, 0) + 1
+
+        if has_strong_match:
+            shadow_strong_rule_candidate_case_count += 1
+            bucket["shadow_strong_rule_matched"] += 1
 
         if expected_has_profanity and has_match:
             shadow_true_positive_candidate_count += 1
@@ -236,9 +254,18 @@ def aggregate_shadow_metrics(case_results: list[dict[str, Any]]) -> dict[str, An
         if expected_has_profanity and not actual_has_profanity and has_match:
             shadow_detected_false_negative_count += 1
             bucket["shadow_detected_false_negatives"] += 1
+        if not expected_has_profanity and has_strong_match:
+            shadow_strong_rule_false_positive_candidate_count += 1
+            bucket["shadow_strong_rule_false_positive_candidates"] += 1
+        if expected_has_profanity and not actual_has_profanity and has_strong_match:
+            shadow_strong_rule_detected_false_negative_count += 1
+            bucket["shadow_strong_rule_detected_false_negatives"] += 1
 
     for bucket in by_category.values():
         bucket["shadow_match_rate"] = round(bucket["shadow_matched"] / bucket["total"], 4) if bucket["total"] else 0.0
+        bucket["shadow_strong_rule_match_rate"] = (
+            round(bucket["shadow_strong_rule_matched"] / bucket["total"], 4) if bucket["total"] else 0.0
+        )
 
     return {
         "shadow_match_count": shadow_match_count,
@@ -248,6 +275,11 @@ def aggregate_shadow_metrics(case_results: list[dict[str, Any]]) -> dict[str, An
         "shadow_false_positive_candidate_count": shadow_false_positive_candidate_count,
         "shadow_detected_false_negative_count": shadow_detected_false_negative_count,
         "shadow_pattern_counts": pattern_counts,
+        "shadow_strong_rule_candidate_match_count": shadow_strong_rule_candidate_match_count,
+        "shadow_strong_rule_candidate_case_count": shadow_strong_rule_candidate_case_count,
+        "shadow_strong_rule_detected_false_negative_count": shadow_strong_rule_detected_false_negative_count,
+        "shadow_strong_rule_false_positive_candidate_count": shadow_strong_rule_false_positive_candidate_count,
+        "shadow_strong_rule_pattern_counts": strong_rule_pattern_counts,
         "shadow_by_category": by_category,
     }
 

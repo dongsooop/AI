@@ -67,6 +67,10 @@ def main() -> int:
         pattern_ids = {match.pattern_id for match in matches}
         if case["expected_pattern"] not in pattern_ids:
             failures.append(f"{case['id']}:missing_pattern:{case['expected_pattern']}:actual={sorted(pattern_ids)}")
+            continue
+        expected_matches = [match for match in matches if match.pattern_id == case["expected_pattern"]]
+        if not any(match.strong_rule_candidate and match.rule_stage == "strong_candidate" for match in expected_matches):
+            failures.append(f"{case['id']}:expected_strong_rule_candidate:{case['expected_pattern']}")
 
     for case in NEGATIVE_CASES:
         matches = detect_bad_word_matches(case["text"])
