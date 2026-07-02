@@ -15,6 +15,7 @@ from core.logging import (
     get_logger,
     runtime_log_message,
 )
+from text_filtering.word_matcher import detect_bad_word_match_dicts
 
 
 MODEL_PATH = Path("model/my_electra_finetuned")
@@ -181,6 +182,7 @@ def _sanitized_pending_log_line(sentence: str, label_num: int, sentence_index: i
 
 def analyze_field(field_name: str, text: str, should_log: bool = False) -> dict[str, Any]:
     results: list[dict[str, str]] = []
+    matches: list[dict[str, Any]] = []
     has_profanity = False
     log_lines: list[str] = []
     english_rule_override_count = 0
@@ -193,6 +195,8 @@ def analyze_field(field_name: str, text: str, should_log: bool = False) -> dict[
             english_rule_override_count += 1
 
         results.append({"sentence": sentence, "label": label_text})
+        for match in detect_bad_word_match_dicts(sentence):
+            matches.append({**match, "sentence_index": sentence_index})
         if should_log:
             log_lines.append(_sanitized_pending_log_line(sentence, label_num, sentence_index))
         if label_text == "비속어":
@@ -202,6 +206,7 @@ def analyze_field(field_name: str, text: str, should_log: bool = False) -> dict[
         "field": field_name,
         "has_profanity": has_profanity,
         "results": results,
+        "matches": matches,
         "log_lines": log_lines,
         "english_rule_override_count": english_rule_override_count,
     }

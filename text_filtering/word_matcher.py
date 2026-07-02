@@ -150,5 +150,5 @@ def detect_bad_word_matches(text: str) -> list[WordMatch]:
     ]
 
 
-def detect_bad_word_match_dicts(text: str) -> list[dict[str, str]]:
+def detect_bad_word_match_dicts(text: str) -> list[dict[str, object]]:
     return [match.to_dict() for match in detect_bad_word_matches(text)]
