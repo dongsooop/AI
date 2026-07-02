@@ -15,6 +15,7 @@ from core.logging import (
     get_logger,
     runtime_log_message,
 )
+from core.settings import get_settings
 from text_filtering.word_matcher import detect_bad_word_match_dicts
 
 
@@ -180,12 +181,17 @@ def _sanitized_pending_log_line(sentence: str, label_num: int, sentence_index: i
     return f"text_hash={text_hash} text_length={len(sentence)} sentence_index={sentence_index}|{label_num}\n"
 
 
+def _strong_rule_matches(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [match for match in matches if match.get("strong_rule_candidate") is True]
+
+
 def analyze_field(field_name: str, text: str, should_log: bool = False) -> dict[str, Any]:
     results: list[dict[str, str]] = []
     matches: list[dict[str, Any]] = []
     has_profanity = False
     log_lines: list[str] = []
     english_rule_override_count = 0
+    strong_rule_override_enabled = get_settings().text_filter_strong_rule_override
 
     for sentence_index, sentence in enumerate(split_sentences(text), start=1):
         label_num, label_text = predict(sentence)
@@ -202,11 +208,21 @@ def analyze_field(field_name: str, text: str, should_log: bool = False) -> dict[
         if label_text == "비속어":
             has_profanity = True
 
+    strong_rule_matches = _strong_rule_matches(matches)
+    strong_rule_override_applied = strong_rule_override_enabled and bool(strong_rule_matches)
+    if strong_rule_override_applied:
+        has_profanity = True
+
     return {
         "field": field_name,
         "has_profanity": has_profanity,
         "results": results,
         "matches": matches,
+        "strong_rule_override": {
+            "enabled": strong_rule_override_enabled,
+            "applied": strong_rule_override_applied,
+            "match_count": len(strong_rule_matches),
+        },
         "log_lines": log_lines,
         "english_rule_override_count": english_rule_override_count,
     }

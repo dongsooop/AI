@@ -63,6 +63,7 @@ python tests/regression/text_filtering/check_text_filter_match_details_response.
 `tests/regression/text_filtering/check_text_filter_normalization.py`는 운영 판정과 연결하지 않은 정규화 후보 생성 helper만 검증합니다.
 `tests/regression/text_filtering/check_text_filter_word_matcher.py`는 정규화 후보 기반 단어 단위 match 근거 생성을 검증하며, 운영 API 판정에는 연결하지 않습니다.
 `tests/regression/text_filtering/check_text_filter_match_details_response.py`는 필드별 응답에 `matches`가 추가되어도 기존 `has_profanity`와 `results` 계약이 유지되는지 검증합니다.
+`TEXT_FILTER_STRONG_RULE_OVERRIDE=1`이면 strong rule candidate match를 재학습 전 임시 보호막으로 `has_profanity` 판정에 반영합니다. 기본값은 `0`입니다.
 
 - `false_positive_count`: 정상 문장을 비속어로 판정한 케이스 수
 - `false_negative_count`: 비속어 문장을 정상으로 판정한 케이스 수

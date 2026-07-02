@@ -39,6 +39,7 @@ class Settings:
     json_only_mode: bool
     chatbot_profanity_filter_enabled: bool
     chatbot_log_db_required: bool
+    text_filter_strong_rule_override: bool
     text_filter_api_url: str | None
     text_filter_api_timeout: float
     root_base_path: str | None
@@ -101,6 +102,7 @@ def get_settings() -> Settings:
         json_only_mode=os.getenv("JSON_ONLY_MODE", "0").strip() == "1",
         chatbot_profanity_filter_enabled=os.getenv("CHATBOT_PROFANITY_FILTER_ENABLED", "0").strip() == "1",
         chatbot_log_db_required=os.getenv("CHATBOT_LOG_DB_REQUIRED", "0").strip() == "1",
+        text_filter_strong_rule_override=os.getenv("TEXT_FILTER_STRONG_RULE_OVERRIDE", "0").strip() == "1",
         text_filter_api_url=os.getenv("TEXT_FILTER_API_URL"),
         text_filter_api_timeout=_get_float_env("TEXT_FILTER_API_TIMEOUT", 10.0),
         root_base_path=os.getenv("ROOT_BASE_PATH"),
