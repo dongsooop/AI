@@ -45,6 +45,11 @@ CASES = [
         "text": "ㅅ1발처럼 숫자를 섞은 표현",
         "expected_pattern": "korean_number_sibal",
     },
+    {
+        "id": "benign_substring_and_spacing_variant",
+        "text": "시발점은 논의고 시 발은 욕설입니다.",
+        "expected_pattern": "korean_sibal",
+    },
 ]
 
 NEGATIVE_CASES = [

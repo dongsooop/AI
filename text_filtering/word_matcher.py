@@ -48,8 +48,18 @@ class WordMatch:
         return asdict(self)
 
 
-def _has_benign_korean_context(text: str, term: str) -> bool:
-    return any(benign in text for benign in BENIGN_KOREAN_SUBSTRINGS if term in benign)
+def _is_inside_benign_korean_substring(text: str, term_start: int, term_end: int) -> bool:
+    for benign in BENIGN_KOREAN_SUBSTRINGS:
+        search_from = 0
+        while True:
+            benign_start = text.find(benign, search_from)
+            if benign_start == -1:
+                break
+            benign_end = benign_start + len(benign)
+            if benign_start <= term_start and term_end <= benign_end:
+                return True
+            search_from = benign_start + 1
+    return False
 
 
 def _append_match_once(matches: list[WordMatch], seen: set[str], match: WordMatch) -> None:
@@ -94,7 +104,14 @@ def _find_korean_compact_matches(variants: dict[str, str]) -> list[WordMatch]:
         if not candidate:
             continue
         for pattern_id, (term, severity) in KOREAN_COMPACT_PATTERNS.items():
-            if term not in candidate or _has_benign_korean_context(candidate, term):
+            term_start = candidate.find(term)
+            while term_start != -1 and _is_inside_benign_korean_substring(
+                candidate,
+                term_start,
+                term_start + len(term),
+            ):
+                term_start = candidate.find(term, term_start + 1)
+            if term_start == -1:
                 continue
             _append_match_once(
                 matches,
