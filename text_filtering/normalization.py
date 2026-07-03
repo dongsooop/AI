@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 
 WHITESPACE_RE = re.compile(r"\s+")
 REPEATED_CHAR_RE = re.compile(r"(.)\1{2,}")
-KOREAN_VOWEL_EXTENSION_RE = re.compile(r"([가-힣ㄱ-ㅎ])([ㅏ-ㅣ이])+(?=[가-힣ㄱ-ㅎ])")
+KOREAN_VOWEL_EXTENSION_RE = re.compile(r"([가-힣ㄱ-ㅎ])([ㅏ-ㅣ이]){2,}(?=[가-힣ㄱ-ㅎ])")
 
 LATIN_NUMBER_MAP = str.maketrans({
     "0": "o",
