@@ -3,7 +3,6 @@ import argparse
 import importlib
 import json
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -116,6 +115,15 @@ def resolve_case_path(path_value: str) -> Path:
     return ROOT_DIR / path
 
 
+def classify_final_ocr_status(lines: List[str], ocr_engine) -> str:
+    if not lines:
+        return "empty"
+    reason = ocr_engine._reject_reason_for_lines(lines)
+    if reason is None:
+        return "accepted"
+    return f"rejected_{reason}"
+
+
 def prepare_cell_candidates(img, cv2, ocr_engine) -> Dict[str, Any]:
     base_gray = ocr_engine._make_base_gray(img)
     x_lines, vertical_mask = ocr_engine._vertical_lines(base_gray)
@@ -135,13 +143,15 @@ def prepare_cell_candidates(img, cv2, ocr_engine) -> Dict[str, Any]:
     cells: List[Dict[str, Any]] = []
     tasks: List[bytes] = []
     task_indexes: List[int] = []
+    foreground_density_map: List[float] = []
     for row, col, roi_gray in ocr_engine._iterate_cells_autogrid(base_gray, x_lines, y_lines):
         if row == 0:
             continue
+        foreground_density = ocr_engine._foreground_density(roi_gray)
         cell = {
             "row": row,
             "col": col + 1,
-            "foreground_density": ocr_engine._foreground_density(roi_gray),
+            "foreground_density": foreground_density,
             "text_component_count": ocr_engine._text_component_count(roi_gray),
             "text_presence": ocr_engine._has_text_presence(roi_gray),
             "ocr_status": "not_run",
@@ -150,27 +160,23 @@ def prepare_cell_candidates(img, cv2, ocr_engine) -> Dict[str, Any]:
         if ok:
             tasks.append(buf.tobytes())
             task_indexes.append(len(cells))
+            foreground_density_map.append(foreground_density)
         else:
             cell["ocr_status"] = "roi_encode_failed"
         cells.append(cell)
 
+    runtime_ocr_metrics = {
+        "runtime_fallback_candidates": 0,
+        "runtime_fallback_attempted_cells": 0,
+    }
     if tasks:
-        max_workers = min(ocr_engine.OCR_THREAD_WORKERS, len(tasks)) or 1
-        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="empty_cell_analysis") as executor:
-            for index, lines in zip(task_indexes, executor.map(ocr_engine._ocr_task, tasks)):
-                cells[index]["lines"] = lines
-                if not lines:
-                    cells[index]["ocr_status"] = "empty"
-                    continue
-                course = lines[0]
-                professor = lines[1] if len(lines) > 1 else ""
-                room = lines[2] if len(lines) > 2 else ""
-                if len(course) > 15 or len(professor) > 8 or len(room) > 10:
-                    cells[index]["ocr_status"] = "rejected_field_too_long"
-                elif ocr_engine._is_valid_course(course) and ocr_engine._is_valid_professor(professor):
-                    cells[index]["ocr_status"] = "accepted"
-                else:
-                    cells[index]["ocr_status"] = "rejected_invalid_course_or_professor"
+        ocr_results, runtime_ocr_metrics = ocr_engine._run_runtime_ocr_with_fallback(tasks, foreground_density_map)
+        for index, ocr_result in zip(task_indexes, ocr_results):
+            lines = ocr_result.get("lines") or []
+            cells[index]["lines"] = lines
+            cells[index]["ocr_config"] = ocr_result.get("config")
+            cells[index]["fallback_used"] = bool(ocr_result.get("fallback_used"))
+            cells[index]["ocr_status"] = classify_final_ocr_status(lines, ocr_engine)
 
     return {
         "grid": {
@@ -179,6 +185,7 @@ def prepare_cell_candidates(img, cv2, ocr_engine) -> Dict[str, Any]:
             "cell_columns": max(0, len(x_lines) - 1),
             "cell_rows": max(0, len(y_lines) - 1),
         },
+        "runtime_ocr_metrics": runtime_ocr_metrics,
         "cells": cells,
     }
 
@@ -204,6 +211,8 @@ def summarize_thresholds(cells: List[Dict[str, Any]], thresholds: List[float], s
                     "row": cell["row"],
                     "col": cell["col"],
                     "foreground_density": cell["foreground_density"],
+                    "ocr_config": cell.get("ocr_config"),
+                    "fallback_used": bool(cell.get("fallback_used")),
                 }
                 for cell in skipped_accepted[:sample_limit]
             ],
@@ -284,6 +293,13 @@ def evaluate_case(case: Dict[str, Any], thresholds: List[float], sample_limit: i
             "accepted_cell_count": accepted_count,
             "text_cell_count": text_count,
             "empty_cell_count": empty_count,
+            "runtime_fallback_candidate_count": int(
+                prepared.get("runtime_ocr_metrics", {}).get("runtime_fallback_candidates", 0)
+            ),
+            "runtime_fallback_attempted_cell_count": int(
+                prepared.get("runtime_ocr_metrics", {}).get("runtime_fallback_attempted_cells", 0)
+            ),
+            "runtime_fallback_accepted_cell_count": sum(1 for cell in cells if cell.get("fallback_used")),
             "best_safe_threshold_no_accepted_loss": max(safe_thresholds) if safe_thresholds else None,
             "best_safe_threshold_no_text_loss": max(no_text_loss_thresholds) if no_text_loss_thresholds else None,
             "text_presence_would_skip_cell_count": len(text_presence_skipped),
@@ -336,6 +352,18 @@ def aggregate_metrics(case_results: List[Dict[str, Any]], thresholds: List[float
         "accepted_cell_count": sum(int(result.get("metrics", {}).get("accepted_cell_count", 0)) for result in passed_results),
         "text_cell_count": sum(int(result.get("metrics", {}).get("text_cell_count", 0)) for result in passed_results),
         "empty_cell_count": sum(int(result.get("metrics", {}).get("empty_cell_count", 0)) for result in passed_results),
+        "runtime_fallback_candidate_count": sum(
+            int(result.get("metrics", {}).get("runtime_fallback_candidate_count", 0))
+            for result in passed_results
+        ),
+        "runtime_fallback_attempted_cell_count": sum(
+            int(result.get("metrics", {}).get("runtime_fallback_attempted_cell_count", 0))
+            for result in passed_results
+        ),
+        "runtime_fallback_accepted_cell_count": sum(
+            int(result.get("metrics", {}).get("runtime_fallback_accepted_cell_count", 0))
+            for result in passed_results
+        ),
         "best_safe_threshold_no_accepted_loss": max(safe_thresholds) if safe_thresholds else None,
         "best_safe_threshold_no_text_loss": max(no_text_loss_thresholds) if no_text_loss_thresholds else None,
         "threshold_summary": threshold_summary,

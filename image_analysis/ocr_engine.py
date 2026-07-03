@@ -229,6 +229,58 @@ def _should_consider_runtime_fallback(lines: List[str], foreground_density: floa
     }
 
 
+def _run_runtime_ocr_with_fallback(
+    tasks: List[bytes],
+    foreground_density_map: List[float],
+) -> tuple[List[Dict[str, Any]], Dict[str, int]]:
+    ocr_results: List[Dict[str, Any]] = []
+    metrics = {
+        "runtime_fallback_candidates": 0,
+        "runtime_fallback_attempted_cells": 0,
+    }
+    if not tasks:
+        return ocr_results, metrics
+
+    max_workers = min(OCR_THREAD_WORKERS, len(tasks)) or 1
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ocr_cell") as executor:
+        for result in executor.map(_ocr_task, tasks):
+            ocr_results.append({
+                "lines": result,
+                "confidence": None,
+                "config": "psm6",
+                "fallback_used": False,
+            })
+
+    fallback_candidates: List[tuple[float, int, bytes]] = []
+    for index, (ocr_result, roi_bytes) in enumerate(zip(ocr_results, tasks)):
+        lines = ocr_result.get("lines") or []
+        if _reject_reason_for_lines(lines) is None:
+            continue
+        foreground_density = foreground_density_map[index]
+        if not _should_consider_runtime_fallback(lines, foreground_density):
+            continue
+        fallback_candidates.append((
+            _runtime_fallback_score(lines, foreground_density),
+            index,
+            roi_bytes,
+        ))
+
+    metrics["runtime_fallback_candidates"] = len(fallback_candidates)
+    fallback_candidates.sort(key=lambda item: item[0], reverse=True)
+    fallback_candidates = fallback_candidates[:MAX_RUNTIME_FALLBACK_CELLS]
+    metrics["runtime_fallback_attempted_cells"] = len(fallback_candidates)
+    if fallback_candidates:
+        max_workers = min(OCR_THREAD_WORKERS, len(fallback_candidates)) or 1
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ocr_fallback") as executor:
+            fallback_results = executor.map(_ocr_fallback_task, [item[2] for item in fallback_candidates])
+            for (_, index, _), fallback_result in zip(fallback_candidates, fallback_results):
+                fallback_lines = fallback_result.get("lines") or []
+                if _reject_reason_for_lines(fallback_lines) is None:
+                    ocr_results[index] = fallback_result
+
+    return ocr_results, metrics
+
+
 def _split_slot(slot: str) -> Optional[tuple[str, str]]:
     if slot is None:
         return None
@@ -653,47 +705,14 @@ def _extract_schedule_core(
     ocr_results: List[Dict[str, Any]] = []
     ocr_start = perf_time.monotonic()
     if tasks:
-        max_workers = min(OCR_THREAD_WORKERS, len(tasks)) or 1
-        ocr_func = _ocr_diagnostic_task if diagnostics_enabled else _ocr_task
-        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ocr_cell") as executor:
-            for result in executor.map(ocr_func, tasks):
-                if diagnostics_enabled:
-                    ocr_results.append(result)
-                else:
-                    ocr_results.append({
-                        "lines": result,
-                        "confidence": None,
-                        "config": "psm6",
-                        "fallback_used": False,
-                    })
-
-    if not diagnostics_enabled and ocr_results:
-        fallback_candidates: List[tuple[float, int, bytes]] = []
-        for index, (ocr_result, roi_bytes) in enumerate(zip(ocr_results, tasks)):
-            lines = ocr_result.get("lines") or []
-            if _reject_reason_for_lines(lines) is None:
-                continue
-            foreground_density = foreground_density_map[index]
-            if not _should_consider_runtime_fallback(lines, foreground_density):
-                continue
-            fallback_candidates.append((
-                _runtime_fallback_score(lines, foreground_density),
-                index,
-                roi_bytes,
-            ))
-
-        diagnostics["ocr"]["runtime_fallback_candidates"] = len(fallback_candidates)
-        fallback_candidates.sort(key=lambda item: item[0], reverse=True)
-        fallback_candidates = fallback_candidates[:MAX_RUNTIME_FALLBACK_CELLS]
-        diagnostics["ocr"]["runtime_fallback_attempted_cells"] = len(fallback_candidates)
-        if fallback_candidates:
-            max_workers = min(OCR_THREAD_WORKERS, len(fallback_candidates)) or 1
-            with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ocr_fallback") as executor:
-                fallback_results = executor.map(_ocr_fallback_task, [item[2] for item in fallback_candidates])
-                for (_, index, _), fallback_result in zip(fallback_candidates, fallback_results):
-                    fallback_lines = fallback_result.get("lines") or []
-                    if _reject_reason_for_lines(fallback_lines) is None:
-                        ocr_results[index] = fallback_result
+        if diagnostics_enabled:
+            max_workers = min(OCR_THREAD_WORKERS, len(tasks)) or 1
+            with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ocr_cell") as executor:
+                ocr_results.extend(executor.map(_ocr_diagnostic_task, tasks))
+        else:
+            ocr_results, runtime_ocr_metrics = _run_runtime_ocr_with_fallback(tasks, foreground_density_map)
+            diagnostics["ocr"]["runtime_fallback_candidates"] = runtime_ocr_metrics["runtime_fallback_candidates"]
+            diagnostics["ocr"]["runtime_fallback_attempted_cells"] = runtime_ocr_metrics["runtime_fallback_attempted_cells"]
 
     diagnostics["runtime"]["ocr_duration_ms"] = int((perf_time.monotonic() - ocr_start) * 1000)
 
@@ -718,15 +737,11 @@ def _extract_schedule_core(
         professor = lines[1] if len(lines) > 1 else ""
         room = lines[2] if len(lines) > 2 else ""
 
-        if len(course) > 15 or len(professor) > 8 or len(room) > 10:
-            if diagnostics_enabled:
-                _reject_cell(diagnostics["ocr"]["rejected_cells"], row, col, "field_too_long", ocr_result)
-            continue
-
+        reject_reason = _reject_reason_for_lines(lines)
         room = room.replace("=", "-")
-        if not (_is_valid_course(course) and _is_valid_professor(professor)):
+        if reject_reason is not None:
             if diagnostics_enabled:
-                _reject_cell(diagnostics["ocr"]["rejected_cells"], row, col, "invalid_course_or_professor", ocr_result)
+                _reject_cell(diagnostics["ocr"]["rejected_cells"], row, col, reject_reason, ocr_result)
             continue
 
         raw_cells.append({
