@@ -154,7 +154,10 @@ def grid_detection_success(grid: Dict[str, Any], expected: Dict[str, Any]) -> bo
 
 
 def empty_cell_ratio(ocr: Dict[str, Any]) -> Optional[float]:
-    total = int(ocr.get("ocr_task_cells", 0) or ocr.get("total_cells", 0))
+    total_value = ocr.get("ocr_task_cells")
+    if total_value is None:
+        total_value = ocr.get("total_cells", 0)
+    total = int(total_value or 0)
     if total <= 0:
         return None
     text_cells = int(ocr.get("text_cells", 0))
