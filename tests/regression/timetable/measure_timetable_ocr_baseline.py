@@ -341,7 +341,12 @@ def main() -> int:
     failed = sum(1 for result in case_results if result.get("status") == "failed")
     skipped = sum(1 for result in case_results if result.get("status") == "skipped")
     passed = len(case_results) - failed - skipped
-    status = "failed" if failed else "passed"
+    if failed:
+        status = "failed"
+    elif passed == 0 and skipped > 0:
+        status = "skipped"
+    else:
+        status = "passed"
     summary = make_summary(
         status=status,
         total=len(case_results),
