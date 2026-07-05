@@ -14,6 +14,9 @@ python tests/regression/chatbot/evaluate_rag_retrieval.py
 python tests/regression/chatbot/check_chatbot_tool_routing.py
 python tests/regression/timetable/check_timetable_ocr_diagnostics.py
 python tests/regression/text_filtering/check_text_filter_quality_report.py
+python tests/regression/text_filtering/check_text_filter_normalization.py
+python tests/regression/text_filtering/check_text_filter_word_matcher.py
+python tests/regression/text_filtering/check_text_filter_match_details_response.py
 ```
 
 ## Evaluation Metrics Policy
@@ -56,12 +59,22 @@ python tests/regression/text_filtering/check_text_filter_quality_report.py
 ### Text Filtering Quality Metrics
 
 `tests/regression/text_filtering/check_text_filter_quality_report.py`는 `tests/regression/text_filtering/text_filter_quality_cases.json`의 케이스를 읽어 기존 텍스트 필터 판정 로직을 평가합니다.
+현재 케이스 파일의 1차 목적은 단어 단위 shadow 탐지 작업 전에 운영 True/False 및 `has_profanity` 판정 기준선을 고정하는 것입니다.
+`tests/regression/text_filtering/check_text_filter_normalization.py`는 운영 판정과 연결하지 않은 정규화 후보 생성 helper만 검증합니다.
+`tests/regression/text_filtering/check_text_filter_word_matcher.py`는 정규화 후보 기반 단어 단위 match 근거 생성을 검증하며, 운영 API 판정에는 연결하지 않습니다.
+`tests/regression/text_filtering/check_text_filter_match_details_response.py`는 필드별 응답에 `matches`가 추가되어도 기존 `has_profanity`와 `results` 계약이 유지되는지 검증합니다.
+`TEXT_FILTER_STRONG_RULE_OVERRIDE=1`이면 strong rule candidate match를 재학습 전 임시 보호막으로 `has_profanity` 판정에 반영합니다. 기본값은 `0`입니다.
+품질 리포트의 pass/fail은 `analyze_text_labels()`의 기존 모델 라벨 기준입니다. Strong rule override 효과는 shadow 지표와 `check_text_filter_match_details_response.py`에서 확인합니다.
 
 - `false_positive_count`: 정상 문장을 비속어로 판정한 케이스 수
 - `false_negative_count`: 비속어 문장을 정상으로 판정한 케이스 수
 - `pass_rate`: 전체 golden case 기대값과 실제 결과가 일치한 비율
 - `ml_filter_pass_rate`: 현재 ML 기반 판정 경로 기준 통과율
 - `rule_endpoint_pass_rate`: 현재 `/text_filter_rule` API 계약의 공유 판정 경로 기준 통과율
+- `shadow_match_count`: 운영 판정에 연결하지 않은 단어 단위 detector match 수
+- `shadow_detected_false_negative_count`: 기존 모델이 놓친 비속어 케이스 중 shadow detector가 match 근거를 만든 수
+- `shadow_strong_rule_candidate_match_count`: feature flag 기반 운영 반영 후보로 분리된 강한 규칙 match 수
+- `shadow_strong_rule_detected_false_negative_count`: 기존 모델이 놓친 케이스 중 강한 규칙 후보가 match 근거를 만든 수
 
 이 스크립트는 `analyze_text_labels()`만 호출하므로 테스트 문장을 `data/bad_text_sample.txt`에 append하지 않습니다. 모델 파일 또는 의존성이 없는 환경에서는 실패 대신 `status: "skipped"` 리포트를 기본 경로에 기록합니다.
 기본 실행은 품질 리포트를 기록하고 종료 코드는 0으로 유지합니다. 품질 실패를 게이트로 쓰려면 `--strict`를 함께 사용합니다.
