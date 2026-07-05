@@ -47,6 +47,10 @@ TRIM_OUTER, TRIM_X_GAP, TRIM_Y_GAP = True, 20, 15
 OCR_THREAD_WORKERS = 8
 LOW_OCR_CONFIDENCE = 55.0
 MAX_REJECTED_CELLS_IN_DIAGNOSTICS = 120
+EMPTY_CELL_FOREGROUND_DENSITY_THRESHOLD = 0.005
+MAX_RUNTIME_FALLBACK_CELLS = 5
+EMPTY_FALLBACK_FOREGROUND_DENSITY_THRESHOLD = 0.05
+MIN_TEXT_COMPONENTS_IN_CELL = 1
 
 
 def configure_ocr_worker_logging() -> None:
@@ -114,6 +118,18 @@ def _ocr_task(roi_bytes: bytes) -> List[str]:
     return _clean_ocr_lines(text)
 
 
+def _ocr_fallback_task(roi_bytes: bytes) -> Dict[str, Any]:
+    nparr = np.frombuffer(roi_bytes, np.uint8)
+    roi_gray = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
+    text = pytesseract.image_to_string(Image.fromarray(roi_gray), config=fallback_tesseract_config).strip()
+    return {
+        "lines": _clean_ocr_lines(text),
+        "confidence": None,
+        "config": "psm11",
+        "fallback_used": True,
+    }
+
+
 def _is_acceptable_ocr_candidate(candidate: Dict[str, Any]) -> bool:
     lines = candidate.get("lines") or []
     if not lines:
@@ -166,6 +182,103 @@ def _is_valid_course(value: str) -> bool:
 def _is_valid_professor(value: str) -> bool:
     value = value.strip()
     return len(value) >= 2 and _hangul.search(value) is not None and _long_repeat.search(value) is None
+
+
+def _reject_reason_for_lines(lines: List[str]) -> Optional[str]:
+    if not lines:
+        return "empty_ocr"
+
+    course = lines[0]
+    professor = lines[1] if len(lines) > 1 else ""
+    room = lines[2] if len(lines) > 2 else ""
+    if len(course) > 15 or len(professor) > 8 or len(room) > 10:
+        return "field_too_long"
+    if not (_is_valid_course(course) and _is_valid_professor(professor)):
+        return "invalid_course_or_professor"
+    return None
+
+
+def _runtime_fallback_score(lines: List[str], foreground_density: float) -> float:
+    if not lines:
+        return 20.0 + foreground_density
+
+    score = 40.0 + min(len(lines), 3) * 5.0 + foreground_density
+    course_valid = _is_valid_course(lines[0])
+    professor_valid = len(lines) >= 2 and _is_valid_professor(lines[1])
+    if course_valid != professor_valid:
+        score += 50.0
+    elif course_valid or professor_valid:
+        score += 25.0
+    elif any(_hangul.search(line) for line in lines):
+        score += 10.0
+    return score
+
+
+def _should_consider_runtime_fallback(lines: List[str], foreground_density: float) -> bool:
+    if not lines:
+        return foreground_density >= EMPTY_FALLBACK_FOREGROUND_DENSITY_THRESHOLD
+
+    if not any(_hangul.search(line) for line in lines):
+        return False
+
+    course_valid = _is_valid_course(lines[0])
+    professor_valid = len(lines) >= 2 and _is_valid_professor(lines[1])
+    return course_valid != professor_valid or _reject_reason_for_lines(lines) in {
+        "field_too_long",
+        "invalid_course_or_professor",
+    }
+
+
+def _run_runtime_ocr_with_fallback(
+    tasks: List[bytes],
+    foreground_density_map: List[float],
+) -> tuple[List[Dict[str, Any]], Dict[str, int]]:
+    ocr_results: List[Dict[str, Any]] = []
+    metrics = {
+        "runtime_fallback_candidates": 0,
+        "runtime_fallback_attempted_cells": 0,
+    }
+    if not tasks:
+        return ocr_results, metrics
+
+    max_workers = min(OCR_THREAD_WORKERS, len(tasks)) or 1
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ocr_cell") as executor:
+        for result in executor.map(_ocr_task, tasks):
+            ocr_results.append({
+                "lines": result,
+                "confidence": None,
+                "config": "psm6",
+                "fallback_used": False,
+            })
+
+    fallback_candidates: List[tuple[float, int, bytes]] = []
+    for index, (ocr_result, roi_bytes) in enumerate(zip(ocr_results, tasks)):
+        lines = ocr_result.get("lines") or []
+        if _reject_reason_for_lines(lines) is None:
+            continue
+        foreground_density = foreground_density_map[index]
+        if not _should_consider_runtime_fallback(lines, foreground_density):
+            continue
+        fallback_candidates.append((
+            _runtime_fallback_score(lines, foreground_density),
+            index,
+            roi_bytes,
+        ))
+
+    metrics["runtime_fallback_candidates"] = len(fallback_candidates)
+    fallback_candidates.sort(key=lambda item: item[0], reverse=True)
+    fallback_candidates = fallback_candidates[:MAX_RUNTIME_FALLBACK_CELLS]
+    metrics["runtime_fallback_attempted_cells"] = len(fallback_candidates)
+    if fallback_candidates:
+        max_workers = min(OCR_THREAD_WORKERS, len(fallback_candidates)) or 1
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ocr_fallback") as executor:
+            fallback_results = executor.map(_ocr_fallback_task, [item[2] for item in fallback_candidates])
+            for (_, index, _), fallback_result in zip(fallback_candidates, fallback_results):
+                fallback_lines = fallback_result.get("lines") or []
+                if _reject_reason_for_lines(fallback_lines) is None:
+                    ocr_results[index] = fallback_result
+
+    return ocr_results, metrics
 
 
 def _split_slot(slot: str) -> Optional[tuple[str, str]]:
@@ -257,6 +370,68 @@ def assess_image_quality(img_bgr: np.ndarray) -> Dict[str, Any]:
         "blur_score": blur_score,
         "flags": flags,
     }
+
+
+def _cell_foreground_mask(roi_gray: np.ndarray) -> np.ndarray:
+    height, width = roi_gray.shape[:2]
+    if height <= 0 or width <= 0:
+        return np.zeros((0, 0), dtype=np.uint8)
+
+    margin_y = max(1, int(height * 0.06))
+    margin_x = max(1, int(width * 0.06))
+    if height > margin_y * 2 and width > margin_x * 2:
+        roi_gray = roi_gray[margin_y:height - margin_y, margin_x:width - margin_x]
+
+    blurred = cv2.GaussianBlur(roi_gray, (3, 3), 0)
+    _, dark_mask = cv2.threshold(blurred, 205, 255, cv2.THRESH_BINARY_INV)
+    if min(dark_mask.shape[:2]) >= 2:
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        dark_mask = cv2.morphologyEx(dark_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    return dark_mask
+
+
+def _foreground_density(roi_gray: np.ndarray) -> float:
+    dark_mask = _cell_foreground_mask(roi_gray)
+    area = dark_mask.shape[0] * dark_mask.shape[1]
+    if area <= 0:
+        return 0.0
+    return round(float(cv2.countNonZero(dark_mask)) / float(area), 6)
+
+
+def _text_component_count(roi_gray: np.ndarray) -> int:
+    dark_mask = _cell_foreground_mask(roi_gray)
+    if dark_mask.size == 0:
+        return 0
+
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(dark_mask, connectivity=8)
+    height, width = dark_mask.shape[:2]
+    area = height * width
+    text_components = 0
+    for label in range(1, count):
+        x, y, component_width, component_height, component_area = stats[label]
+        if component_area < 4:
+            continue
+        if component_area > area * 0.18:
+            continue
+        if component_width > width * 0.75 or component_height > height * 0.75:
+            continue
+        if component_width < 2 or component_height < 2:
+            continue
+        aspect_ratio = component_width / max(component_height, 1)
+        if aspect_ratio > 12.0 or aspect_ratio < 0.08:
+            continue
+        text_components += 1
+    return text_components
+
+
+def _has_text_presence(roi_gray: np.ndarray) -> bool:
+    if _foreground_density(roi_gray) <= EMPTY_CELL_FOREGROUND_DENSITY_THRESHOLD:
+        return False
+    return _text_component_count(roi_gray) >= MIN_TEXT_COMPONENTS_IN_CELL
+
+
+def _is_empty_cell_candidate(roi_gray: np.ndarray) -> bool:
+    return not _has_text_presence(roi_gray)
 
 
 def _save_grid_debug_image(base_gray: np.ndarray, x_lines: List[int], y_lines: List[int], output_path: Path) -> None:
@@ -441,6 +616,13 @@ def _extract_schedule_core(
         "grid": {},
         "ocr": {
             "total_cells": 0,
+            "ocr_task_cells": 0,
+            "skipped_empty_cells": 0,
+            "empty_cell_skip_threshold": EMPTY_CELL_FOREGROUND_DENSITY_THRESHOLD,
+            "min_text_components_in_cell": MIN_TEXT_COMPONENTS_IN_CELL,
+            "runtime_fallback_limit": MAX_RUNTIME_FALLBACK_CELLS,
+            "runtime_fallback_candidates": 0,
+            "runtime_fallback_attempted_cells": 0,
             "text_cells": 0,
             "accepted_cells": 0,
             "rejected_cells": [],
@@ -500,10 +682,16 @@ def _extract_schedule_core(
 
     tasks: List[bytes] = []
     meta_map: List[tuple[int, int]] = []
+    foreground_density_map: List[float] = []
     for row, col, roi_gray in _iterate_cells_autogrid(base_gray, x_lines, y_lines):
         if row == 0:
             continue
         diagnostics["ocr"]["total_cells"] += 1
+        if _is_empty_cell_candidate(roi_gray):
+            diagnostics["ocr"]["skipped_empty_cells"] += 1
+            if diagnostics_enabled:
+                _reject_cell(diagnostics["ocr"]["rejected_cells"], row, col, "skipped_empty_cell")
+            continue
         ok, buf = cv2.imencode(".png", roi_gray)
         if not ok:
             if diagnostics_enabled:
@@ -511,23 +699,21 @@ def _extract_schedule_core(
             continue
         tasks.append(buf.tobytes())
         meta_map.append((row, col))
+        foreground_density_map.append(_foreground_density(roi_gray))
+        diagnostics["ocr"]["ocr_task_cells"] += 1
 
     ocr_results: List[Dict[str, Any]] = []
     ocr_start = perf_time.monotonic()
     if tasks:
-        max_workers = min(OCR_THREAD_WORKERS, len(tasks)) or 1
-        ocr_func = _ocr_diagnostic_task if diagnostics_enabled else _ocr_task
-        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ocr_cell") as executor:
-            for result in executor.map(ocr_func, tasks):
-                if diagnostics_enabled:
-                    ocr_results.append(result)
-                else:
-                    ocr_results.append({
-                        "lines": result,
-                        "confidence": None,
-                        "config": "psm6",
-                        "fallback_used": False,
-                    })
+        if diagnostics_enabled:
+            max_workers = min(OCR_THREAD_WORKERS, len(tasks)) or 1
+            with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ocr_cell") as executor:
+                ocr_results.extend(executor.map(_ocr_diagnostic_task, tasks))
+        else:
+            ocr_results, runtime_ocr_metrics = _run_runtime_ocr_with_fallback(tasks, foreground_density_map)
+            diagnostics["ocr"]["runtime_fallback_candidates"] = runtime_ocr_metrics["runtime_fallback_candidates"]
+            diagnostics["ocr"]["runtime_fallback_attempted_cells"] = runtime_ocr_metrics["runtime_fallback_attempted_cells"]
+
     diagnostics["runtime"]["ocr_duration_ms"] = int((perf_time.monotonic() - ocr_start) * 1000)
 
     raw_cells: List[dict] = []
@@ -544,22 +730,18 @@ def _extract_schedule_core(
             confidence_values.append(float(confidence))
             if confidence < LOW_OCR_CONFIDENCE:
                 diagnostics["ocr"]["low_confidence_cells"] += 1
-        if diagnostics_enabled and ocr_result.get("fallback_used"):
+        if ocr_result.get("fallback_used"):
             diagnostics["ocr"]["fallback_cells"] += 1
 
         course = lines[0]
         professor = lines[1] if len(lines) > 1 else ""
         room = lines[2] if len(lines) > 2 else ""
 
-        if len(course) > 15 or len(professor) > 8 or len(room) > 10:
-            if diagnostics_enabled:
-                _reject_cell(diagnostics["ocr"]["rejected_cells"], row, col, "field_too_long", ocr_result)
-            continue
-
+        reject_reason = _reject_reason_for_lines(lines)
         room = room.replace("=", "-")
-        if not (_is_valid_course(course) and _is_valid_professor(professor)):
+        if reject_reason is not None:
             if diagnostics_enabled:
-                _reject_cell(diagnostics["ocr"]["rejected_cells"], row, col, "invalid_course_or_professor", ocr_result)
+                _reject_cell(diagnostics["ocr"]["rejected_cells"], row, col, reject_reason, ocr_result)
             continue
 
         raw_cells.append({
@@ -650,23 +832,28 @@ def _log_ocr_engine_runtime(diagnostics: Dict[str, Any], schedule_count: int) ->
     failure_reason = diagnostics.get("failure_reason")
     ocr = diagnostics.get("ocr", {})
     runtime = diagnostics.get("runtime", {})
+    fallback_cell_count = int(ocr.get("fallback_cells", 0) or 0)
     logger.info(
         runtime_log_message(
             "timetable_ocr_engine_runtime",
             component=RuntimeComponent.OCR,
             operation=RuntimeOperation.OCR,
-            status=RuntimeStatus.SUCCESS if not failure_reason else RuntimeStatus.FALLBACK,
+            status=RuntimeStatus.SUCCESS if not failure_reason and fallback_cell_count == 0 else RuntimeStatus.FALLBACK,
             duration_ms=runtime.get("total_duration_ms", 0),
             result_count=schedule_count,
-            fallback=bool(failure_reason) or int(ocr.get("fallback_cells", 0) or 0) > 0,
+            fallback=bool(failure_reason) or fallback_cell_count > 0,
             fallback_reason=failure_reason,
             error_code=None,
             grid_detection_duration_ms=runtime.get("grid_detection_duration_ms", 0),
             ocr_duration_ms=runtime.get("ocr_duration_ms", 0),
             extracted_cell_count=ocr.get("accepted_cells", 0),
             total_cell_count=ocr.get("total_cells", 0),
+            ocr_task_cell_count=ocr.get("ocr_task_cells", 0),
             text_cell_count=ocr.get("text_cells", 0),
-            ocr_fallback_cell_count=ocr.get("fallback_cells", 0),
+            skipped_empty_cell_count=ocr.get("skipped_empty_cells", 0),
+            ocr_fallback_cell_count=fallback_cell_count,
+            runtime_fallback_candidate_count=ocr.get("runtime_fallback_candidates", 0),
+            runtime_fallback_attempted_cell_count=ocr.get("runtime_fallback_attempted_cells", 0),
         )
     )
 

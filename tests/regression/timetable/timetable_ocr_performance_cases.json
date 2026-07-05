@@ -1,0 +1,39 @@
+{
+  "suite": "timetable_ocr_performance_baseline",
+  "cases": [
+    {
+      "id": "image_1",
+      "path": "data/image/1.png"
+    },
+    {
+      "id": "image_2",
+      "path": "data/image/2.png"
+    },
+    {
+      "id": "image_3",
+      "path": "data/image/3.jpeg"
+    },
+    {
+      "id": "image_4",
+      "path": "data/image/4.png"
+    },
+    {
+      "id": "capture_heetae",
+      "path": "data/image/capture_heetae.png"
+    },
+    {
+      "id": "capture_jeseung",
+      "path": "data/image/capture_jeseung.png"
+    }
+  ],
+  "performance_targets": {
+    "max_total_duration_regression_ratio": 1.1,
+    "average_total_duration_regression_ratio": 1.1,
+    "p95_total_duration_regression_ratio": 1.1,
+    "average_ocr_duration_regression_ratio": 1.0,
+    "notes": [
+      "This file defines the first local/OCI sample set for measuring the current timetable OCR runtime baseline.",
+      "Targets are documented for follow-up comparison runs and are not enforced by this baseline writer."
+    ]
+  }
+}

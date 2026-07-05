@@ -164,15 +164,16 @@ def _log_timetable_runtime(job_id: str, start: float, diagnostics: dict[str, Any
     runtime = diagnostics.get("runtime", {})
     failure_reason = diagnostics.get("failure_reason")
     fallback_cell_count = int(ocr.get("fallback_cells", 0) or 0)
+    fallback_used = bool(failure_reason) or fallback_cell_count > 0
     logger.info(
         runtime_log_message(
             "timetable_job_runtime",
             component=RuntimeComponent.OCR,
             operation=RuntimeOperation.REQUEST,
-            status=RuntimeStatus.SUCCESS if not failure_reason else RuntimeStatus.FALLBACK,
+            status=RuntimeStatus.SUCCESS if not fallback_used else RuntimeStatus.FALLBACK,
             duration_ms=int((time.monotonic() - start) * 1000),
             result_count=result_count,
-            fallback=bool(failure_reason) or fallback_cell_count > 0,
+            fallback=fallback_used,
             fallback_reason=failure_reason,
             error_code=None,
             job_id=job_id,
@@ -181,7 +182,9 @@ def _log_timetable_runtime(job_id: str, start: float, diagnostics: dict[str, Any
             engine_total_duration_ms=runtime.get("total_duration_ms", 0),
             extracted_cell_count=ocr.get("accepted_cells", 0),
             total_cell_count=ocr.get("total_cells", 0),
+            ocr_task_cell_count=ocr.get("ocr_task_cells", 0),
             text_cell_count=ocr.get("text_cells", 0),
+            skipped_empty_cell_count=ocr.get("skipped_empty_cells", 0),
             ocr_fallback_cell_count=fallback_cell_count,
         )
     )
