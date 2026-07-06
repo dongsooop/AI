@@ -358,12 +358,84 @@ def aggregate_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _shadow_pattern_ids(result: dict[str, Any]) -> list[str]:
+    shadow = result.get("shadow", {})
+    matches = shadow.get("matches", []) if isinstance(shadow, dict) else []
+    pattern_ids = {
+        str(match.get("pattern_id", "") or "unknown")
+        for match in matches
+        if isinstance(match, dict)
+    }
+    return sorted(pattern_ids)
+
+
+def _example_from_result(result: dict[str, Any]) -> dict[str, Any]:
+    shadow = result.get("shadow", {})
+    return {
+        "id": result.get("id"),
+        "category": result.get("category"),
+        "source_file": result.get("source_file"),
+        "text": result.get("text"),
+        "expected_has_profanity": result.get("expected", {}).get("has_profanity"),
+        "actual_has_profanity": result.get("actual", {}).get("has_profanity"),
+        "actual_labels": result.get("actual", {}).get("labels"),
+        "shadow_has_match": bool(shadow.get("has_match")) if isinstance(shadow, dict) else False,
+        "shadow_pattern_ids": _shadow_pattern_ids(result),
+    }
+
+
+def build_examples(case_results: list[dict[str, Any]], limit: int) -> dict[str, list[dict[str, Any]]]:
+    if limit <= 0:
+        return {
+            "false_negatives_top": [],
+            "false_positives_top": [],
+            "shadow_detected_false_negatives_top": [],
+            "shadow_false_positive_candidates_top": [],
+        }
+
+    false_negatives = [
+        result
+        for result in case_results
+        if "false_negative" in result.get("errors", [])
+    ]
+    false_positives = [
+        result
+        for result in case_results
+        if "false_positive" in result.get("errors", [])
+    ]
+    shadow_detected_false_negatives = [
+        result
+        for result in false_negatives
+        if result.get("shadow", {}).get("has_match") is True
+    ]
+    shadow_false_positive_candidates = [
+        result
+        for result in case_results
+        if result.get("expected", {}).get("has_profanity") is False
+        and result.get("shadow", {}).get("has_match") is True
+    ]
+
+    return {
+        "false_negatives_top": [_example_from_result(result) for result in false_negatives[:limit]],
+        "false_positives_top": [_example_from_result(result) for result in false_positives[:limit]],
+        "shadow_detected_false_negatives_top": [
+            _example_from_result(result)
+            for result in shadow_detected_false_negatives[:limit]
+        ],
+        "shadow_false_positive_candidates_top": [
+            _example_from_result(result)
+            for result in shadow_false_positive_candidates[:limit]
+        ],
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Write a text filtering quality report")
     ap.add_argument("--cases", default=str(DEFAULT_CASES_PATH), help="golden text filtering cases path")
     ap.add_argument("--out", default=str(DEFAULT_REPORT_PATH), help="output report path")
     ap.add_argument("--validate-only", action="store_true", help="validate golden cases without loading the model")
     ap.add_argument("--strict", action="store_true", help="return a non-zero exit code when evaluated cases fail")
+    ap.add_argument("--example-limit", type=int, default=5, help="maximum examples per report examples bucket")
     args = ap.parse_args()
 
     cases_path = Path(args.cases)
@@ -478,6 +550,7 @@ def main() -> int:
         },
         "summary": summary,
         "cases_path": str(cases_path),
+        "examples": build_examples(case_results, args.example_limit),
         "case_results": case_results,
         "notes": [
             "This report calls analyze_text_labels() only, so test cases are not appended to data/bad_text_sample.txt.",
