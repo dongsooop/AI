@@ -9,25 +9,63 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-DEFAULT_CASES_PATH = ROOT_DIR / "tests" / "regression" / "text_filtering" / "text_filter_quality_cases.json"
+DEFAULT_CASES_PATH = ROOT_DIR / "tests" / "regression" / "text_filtering" / "cases"
 DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "text_filtering" / "text_filter_quality_report.json"
 SUITE = "text_filter_quality"
 SERVICE = "text_filtering"
 BASELINE_PHASE = "1"
 
 
+def load_case_payloads(path: Path) -> list[tuple[Path, dict[str, Any]]]:
+    if path.is_dir():
+        case_files = sorted(child for child in path.glob("*.json") if child.is_file())
+        if not case_files:
+            raise ValueError(f"no text filtering case files found in {path}")
+        return [(case_file, json.loads(case_file.read_text(encoding="utf-8"))) for case_file in case_files]
+
+    return [(path, json.loads(path.read_text(encoding="utf-8")))]
+
+
 def load_cases(path: Path) -> list[dict[str, Any]]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    cases = payload.get("cases", [])
-    if not isinstance(cases, list) or not cases:
+    loaded_cases: list[dict[str, Any]] = []
+    for case_file, payload in load_case_payloads(path):
+        resolved_case_file = case_file.resolve()
+        cases = payload.get("cases", [])
+        if not isinstance(cases, list) or not cases:
+            raise ValueError(f"no text filtering cases found in {case_file}")
+        for case in cases:
+            if isinstance(case, dict):
+                loaded_case = dict(case)
+                loaded_case.setdefault("source_file", str(resolved_case_file.relative_to(ROOT_DIR)))
+                loaded_cases.append(loaded_case)
+
+    if not loaded_cases:
         raise ValueError(f"no text filtering cases found in {path}")
-    return cases
+    return loaded_cases
 
 
 def load_case_metadata(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    metadata = payload.get("metadata", {})
-    return metadata if isinstance(metadata, dict) else {}
+    payloads = load_case_payloads(path)
+    if len(payloads) == 1:
+        metadata = payloads[0][1].get("metadata", {})
+        return metadata if isinstance(metadata, dict) else {}
+
+    case_files: list[dict[str, Any]] = []
+    for case_file, payload in payloads:
+        resolved_case_file = case_file.resolve()
+        metadata = payload.get("metadata", {})
+        cases = payload.get("cases", [])
+        case_files.append({
+            "path": str(resolved_case_file.relative_to(ROOT_DIR)),
+            "metadata": metadata if isinstance(metadata, dict) else {},
+            "case_count": len(cases) if isinstance(cases, list) else 0,
+        })
+
+    return {
+        "purpose": "text_filter_shadow_variant_evaluation",
+        "contract": "Do not change production True/False or has_profanity behavior in this phase.",
+        "case_files": case_files,
+    }
 
 
 def validate_cases(cases: list[dict[str, Any]]) -> list[str]:
@@ -169,6 +207,7 @@ def evaluate_case(case: dict[str, Any], text_filter_service) -> dict[str, Any]:
     return {
         "id": case.get("id"),
         "category": case.get("category"),
+        "source_file": case.get("source_file"),
         "text": text,
         "expected": {
             "has_profanity": expected_has_profanity,

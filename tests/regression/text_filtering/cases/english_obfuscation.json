@@ -1,0 +1,26 @@
+{
+  "metadata": {
+    "purpose": "english_obfuscation",
+    "phase": "1",
+    "description": "English profanity variants observed by the report-only shadow matcher.",
+    "contract": "Do not change production True/False or has_profanity behavior in this phase."
+  },
+  "cases": [
+    {
+      "id": "english_variant_obfuscation_01",
+      "category": "english_variant_obfuscation",
+      "text": "That was a sh1t response.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "romanized_korean_profanity_01",
+      "category": "romanized_korean_profanity",
+      "text": "댓글에 sibal 같은 로마자 욕설을 쓰면 안 됩니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    }
+  ]
+}

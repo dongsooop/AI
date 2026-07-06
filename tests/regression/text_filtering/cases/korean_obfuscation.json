@@ -1,0 +1,58 @@
+{
+  "metadata": {
+    "purpose": "korean_obfuscation",
+    "phase": "1",
+    "description": "Korean spacing, initial-consonant, symbol, repeated-character, and number obfuscation cases.",
+    "contract": "Do not change production True/False or has_profanity behavior in this phase."
+  },
+  "cases": [
+    {
+      "id": "korean_variant_spacing_01",
+      "category": "korean_variant_spacing",
+      "text": "시 발 이라고 띄어 써도 상대에게 불쾌감을 줄 수 있습니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "korean_variant_spacing_02",
+      "category": "korean_variant_spacing",
+      "text": "씨 발처럼 일부러 띄어 쓰는 표현도 필터링 대상입니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "korean_initial_consonant_01",
+      "category": "korean_initial_consonant",
+      "text": "댓글에 ㅅㅂ 같은 초성 욕설을 남기면 안 됩니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "korean_special_character_01",
+      "category": "korean_special_character",
+      "text": "씨@발처럼 특수문자를 끼워 넣은 표현도 제재 대상입니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "korean_repeated_character_01",
+      "category": "korean_repeated_character",
+      "text": "씨이발처럼 글자를 늘려 쓰는 표현도 비속어로 봐야 합니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    },
+    {
+      "id": "korean_number_obfuscation_01",
+      "category": "korean_number_obfuscation",
+      "text": "ㅅ1발처럼 숫자를 섞은 표현도 필터링 대상입니다.",
+      "expected": {
+        "has_profanity": true
+      }
+    }
+  ]
+}

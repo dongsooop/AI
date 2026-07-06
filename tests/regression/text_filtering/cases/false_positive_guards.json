@@ -1,0 +1,18 @@
+{
+  "metadata": {
+    "purpose": "false_positive_guards",
+    "phase": "1",
+    "description": "Benign sentences that protect against over-broad shadow matching.",
+    "contract": "Do not change production True/False or has_profanity behavior in this phase."
+  },
+  "cases": [
+    {
+      "id": "normal_false_positive_guard_01",
+      "category": "normal_false_positive_guard",
+      "text": "이 논의의 시발점은 수업 공지 내용이었습니다.",
+      "expected": {
+        "has_profanity": false
+      }
+    }
+  ]
+}
