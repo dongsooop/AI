@@ -119,7 +119,7 @@ python tests/regression/timetable/measure_timetable_ocr_baseline.py --profile oc
 - `shadow_strong_rule_candidate_match_count`: feature flag 기반 운영 반영 후보로 분리된 강한 규칙 match 수
 - `shadow_strong_rule_detected_false_negative_count`: 기존 모델이 놓친 케이스 중 강한 규칙 후보가 match 근거를 만든 수
 
-리포트의 `examples` 섹션은 모델 기준 false negative/false positive 샘플과, 그중 shadow detector가 match 근거를 만든 후보를 최대 5개씩 보여줍니다. 샘플 개수는 `--example-limit`로 조정할 수 있습니다.
+리포트의 `examples` 섹션은 모델 기준 false negative/false positive 샘플과, 그중 shadow detector가 match 근거를 만든 후보를 최대 5개씩 보여줍니다. 샘플 개수는 `--example-limit`로 조정할 수 있습니다. 각 샘플은 `shadow_patterns`와 `strong_rule_candidate_patterns`를 함께 기록해서 default-off strong rule 후보 판단에 활용할 수 있게 합니다.
 
 이 스크립트는 `analyze_text_labels()`만 호출하므로 테스트 문장을 `data/bad_text_sample.txt`에 append하지 않습니다. 모델 파일 또는 의존성이 없는 환경에서는 실패 대신 `status: "skipped"` 리포트를 기본 경로에 기록합니다.
 기본 실행은 품질 리포트를 기록하고 종료 코드는 0으로 유지합니다. 품질 실패를 게이트로 쓰려면 `--strict`를 함께 사용합니다.

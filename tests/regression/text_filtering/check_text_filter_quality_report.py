@@ -358,35 +358,61 @@ def aggregate_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _shadow_pattern_ids(result: dict[str, Any]) -> list[str]:
+def _shadow_matches(result: dict[str, Any]) -> list[dict[str, Any]]:
     shadow = result.get("shadow", {})
     matches = shadow.get("matches", []) if isinstance(shadow, dict) else []
+    return [match for match in matches if isinstance(match, dict)]
+
+
+def _shadow_pattern_ids(result: dict[str, Any]) -> list[str]:
+    matches = _shadow_matches(result)
     pattern_ids = {
         str(match.get("pattern_id", "") or "unknown")
         for match in matches
-        if isinstance(match, dict)
+    }
+    return sorted(pattern_ids)
+
+
+def _strong_rule_candidate_pattern_ids(result: dict[str, Any]) -> list[str]:
+    matches = _shadow_matches(result)
+    pattern_ids = {
+        str(match.get("pattern_id", "") or "unknown")
+        for match in matches
+        if match.get("strong_rule_candidate") is True
     }
     return sorted(pattern_ids)
 
 
 def _example_from_result(result: dict[str, Any]) -> dict[str, Any]:
     shadow = result.get("shadow", {})
+    shadow_patterns = _shadow_pattern_ids(result)
+    strong_rule_candidate_patterns = _strong_rule_candidate_pattern_ids(result)
     return {
         "id": result.get("id"),
         "category": result.get("category"),
         "source_file": result.get("source_file"),
         "text": result.get("text"),
+        "errors": result.get("errors", []),
         "expected_has_profanity": result.get("expected", {}).get("has_profanity"),
         "actual_has_profanity": result.get("actual", {}).get("has_profanity"),
         "actual_labels": result.get("actual", {}).get("labels"),
         "shadow_has_match": bool(shadow.get("has_match")) if isinstance(shadow, dict) else False,
-        "shadow_pattern_ids": _shadow_pattern_ids(result),
+        "shadow_patterns": shadow_patterns,
+        "shadow_pattern_ids": shadow_patterns,
+        "strong_rule_candidate_patterns": strong_rule_candidate_patterns,
     }
 
 
-def build_examples(case_results: list[dict[str, Any]], limit: int) -> dict[str, list[dict[str, Any]]]:
+def build_examples(case_results: list[dict[str, Any]], limit: int) -> dict[str, Any]:
     if limit <= 0:
         return {
+            "limit": limit,
+            "counts": {
+                "false_negatives": 0,
+                "false_positives": 0,
+                "shadow_detected_false_negatives": 0,
+                "shadow_false_positive_candidates": 0,
+            },
             "false_negatives_top": [],
             "false_positives_top": [],
             "shadow_detected_false_negatives_top": [],
@@ -416,6 +442,13 @@ def build_examples(case_results: list[dict[str, Any]], limit: int) -> dict[str, 
     ]
 
     return {
+        "limit": limit,
+        "counts": {
+            "false_negatives": len(false_negatives),
+            "false_positives": len(false_positives),
+            "shadow_detected_false_negatives": len(shadow_detected_false_negatives),
+            "shadow_false_positive_candidates": len(shadow_false_positive_candidates),
+        },
         "false_negatives_top": [_example_from_result(result) for result in false_negatives[:limit]],
         "false_positives_top": [_example_from_result(result) for result in false_positives[:limit]],
         "shadow_detected_false_negatives_top": [
