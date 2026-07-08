@@ -105,6 +105,10 @@ def count_cases_by_category(cases: list[dict[str, Any]]) -> dict[str, int]:
     return by_category
 
 
+def rate(numerator: int, denominator: int) -> float:
+    return round(numerator / denominator, 4) if denominator else 0.0
+
+
 def write_report(out_path: Path, output: dict[str, Any]) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -228,6 +232,10 @@ def evaluate_case(case: dict[str, Any], text_filter_service) -> dict[str, Any]:
 
 def aggregate_shadow_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any]:
     total = len(case_results)
+    model_false_negative_count = 0
+    model_false_positive_count = 0
+    normal_case_count = 0
+    profanity_case_count = 0
     shadow_matched_case_count = 0
     shadow_match_count = 0
     shadow_detected_false_negative_count = 0
@@ -239,6 +247,7 @@ def aggregate_shadow_metrics(case_results: list[dict[str, Any]]) -> dict[str, An
     shadow_strong_rule_false_positive_candidate_count = 0
     pattern_counts: dict[str, int] = {}
     strong_rule_pattern_counts: dict[str, int] = {}
+    by_pattern_id: dict[str, dict[str, Any]] = {}
     by_category: dict[str, dict[str, Any]] = {}
 
     for result in case_results:
@@ -252,6 +261,17 @@ def aggregate_shadow_metrics(case_results: list[dict[str, Any]]) -> dict[str, An
         strong_matches = [match for match in matches if match.get("strong_rule_candidate") is True]
         strong_match_count = len(strong_matches)
         has_strong_match = strong_match_count > 0
+        is_model_false_negative = expected_has_profanity and not actual_has_profanity
+        is_model_false_positive = not expected_has_profanity and actual_has_profanity
+
+        if expected_has_profanity:
+            profanity_case_count += 1
+        else:
+            normal_case_count += 1
+        if is_model_false_negative:
+            model_false_negative_count += 1
+        if is_model_false_positive:
+            model_false_positive_count += 1
 
         bucket = by_category.setdefault(
             category,
@@ -264,9 +284,15 @@ def aggregate_shadow_metrics(case_results: list[dict[str, Any]]) -> dict[str, An
                 "shadow_strong_rule_matched": 0,
                 "shadow_strong_rule_false_positive_candidates": 0,
                 "shadow_strong_rule_detected_false_negatives": 0,
+                "model_false_negatives": 0,
+                "model_false_positives": 0,
             },
         )
         bucket["total"] += 1
+        if is_model_false_negative:
+            bucket["model_false_negatives"] += 1
+        if is_model_false_positive:
+            bucket["model_false_positives"] += 1
         if has_match:
             shadow_matched_case_count += 1
             bucket["shadow_matched"] += 1
@@ -277,9 +303,34 @@ def aggregate_shadow_metrics(case_results: list[dict[str, Any]]) -> dict[str, An
         for match in matches:
             pattern_id = str(match.get("pattern_id", "") or "unknown")
             pattern_counts[pattern_id] = pattern_counts.get(pattern_id, 0) + 1
+            pattern_bucket = by_pattern_id.setdefault(
+                pattern_id,
+                {
+                    "match_count": 0,
+                    "matched_case_count": 0,
+                    "profanity_case_count": 0,
+                    "normal_case_count": 0,
+                    "detected_false_negative_count": 0,
+                    "false_positive_candidate_count": 0,
+                    "strong_rule_candidate_match_count": 0,
+                    "strong_rule_candidate_case_count": 0,
+                },
+            )
+            pattern_bucket["match_count"] += 1
+            pattern_bucket["matched_case_count"] += 1
+            if expected_has_profanity:
+                pattern_bucket["profanity_case_count"] += 1
+            else:
+                pattern_bucket["normal_case_count"] += 1
+            if is_model_false_negative:
+                pattern_bucket["detected_false_negative_count"] += 1
+            if not expected_has_profanity:
+                pattern_bucket["false_positive_candidate_count"] += 1
             if match.get("strong_rule_candidate") is True:
                 shadow_strong_rule_candidate_match_count += 1
                 strong_rule_pattern_counts[pattern_id] = strong_rule_pattern_counts.get(pattern_id, 0) + 1
+                pattern_bucket["strong_rule_candidate_match_count"] += 1
+                pattern_bucket["strong_rule_candidate_case_count"] += 1
 
         if has_strong_match:
             shadow_strong_rule_candidate_case_count += 1
@@ -301,24 +352,58 @@ def aggregate_shadow_metrics(case_results: list[dict[str, Any]]) -> dict[str, An
             bucket["shadow_strong_rule_detected_false_negatives"] += 1
 
     for bucket in by_category.values():
-        bucket["shadow_match_rate"] = round(bucket["shadow_matched"] / bucket["total"], 4) if bucket["total"] else 0.0
-        bucket["shadow_strong_rule_match_rate"] = (
-            round(bucket["shadow_strong_rule_matched"] / bucket["total"], 4) if bucket["total"] else 0.0
+        bucket["shadow_match_rate"] = rate(bucket["shadow_matched"], bucket["total"])
+        bucket["shadow_strong_rule_match_rate"] = rate(bucket["shadow_strong_rule_matched"], bucket["total"])
+        bucket["shadow_detected_false_negative_rate"] = rate(
+            bucket["shadow_detected_false_negatives"],
+            bucket["model_false_negatives"],
+        )
+
+    for bucket in by_pattern_id.values():
+        bucket["detected_false_negative_rate"] = rate(
+            bucket["detected_false_negative_count"],
+            model_false_negative_count,
+        )
+        bucket["false_positive_candidate_rate"] = rate(
+            bucket["false_positive_candidate_count"],
+            normal_case_count,
         )
 
     return {
+        "model_false_negative_count": model_false_negative_count,
+        "model_false_positive_count": model_false_positive_count,
+        "normal_case_count": normal_case_count,
+        "profanity_case_count": profanity_case_count,
         "shadow_match_count": shadow_match_count,
         "shadow_matched_case_count": shadow_matched_case_count,
-        "shadow_match_rate": round(shadow_matched_case_count / total, 4) if total else 0.0,
+        "shadow_match_rate": rate(shadow_matched_case_count, total),
         "shadow_true_positive_candidate_count": shadow_true_positive_candidate_count,
         "shadow_false_positive_candidate_count": shadow_false_positive_candidate_count,
         "shadow_detected_false_negative_count": shadow_detected_false_negative_count,
+        "shadow_detected_false_negative_rate": rate(
+            shadow_detected_false_negative_count,
+            model_false_negative_count,
+        ),
+        "shadow_false_positive_candidate_rate": rate(
+            shadow_false_positive_candidate_count,
+            normal_case_count,
+        ),
         "shadow_pattern_counts": pattern_counts,
         "shadow_strong_rule_candidate_match_count": shadow_strong_rule_candidate_match_count,
         "shadow_strong_rule_candidate_case_count": shadow_strong_rule_candidate_case_count,
         "shadow_strong_rule_detected_false_negative_count": shadow_strong_rule_detected_false_negative_count,
         "shadow_strong_rule_false_positive_candidate_count": shadow_strong_rule_false_positive_candidate_count,
+        "shadow_strong_rule_detected_false_negative_rate": rate(
+            shadow_strong_rule_detected_false_negative_count,
+            model_false_negative_count,
+        ),
+        "shadow_strong_rule_false_positive_candidate_rate": rate(
+            shadow_strong_rule_false_positive_candidate_count,
+            normal_case_count,
+        ),
         "shadow_strong_rule_pattern_counts": strong_rule_pattern_counts,
+        "by_pattern_id": by_pattern_id,
+        "shadow_by_pattern_id": by_pattern_id,
         "shadow_by_category": by_category,
     }
 
@@ -335,20 +420,35 @@ def aggregate_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any]:
     by_category: dict[str, dict[str, Any]] = {}
     for result in case_results:
         category = str(result.get("category", "") or "uncategorized")
-        bucket = by_category.setdefault(category, {"total": 0, "passed": 0, "failed": 0})
+        bucket = by_category.setdefault(
+            category,
+            {
+                "total": 0,
+                "passed": 0,
+                "failed": 0,
+                "model_false_negatives": 0,
+                "model_false_positives": 0,
+            },
+        )
         bucket["total"] += 1
         if result["status"] == "passed":
             bucket["passed"] += 1
         else:
             bucket["failed"] += 1
+        if "false_negative" in result.get("errors", []):
+            bucket["model_false_negatives"] += 1
+        if "false_positive" in result.get("errors", []):
+            bucket["model_false_positives"] += 1
 
     for bucket in by_category.values():
-        bucket["pass_rate"] = round(bucket["passed"] / bucket["total"], 4) if bucket["total"] else 0.0
+        bucket["pass_rate"] = rate(bucket["passed"], bucket["total"])
 
-    pass_rate = round(passed / total, 4)
+    pass_rate = rate(passed, total)
     return {
         "false_positive_count": false_positive_count,
         "false_negative_count": false_negative_count,
+        "model_false_positive_count": false_positive_count,
+        "model_false_negative_count": false_negative_count,
         "pass_rate": pass_rate,
         "ml_filter_pass_rate": pass_rate,
         "rule_filter_pass_rate": None,

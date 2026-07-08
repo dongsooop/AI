@@ -111,13 +111,20 @@ python tests/regression/timetable/measure_timetable_ocr_baseline.py --profile oc
 
 - `false_positive_count`: 정상 문장을 비속어로 판정한 케이스 수
 - `false_negative_count`: 비속어 문장을 정상으로 판정한 케이스 수
+- `model_false_positive_count`, `model_false_negative_count`: 기존 모델 판정 기준 오탐/미탐 케이스 수
 - `pass_rate`: 전체 golden case 기대값과 실제 결과가 일치한 비율
 - `ml_filter_pass_rate`: 현재 ML 기반 판정 경로 기준 통과율
 - `rule_endpoint_pass_rate`: 현재 `/text_filter_rule` API 계약의 공유 판정 경로 기준 통과율
 - `shadow_match_count`: 운영 판정에 연결하지 않은 단어 단위 detector match 수
+- `shadow_matched_case_count`: shadow detector가 하나 이상의 match 근거를 만든 케이스 수
 - `shadow_detected_false_negative_count`: 기존 모델이 놓친 비속어 케이스 중 shadow detector가 match 근거를 만든 수
+- `shadow_detected_false_negative_rate`: 기존 모델 미탐 중 shadow detector가 보완 근거를 만든 비율
+- `shadow_false_positive_candidate_count`: 정상 기대 케이스 중 shadow detector가 match 근거를 만든 오탐 후보 수
+- `shadow_false_positive_candidate_rate`: 정상 기대 케이스 중 shadow 오탐 후보 비율
 - `shadow_strong_rule_candidate_match_count`: feature flag 기반 운영 반영 후보로 분리된 강한 규칙 match 수
 - `shadow_strong_rule_detected_false_negative_count`: 기존 모델이 놓친 케이스 중 강한 규칙 후보가 match 근거를 만든 수
+- `shadow_strong_rule_false_positive_candidate_count`: 정상 기대 케이스 중 강한 규칙 후보가 match 근거를 만든 수
+- `by_category`, `shadow_by_category`, `by_pattern_id`: 카테고리와 pattern id별로 모델 미탐, shadow 보완, 오탐 후보를 나눠 보는 집계
 
 리포트의 `examples` 섹션은 모델 기준 false negative/false positive 샘플과, 그중 shadow detector가 match 근거를 만든 후보를 최대 5개씩 보여줍니다. 샘플 개수는 `--example-limit`로 조정할 수 있습니다. 각 샘플은 `shadow_patterns`와 `strong_rule_candidate_patterns`를 함께 기록해서 default-off strong rule 후보 판단에 활용할 수 있게 합니다.
 
