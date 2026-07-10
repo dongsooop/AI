@@ -101,7 +101,7 @@ python tests/regression/timetable/measure_timetable_ocr_baseline.py --profile oc
 
 ### Text Filtering Quality Metrics
 
-`tests/regression/text_filtering/check_text_filter_quality_report.py`는 `tests/regression/text_filtering/text_filter_quality_cases.json`의 케이스를 읽어 기존 텍스트 필터 판정 로직을 평가합니다.
+`tests/regression/text_filtering/check_text_filter_quality_report.py`는 기본적으로 `tests/regression/text_filtering/cases/*.json`의 케이스를 읽어 기존 텍스트 필터 판정 로직을 평가합니다. `--cases`로 기존 단일 JSON 파일도 지정할 수 있습니다.
 현재 케이스 파일의 1차 목적은 단어 단위 shadow 탐지 작업 전에 운영 True/False 및 `has_profanity` 판정 기준선을 고정하는 것입니다.
 `tests/regression/text_filtering/check_text_filter_normalization.py`는 운영 판정과 연결하지 않은 정규화 후보 생성 helper만 검증합니다.
 `tests/regression/text_filtering/check_text_filter_word_matcher.py`는 정규화 후보 기반 단어 단위 match 근거 생성을 검증하며, 운영 API 판정에는 연결하지 않습니다.
@@ -111,13 +111,22 @@ python tests/regression/timetable/measure_timetable_ocr_baseline.py --profile oc
 
 - `false_positive_count`: 정상 문장을 비속어로 판정한 케이스 수
 - `false_negative_count`: 비속어 문장을 정상으로 판정한 케이스 수
+- `model_false_positive_count`, `model_false_negative_count`: 기존 모델 판정 기준 오탐/미탐 케이스 수
 - `pass_rate`: 전체 golden case 기대값과 실제 결과가 일치한 비율
 - `ml_filter_pass_rate`: 현재 ML 기반 판정 경로 기준 통과율
 - `rule_endpoint_pass_rate`: 현재 `/text_filter_rule` API 계약의 공유 판정 경로 기준 통과율
 - `shadow_match_count`: 운영 판정에 연결하지 않은 단어 단위 detector match 수
+- `shadow_matched_case_count`: shadow detector가 하나 이상의 match 근거를 만든 케이스 수
 - `shadow_detected_false_negative_count`: 기존 모델이 놓친 비속어 케이스 중 shadow detector가 match 근거를 만든 수
+- `shadow_detected_false_negative_rate`: 기존 모델 미탐 중 shadow detector가 보완 근거를 만든 비율
+- `shadow_false_positive_candidate_count`: 정상 기대 케이스 중 shadow detector가 match 근거를 만든 오탐 후보 수
+- `shadow_false_positive_candidate_rate`: 정상 기대 케이스 중 shadow 오탐 후보 비율
 - `shadow_strong_rule_candidate_match_count`: feature flag 기반 운영 반영 후보로 분리된 강한 규칙 match 수
 - `shadow_strong_rule_detected_false_negative_count`: 기존 모델이 놓친 케이스 중 강한 규칙 후보가 match 근거를 만든 수
+- `shadow_strong_rule_false_positive_candidate_count`: 정상 기대 케이스 중 강한 규칙 후보가 match 근거를 만든 수
+- `by_category`, `shadow_by_category`, `by_pattern_id`: 카테고리와 pattern id별로 모델 미탐, shadow 보완, 오탐 후보를 나눠 보는 집계
+
+리포트의 `examples` 섹션은 모델 기준 false negative/false positive 샘플과, 그중 shadow detector가 match 근거를 만든 후보를 최대 5개씩 보여줍니다. 샘플 개수는 `--example-limit`로 조정할 수 있습니다. 각 샘플은 `shadow_patterns`와 `strong_rule_candidate_patterns`를 함께 기록해서 default-off strong rule 후보 판단에 활용할 수 있게 합니다.
 
 이 스크립트는 `analyze_text_labels()`만 호출하므로 테스트 문장을 `data/bad_text_sample.txt`에 append하지 않습니다. 모델 파일 또는 의존성이 없는 환경에서는 실패 대신 `status: "skipped"` 리포트를 기본 경로에 기록합니다.
 기본 실행은 품질 리포트를 기록하고 종료 코드는 0으로 유지합니다. 품질 실패를 게이트로 쓰려면 `--strict`를 함께 사용합니다.
