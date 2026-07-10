@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 WHITESPACE_RE = re.compile(r"\s+")
 REPEATED_CHAR_RE = re.compile(r"(.)\1{2,}")
 KOREAN_VOWEL_EXTENSION_RE = re.compile(r"([가-힣ㄱ-ㅎ])([ㅏ-ㅣ이]){2,}(?=[가-힣ㄱ-ㅎ])")
+KOREAN_SIBAL_VOWEL_EXTENSION_RE = re.compile(r"([시씨])이+(?=발)")
 
 LATIN_NUMBER_MAP = str.maketrans({
     "0": "o",
@@ -37,7 +38,8 @@ def collapse_repeated_characters(text: str) -> str:
 
 
 def collapse_korean_vowel_extensions(text: str) -> str:
-    return KOREAN_VOWEL_EXTENSION_RE.sub(r"\1", text)
+    collapsed = KOREAN_SIBAL_VOWEL_EXTENSION_RE.sub(r"\1", text)
+    return KOREAN_VOWEL_EXTENSION_RE.sub(r"\1", collapsed)
 
 
 def compact_text(text: str) -> str:
