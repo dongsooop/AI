@@ -93,4 +93,4 @@
 - chatbot LLM timeout, empty response, deterministic fallback을 같은 degraded로 볼지 분리할지
 - 품질 게이트 리포트의 실패를 배포 차단으로 볼 임계값
 
-이 규칙은 3단계의 로그 기반 SLI 수집 준비에서 구체화합니다.
+이 규칙은 `docs/OPERATIONS_LOG_SLI_COLLECTION.md`에서 구체화합니다.
