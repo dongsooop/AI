@@ -142,4 +142,4 @@ readiness는 장애 감지의 빠른 신호입니다. 실제 사용자 영향은
 
 ## 다음 단계
 
-다음 단계에서는 이 집계 규칙을 바탕으로 장애 시스템 구축 후 적용할 1차 운영 SLO 후보를 선언합니다. SLO 수치는 아직 임의로 박지 않고, baseline이 필요한 항목은 `TBD after baseline`로 남깁니다.
+다음 단계에서는 이 집계 규칙을 바탕으로 장애 시스템 구축 후 적용할 1차 운영 SLO 후보를 `docs/OPERATIONS_SLO_CANDIDATES.md`에 선언합니다. SLO 수치는 아직 임의로 박지 않고, baseline이 필요한 항목은 `TBD after baseline`로 남깁니다.
