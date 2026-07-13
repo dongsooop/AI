@@ -230,7 +230,7 @@
 - 시간표 분석은 한국어 지원이 포함된 Tesseract OCR에 의존합니다.
 - 일부 챗봇 인덱싱 유틸은 KoNLPy/JPype1 사용을 위해 Java가 필요합니다.
 - 인증은 `.env`의 JWT 관련 값을 사용합니다.
-- 장애, degraded, 품질 회귀의 운영상 구분은 `docs/OPERATIONS_FAILURE_POLICY.md`를 기준으로 보고, SLI 후보와 로그 기반 집계 규칙은 `docs/OPERATIONS_SLI_MAP.md`와 `docs/OPERATIONS_LOG_SLI_COLLECTION.md`를 참고합니다. 장애 시스템 구축 후 적용할 1차 운영 SLO 후보는 `docs/OPERATIONS_SLO_CANDIDATES.md`에 둡니다.
+- 장애, degraded, 품질 회귀의 운영상 구분은 `docs/OPERATIONS_FAILURE_POLICY.md`를 기준으로 보고, SLI 후보와 로그 기반 집계 규칙은 `docs/OPERATIONS_SLI_MAP.md`와 `docs/OPERATIONS_LOG_SLI_COLLECTION.md`를 참고합니다. 장애 시스템 구축 후 적용할 1차 운영 SLO 후보는 `docs/OPERATIONS_SLO_CANDIDATES.md`에 두고, AI 품질 지표는 `docs/OPERATIONS_QUALITY_GATES.md`의 릴리즈 품질 게이트로 분리합니다.
 
 ## 권장 변경 전략
 
