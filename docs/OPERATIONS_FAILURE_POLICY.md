@@ -104,4 +104,4 @@ SLO 수치를 선언하기 전에 다음 기준을 먼저 만족해야 합니다
 2. 기존 로그에서 SLI를 집계할 수 있는지 `docs/OPERATIONS_LOG_SLI_COLLECTION.md`에 정리합니다.
 3. 장애 시스템 구축 후 적용할 1차 운영 SLO 후보를 `docs/OPERATIONS_SLO_CANDIDATES.md`에 선언합니다.
 4. AI 품질 지표를 `docs/OPERATIONS_QUALITY_GATES.md`의 릴리즈 품질 게이트로 분리합니다.
-5. SLO 위반 시 알림, 점검, 배포 판단 흐름을 연결합니다.
+5. SLO 위반 시 알림, 점검, 배포 판단 흐름을 `docs/OPERATIONS_INCIDENT_WORKFLOW.md`에 연결합니다.

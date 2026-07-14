@@ -101,4 +101,4 @@ OCR 품질 게이트는 로컬 측정값만으로 운영 품질을 확정하지 
 
 ## 다음 단계
 
-다음 단계에서는 SLO 또는 품질 게이트 위반 시 어떤 알림, 점검, 배포 판단 흐름으로 이어질지 incident workflow로 연결합니다.
+다음 단계에서는 SLO 또는 품질 게이트 위반 시 어떤 알림, 점검, 배포 판단 흐름으로 이어질지 `docs/OPERATIONS_INCIDENT_WORKFLOW.md`의 incident workflow로 연결합니다.
