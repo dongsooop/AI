@@ -118,7 +118,13 @@
 │   ├── AGENTS.md                   # GPT 에이전트 공통 작업 지침
 │   ├── PLANS.md                    # 현재 구조와 목표 구조 계획서
 │   ├── BRANCH_REVIEW_GUIDE.md      # 브랜치 리뷰 기준 문서
-│   └── CHECKLIST.md                # 실제 점검 순서 체크리스트
+│   ├── CHECKLIST.md                # 실제 점검 순서 체크리스트
+│   ├── OPERATIONS_FAILURE_POLICY.md     # 장애/degraded/품질 회귀 기준
+│   ├── OPERATIONS_SLI_MAP.md            # 운영 SLI 후보와 수집 위치
+│   ├── OPERATIONS_LOG_SLI_COLLECTION.md # 로그 기반 SLI 집계 규칙
+│   ├── OPERATIONS_SLO_CANDIDATES.md     # 1차 운영 SLO 후보
+│   ├── OPERATIONS_QUALITY_GATES.md      # AI 품질 게이트 기준
+│   └── OPERATIONS_INCIDENT_WORKFLOW.md  # 알림/점검/배포 판단 흐름
 └── CLAUDE.md                       # Claude 호환용 저장소 참고 문서
 ```
 

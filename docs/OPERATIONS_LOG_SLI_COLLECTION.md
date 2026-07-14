@@ -48,7 +48,7 @@
 | --- | --- | --- |
 | main-api 5xx rate | request log | `service=main-api`, `status_code >= 500` |
 | main-api p95 latency | request log | `service=main-api`, `path`별 p95 |
-| upload size rejection count | request log | `status_code=413` | 
+| upload size rejection count | request log | `status_code=413` |
 
 `413`은 클라이언트 입력 제한에 따른 거절이므로 5xx error rate에 포함하지 않습니다. 다만 갑자기 증가하면 사용 패턴 변화 신호로 볼 수 있습니다.
 
