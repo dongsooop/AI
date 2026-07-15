@@ -58,9 +58,9 @@
 | SLI 후보 | 분류 | 수집 위치 | 현재 사용 가능 여부 | 비고 |
 | --- | --- | --- | --- | --- |
 | chatbot readiness | 운영 SLI | `/ready`의 top-level `status` | 가능 | rule book, query index, log DB 상태 포함 |
-| rule book readiness | 운영 SLI | `/ready.components.rule_book.status` | 가능 | 필수 컴포넌트 |
-| query index readiness | 운영 SLI | `/ready.components.query_index.status` | 가능 | 검색 문서와 임베딩 row 수 확인 |
-| chat log DB degraded state | 운영 SLI | `/ready.components.chat_log_db.status` | 가능 | 기본 best-effort에서는 degraded로 취급 |
+| rule book readiness | 운영 SLI | `/ready` 응답의 `components.rule_book.status` | 가능 | 필수 컴포넌트 |
+| query index readiness | 운영 SLI | `/ready` 응답의 `components.query_index.status` | 가능 | 검색 문서와 임베딩 row 수 확인 |
+| chat log DB degraded state | 운영 SLI | `/ready` 응답의 `components.chat_log_db.status` | 가능 | 기본 best-effort에서는 degraded로 취급 |
 | chatbot total p95 latency | 운영 SLI | `chatbot_request_summary.duration_ms` | 가능 | request log와 함께 확인 |
 | LLM failed/fallback rate | 운영 SLI | `chatbot_llm_runtime.status`, `fallback`, `fallback_reason` | 가능 | Ollama/LLM 장애 또는 빈 응답 추적 |
 | retrieval failed rate | 운영 SLI | `chatbot_retrieval_runtime.status` | 가능 | 검색 예외와 empty result를 구분해 볼 수 있음 |
