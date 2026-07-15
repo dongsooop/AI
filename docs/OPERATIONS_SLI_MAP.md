@@ -18,7 +18,7 @@
 
 | SLI 후보 | 분류 | 수집 위치 | 현재 사용 가능 여부 | 비고 |
 | --- | --- | --- | --- | --- |
-| readiness success rate | 운영 SLI | `/ready` 응답의 `status`, HTTP status | 가능 | `ready`는 필수 의존성 준비 상태 판단에 사용 |
+| readiness success rate | 운영 SLI | `/ready` 응답의 HTTP status와 top-level `status` | 가능 | HTTP 200이고 `status=ready`이면 성공, 둘 중 하나라도 불일치하면 실패로 집계 |
 | request error rate | 운영 SLI | request log의 `status_code` | 가능 | 5xx 비율을 서비스별로 집계 |
 | request p95 latency | 운영 SLI | request log의 `duration_ms` | 가능 | `path`와 서비스 기준으로 분리 필요 |
 | request failure count | 운영 SLI | `request_failed` log | 가능 | 예외 발생 요청 수 |

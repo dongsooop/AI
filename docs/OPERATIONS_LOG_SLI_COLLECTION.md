@@ -23,7 +23,7 @@
 | request error rate | `status_code >= 500` / `request_completed` | `/health`는 제외 가능, `/ready`는 별도 집계 | 운영 SLI |
 | request p95 latency | `request_completed.duration_ms`의 p95 | `service`, `path`별 | 운영 SLI |
 | request failure count | `request_failed` 수 | `service`, `path`별 | 운영 SLI |
-| readiness success rate | `/ready`의 `status=ready` 비율 또는 HTTP 200 비율 | `service`별 | 운영 SLI |
+| readiness success rate | `/ready` 응답이 HTTP 200이고 top-level `status=ready`인 비율 | `service`별 | 운영 SLI |
 
 `/health`는 liveness 확인용입니다. 서비스 availability SLO를 만들 때는 `/health` 단독 성공률보다 `/ready`, 5xx, latency를 함께 봅니다.
 
