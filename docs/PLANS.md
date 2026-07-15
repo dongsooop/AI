@@ -118,7 +118,13 @@
 │   ├── AGENTS.md                   # GPT 에이전트 공통 작업 지침
 │   ├── PLANS.md                    # 현재 구조와 목표 구조 계획서
 │   ├── BRANCH_REVIEW_GUIDE.md      # 브랜치 리뷰 기준 문서
-│   └── CHECKLIST.md                # 실제 점검 순서 체크리스트
+│   ├── CHECKLIST.md                # 실제 점검 순서 체크리스트
+│   ├── OPERATIONS_FAILURE_POLICY.md     # 장애/degraded/품질 회귀 기준
+│   ├── OPERATIONS_SLI_MAP.md            # 운영 SLI 후보와 수집 위치
+│   ├── OPERATIONS_LOG_SLI_COLLECTION.md # 로그 기반 SLI 집계 규칙
+│   ├── OPERATIONS_SLO_CANDIDATES.md     # 1차 운영 SLO 후보
+│   ├── OPERATIONS_QUALITY_GATES.md      # AI 품질 게이트 기준
+│   └── OPERATIONS_INCIDENT_WORKFLOW.md  # 알림/점검/배포 판단 흐름
 └── CLAUDE.md                       # Claude 호환용 저장소 참고 문서
 ```
 
@@ -230,6 +236,7 @@
 - 시간표 분석은 한국어 지원이 포함된 Tesseract OCR에 의존합니다.
 - 일부 챗봇 인덱싱 유틸은 KoNLPy/JPype1 사용을 위해 Java가 필요합니다.
 - 인증은 `.env`의 JWT 관련 값을 사용합니다.
+- 장애, degraded, 품질 회귀의 운영상 구분은 `docs/OPERATIONS_FAILURE_POLICY.md`를 기준으로 보고, SLI 후보와 로그 기반 집계 규칙은 `docs/OPERATIONS_SLI_MAP.md`와 `docs/OPERATIONS_LOG_SLI_COLLECTION.md`를 참고합니다. 장애 시스템 구축 후 적용할 1차 운영 SLO 후보는 `docs/OPERATIONS_SLO_CANDIDATES.md`에 두고, AI 품질 지표는 `docs/OPERATIONS_QUALITY_GATES.md`의 릴리즈 품질 게이트로 분리합니다. SLO 또는 품질 게이트 위반 시 점검 흐름은 `docs/OPERATIONS_INCIDENT_WORKFLOW.md`를 따릅니다.
 
 ## 권장 변경 전략
 
