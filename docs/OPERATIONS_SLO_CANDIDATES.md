@@ -21,7 +21,7 @@
 | API availability | 공통 | request error rate, readiness success rate | `TBD after baseline` | 높음 |
 | API latency | 공통 | request p95 latency | `TBD after baseline` | 높음 |
 | Chatbot runtime health | chatbot-api | LLM failed/fallback rate, retrieval failed rate | `TBD after baseline` | 높음 |
-| Chatbot degraded mode | chatbot-api | BM25 fallback tier rate, direct answer route rate | `TBD after baseline` | 중간 |
+| Chatbot degraded mode | chatbot-api | BM25 fallback tier rate, fallback direct answer route rate | `TBD after baseline` | 중간 |
 | OCR processing health | main-api/timetable | OCR request failed rate, OCR p95 total latency | `TBD after OCI baseline` | 높음 |
 | OCR degraded mode | main-api/timetable | OCR fallback rate, queue pressure | `TBD after baseline` | 중간 |
 | Text filter runtime health | main-api/text_filter | ML filter failed rate, model unavailable count | `TBD after baseline` | 중간 |
@@ -75,12 +75,14 @@ LLM 빈 응답, timeout, exception은 request 5xx와 별도로 봅니다. fallba
 | --- | --- |
 | 대상 | 챗봇 검색/응답 경로 |
 | 목적 | 장애는 아니지만 성능 또는 품질 리스크가 커지는 상태를 추적 |
-| SLI | `BM25 fallback tier rate`, `direct answer route rate`, `cache hit rate` |
+| SLI | `BM25 fallback tier rate`, `fallback direct answer route rate`, `cache hit rate` |
 | 수집 위치 | `chatbot_retrieval_runtime`, `chatbot_request_summary` |
 | 목표 | `TBD after baseline` |
 | 제외 | `source_url_pass_rate`, `hallucination_proxy_rate`, `top-k URL accuracy` |
 
 `bm25_fallback_tier=runtime_tokenize`는 startup 또는 retrieval 성능 리스크가 크므로 `tokenized_corpus`와 분리해서 봅니다.
+
+`direct_answer_route=true`만으로는 degraded로 판정하지 않습니다. 정상적인 의도 기반 라우팅을 제외하기 위해 `fallback=true`가 함께 기록된 direct answer route만 `mode`별 기준선과 비교합니다.
 
 ## main-api SLO 후보
 

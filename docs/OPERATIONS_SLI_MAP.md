@@ -66,7 +66,7 @@
 | retrieval failed rate | 운영 SLI | `chatbot_retrieval_runtime.status` | 가능 | 검색 예외와 empty result를 구분해 볼 수 있음 |
 | retrieval p95 latency | 운영 SLI | `chatbot_retrieval_runtime.duration_ms` | 가능 | RAG 성능 추세 확인 |
 | BM25 fallback tier rate | 운영 SLI | `chatbot_retrieval_runtime.bm25_fallback_tier` | 가능 | `pickle`, `tokenized_corpus`, `runtime_tokenize` tier별 집계 |
-| direct answer route rate | 운영 SLI | `chatbot_request_summary.direct_answer_route` | 가능 | LLM 우회/도구 라우팅 추세 |
+| fallback direct answer route rate | 운영 SLI | `chatbot_request_summary.direct_answer_route`, `fallback` | 가능 | 두 필드가 모두 `true`인 비율을 `mode`별 기준선과 비교 |
 | cache hit rate | 운영 SLI | `chatbot_request_summary.cache_hit` | 가능 | 캐시 동작 추세 |
 | source URL pass rate | 품질 게이트 지표 | `tests/regression/chatbot/evaluate_rag_retrieval.py` 리포트 | 가능 | 운영 알림보다 배포 전 품질 기준 |
 | hallucination proxy rate | 품질 게이트 지표 | chatbot RAG report | 가능 | 출처 없는 답변 회귀 판단 |
