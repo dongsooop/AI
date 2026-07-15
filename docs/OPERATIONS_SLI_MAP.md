@@ -47,7 +47,8 @@
 | timetable readiness | 운영 SLI | `/ready`의 `components.timetable.status` | 가능 | Spring URL과 queue worker 상태 |
 | OCR request failed rate | 운영 SLI | `timetable_job_runtime`의 `status=failed` | 가능 | 요청 처리 실패를 집계하며 OCR engine fallback은 별도 SLI로 구분 |
 | OCR p95 total latency | 운영 SLI | `timetable_ocr_engine_runtime.duration_ms` 또는 baseline report | 준비 필요 | 운영 기준은 OCI 또는 OCI-constrained 기준선 사용 |
-| OCR fallback rate | 운영 SLI | `timetable_ocr_engine_runtime.fallback`, `ocr_fallback_cell_count` | 가능 | fallback cell 증가를 degraded 신호로 사용 |
+| OCR fallback rate | 운영 SLI | `timetable_ocr_engine_runtime.fallback` | 가능 | fallback이 발생한 OCR engine event 비율 |
+| fallback cell rate | 운영 SLI | `ocr_fallback_cell_count`, `ocr_task_cell_count` | 가능 | 전체 task cell 대비 fallback cell 비율로 정규화 |
 | queue pressure | 운영 SLI | `/ready`의 `queue_size`, `queue_max_size` | 가능 | queue 포화 추세 확인 |
 | OCR task workload | 참고 신호 | `ocr_task_cell_count` | 가능 | 요청량·이미지 복잡도 분해용이며 단독 degraded 판정에서 제외 |
 | skipped empty cell count | 운영 SLI | `skipped_empty_cell_count` | 가능 | 성능 최적화 효과 추적 |
@@ -68,7 +69,7 @@
 | retrieval p95 latency | 운영 SLI | `chatbot_retrieval_runtime.duration_ms` | 가능 | RAG 성능 추세 확인 |
 | BM25 fallback tier rate | 운영 SLI | `chatbot_retrieval_runtime.bm25_fallback_tier` | 가능 | `pickle`, `tokenized_corpus`, `runtime_tokenize` tier별 집계 |
 | fallback direct answer route rate | 운영 SLI | `chatbot_request_summary.direct_answer_route`, `fallback` | 가능 | 두 필드가 모두 `true`인 비율을 `mode`별 기준선과 비교 |
-| cache hit rate | 운영 SLI | `chatbot_request_summary.cache_hit` | 가능 | 캐시 동작 추세 |
+| cache hit rate | 참고 신호 | `chatbot_request_summary.cache_hit` | 가능 | `mode`별 기준선과 latency/fallback을 함께 보며 단독 degraded 판정에서 제외 |
 | source URL pass rate | 품질 게이트 지표 | `tests/regression/chatbot/evaluate_rag_retrieval.py` 리포트 | 가능 | 운영 알림보다 배포 전 품질 기준 |
 | hallucination proxy rate | 품질 게이트 지표 | chatbot RAG report | 가능 | 출처 없는 답변 회귀 판단 |
 | top-k URL accuracy | 품질 게이트 지표 | chatbot RAG report | 가능 | 검색 품질 회귀 판단 |

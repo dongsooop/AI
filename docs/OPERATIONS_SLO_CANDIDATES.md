@@ -75,7 +75,8 @@ LLM 빈 응답, timeout, exception은 request 5xx와 별도로 봅니다. fallba
 | --- | --- |
 | 대상 | 챗봇 검색/응답 경로 |
 | 목적 | 장애는 아니지만 성능 또는 품질 리스크가 커지는 상태를 추적 |
-| SLI | `BM25 fallback tier rate`, `fallback direct answer route rate`, `cache hit rate` |
+| SLI | `BM25 fallback tier rate`, `fallback direct answer route rate` |
+| 보조 신호 | `cache hit rate` |
 | 수집 위치 | `chatbot_retrieval_runtime`, `chatbot_request_summary` |
 | 목표 | `TBD after baseline` |
 | 제외 | `source_url_pass_rate`, `hallucination_proxy_rate`, `top-k URL accuracy` |
@@ -83,6 +84,8 @@ LLM 빈 응답, timeout, exception은 request 5xx와 별도로 봅니다. fallba
 `bm25_fallback_tier=runtime_tokenize`는 startup 또는 retrieval 성능 리스크가 크므로 `tokenized_corpus`와 분리해서 봅니다.
 
 `direct_answer_route=true`만으로는 degraded로 판정하지 않습니다. 정상적인 의도 기반 라우팅을 제외하기 위해 `fallback=true`가 함께 기록된 direct answer route만 `mode`별 기준선과 비교합니다.
+
+`cache hit rate`는 요청 유형과 cold cache 상태에 따라 달라질 수 있으므로 단독 degraded 판정에서 제외합니다. `mode`별 기준선과 비교하고 latency 또는 fallback 증가가 함께 나타나는지 확인하는 보조 신호로만 사용합니다.
 
 ## main-api SLO 후보
 
@@ -105,7 +108,7 @@ OCR latency는 로컬 환경 기준으로 확정하지 않습니다. 실제 OCI 
 | --- | --- |
 | 대상 | 시간표 OCR 내부 처리 경로 |
 | 목적 | fallback 증가와 queue 압박처럼 성능 저하 신호를 추적 |
-| SLI | `OCR fallback rate`, `fallback cell count`, `queue pressure` |
+| SLI | `OCR fallback rate`, `fallback cell rate`, `queue pressure` |
 | workload 참고 신호 | `OCR task workload` (`ocr_task_cell_count`) |
 | 수집 위치 | `timetable_ocr_engine_runtime`, `/ready.components.timetable` |
 | 목표 | `TBD after baseline` |
@@ -114,6 +117,8 @@ OCR latency는 로컬 환경 기준으로 확정하지 않습니다. 실제 OCI 
 fallback 증가는 즉시 장애가 아닐 수 있지만, 처리 시간이 길어지거나 인식 품질 리스크가 커질 수 있어 degraded 후보로 봅니다.
 
 `OCR task workload`는 요청량 또는 이미지 복잡도를 설명하는 값입니다. 요청별 task 수와 함께 fallback·queue pressure·latency를 정규화하거나 분해할 때만 사용하며, task 수 증가만으로 degraded를 판정하지 않습니다.
+
+`fallback cell rate`는 `sum(ocr_fallback_cell_count) / sum(ocr_task_cell_count)`로 집계합니다. 절대 fallback cell count는 workload 참고값으로만 남기며 단독 degraded 판정에 사용하지 않습니다.
 
 ### Text filter runtime health
 
