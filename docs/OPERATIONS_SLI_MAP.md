@@ -49,6 +49,7 @@
 | OCR p95 total latency | 운영 SLI | `timetable_ocr_engine_runtime.duration_ms` 또는 baseline report | 준비 필요 | 운영 기준은 OCI 또는 OCI-constrained 기준선 사용 |
 | OCR fallback rate | 운영 SLI | `timetable_ocr_engine_runtime.fallback`, `ocr_fallback_cell_count` | 가능 | fallback cell 증가를 degraded 신호로 사용 |
 | queue pressure | 운영 SLI | `/ready`의 `queue_size`, `queue_max_size` | 가능 | queue 포화 추세 확인 |
+| OCR task workload | 참고 신호 | `ocr_task_cell_count` | 가능 | 요청량·이미지 복잡도 분해용이며 단독 degraded 판정에서 제외 |
 | skipped empty cell count | 운영 SLI | `skipped_empty_cell_count` | 가능 | 성능 최적화 효과 추적 |
 | grid detection success rate | 품질 게이트 지표 | timetable diagnostics report | 가능 | OCR 품질 회귀 판단 |
 | average OCR confidence | 품질 게이트 지표 | timetable diagnostics report | 가능 | 운영 알림보다 회귀 리포트 기준 |

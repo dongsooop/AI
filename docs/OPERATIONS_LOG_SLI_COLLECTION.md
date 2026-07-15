@@ -73,12 +73,14 @@
 | OCR engine fallback rate | `timetable_ocr_engine_runtime` | `fallback=true` 또는 `status=fallback` 비율 |
 | OCR p95 total latency | `timetable_ocr_engine_runtime.duration_ms` | OCI 또는 OCI-constrained 기준선과 비교 |
 | grid detection p95 latency | `grid_detection_duration_ms` | runtime event별 p95 |
-| OCR task count | `ocr_task_cell_count` | 평균, p95, case별 추세 |
+| OCR task workload | `ocr_task_cell_count` | 평균, p95, case별 추세를 보되 단독 degraded 판정에서 제외 |
 | skipped empty cell count | `skipped_empty_cell_count` | 평균, p95, 성능 변화 추세 |
 | fallback cell count | `ocr_fallback_cell_count` | 평균, p95, degraded 추세 |
 | queue pressure | `/ready.components.timetable.queue_size` | `queue_size / queue_max_size` |
 
 OCR 성능 SLI는 로컬 측정값만으로 목표를 정하지 않습니다. 운영 기준은 실제 OCI 또는 OCI-constrained baseline과 비교합니다.
+
+`OCR task workload`는 요청량과 이미지 복잡도를 설명하는 참고 신호입니다. fallback rate, queue pressure, latency를 요청별 task 수로 분해하거나 정규화할 때 사용합니다.
 
 ### chatbot-api request layer
 

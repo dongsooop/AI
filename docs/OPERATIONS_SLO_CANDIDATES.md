@@ -104,13 +104,16 @@ OCR latency는 로컬 환경 기준으로 확정하지 않습니다. 실제 OCI 
 | 항목 | 내용 |
 | --- | --- |
 | 대상 | 시간표 OCR 내부 처리 경로 |
-| 목적 | fallback 증가, queue 압박, 빈 셀 스킵 변화처럼 성능 저하 신호를 추적 |
-| SLI | `OCR fallback rate`, `fallback cell count`, `queue pressure`, `OCR task count` |
+| 목적 | fallback 증가와 queue 압박처럼 성능 저하 신호를 추적 |
+| SLI | `OCR fallback rate`, `fallback cell count`, `queue pressure` |
+| workload 참고 신호 | `OCR task workload` (`ocr_task_cell_count`) |
 | 수집 위치 | `timetable_ocr_engine_runtime`, `/ready.components.timetable` |
 | 목표 | `TBD after baseline` |
 | 제외 | `grid_detection_success_rate`, `average_ocr_confidence` |
 
 fallback 증가는 즉시 장애가 아닐 수 있지만, 처리 시간이 길어지거나 인식 품질 리스크가 커질 수 있어 degraded 후보로 봅니다.
+
+`OCR task workload`는 요청량 또는 이미지 복잡도를 설명하는 값입니다. 요청별 task 수와 함께 fallback·queue pressure·latency를 정규화하거나 분해할 때만 사용하며, task 수 증가만으로 degraded를 판정하지 않습니다.
 
 ### Text filter runtime health
 
