@@ -45,7 +45,7 @@
 | SLI 후보 | 분류 | 수집 위치 | 현재 사용 가능 여부 | 비고 |
 | --- | --- | --- | --- | --- |
 | timetable readiness | 운영 SLI | `/ready`의 `components.timetable.status` | 가능 | Spring URL과 queue worker 상태 |
-| OCR request failed rate | 운영 SLI | `timetable_job_runtime`, `timetable_ocr_engine_runtime.status` | 가능 | worker exception과 OCR failure 구분 |
+| OCR request failed rate | 운영 SLI | `timetable_job_runtime`의 `status=failed` | 가능 | 요청 처리 실패를 집계하며 OCR engine fallback은 별도 SLI로 구분 |
 | OCR p95 total latency | 운영 SLI | `timetable_ocr_engine_runtime.duration_ms` 또는 baseline report | 준비 필요 | 운영 기준은 OCI 또는 OCI-constrained 기준선 사용 |
 | OCR fallback rate | 운영 SLI | `timetable_ocr_engine_runtime.fallback`, `ocr_fallback_cell_count` | 가능 | fallback cell 증가를 degraded 신호로 사용 |
 | queue pressure | 운영 SLI | `/ready`의 `queue_size`, `queue_max_size` | 가능 | queue 포화 추세 확인 |

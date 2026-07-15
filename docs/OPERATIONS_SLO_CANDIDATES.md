@@ -22,7 +22,7 @@
 | API latency | 공통 | request p95 latency | `TBD after baseline` | 높음 |
 | Chatbot runtime health | chatbot-api | LLM failed/fallback rate, retrieval failed rate | `TBD after baseline` | 높음 |
 | Chatbot degraded mode | chatbot-api | BM25 fallback tier rate, direct answer route rate | `TBD after baseline` | 중간 |
-| OCR processing health | main-api/timetable | OCR failed rate, OCR p95 total latency | `TBD after OCI baseline` | 높음 |
+| OCR processing health | main-api/timetable | OCR request failed rate, OCR p95 total latency | `TBD after OCI baseline` | 높음 |
 | OCR degraded mode | main-api/timetable | OCR fallback rate, queue pressure | `TBD after baseline` | 중간 |
 | Text filter runtime health | main-api/text_filter | ML filter failed rate, model unavailable count | `TBD after baseline` | 중간 |
 

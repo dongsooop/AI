@@ -69,7 +69,7 @@
 
 | SLI | 입력 | 집계 기준 |
 | --- | --- | --- |
-| timetable job failed rate | `timetable_job_runtime` | `status=failed` 비율 |
+| OCR request failed rate | `timetable_job_runtime` | `status=failed` 비율 |
 | OCR engine fallback rate | `timetable_ocr_engine_runtime` | `fallback=true` 또는 `status=fallback` 비율 |
 | OCR p95 total latency | `timetable_ocr_engine_runtime.duration_ms` | OCI 또는 OCI-constrained 기준선과 비교 |
 | grid detection p95 latency | `grid_detection_duration_ms` | runtime event별 p95 |
