@@ -37,9 +37,21 @@ jobs:
 
       - name: Prepare CI-only Docker inputs
         run: |
-          mkdir -p model/my_electra_finetuned model/artifacts
+          mkdir -p \
+            model/my_electra_finetuned \
+            model/artifacts \
+            data/sub_model_data \
+            data/school_info/old_data \
+            data/rule_book
           touch model/my_electra_finetuned/.ci-placeholder
           touch model/artifacts/.ci-placeholder
+          touch data/sub_model_data/.ci-placeholder
+          touch data/rule_book/.ci-placeholder
+          touch data/bad_text_sample.txt
+          touch data/eng_bad_text.txt
+          touch data/department.txt
+          touch data/school_info/old_data/dmu_documents_cleaned.json
+          touch requirements.txt requirements_oss.txt
           : > .env
 
       - name: Set up QEMU
@@ -89,6 +101,7 @@ jobs:
             echo "- Platform: \`linux/arm64\`"
             echo "- Validation scope: image build, command/port inspection, container creation"
             echo "- Model and RAG inputs: CI-only placeholders"
+            echo "- Python dependency manifests: CI-only empty placeholders; dependency installation is not validated"
             echo "- Image publication: disabled"
             echo ""
             echo "This check does not start the application or validate model, RAG, database, Ollama, or external API behavior."
