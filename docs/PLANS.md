@@ -124,7 +124,8 @@
 │   ├── OPERATIONS_LOG_SLI_COLLECTION.md # 로그 기반 SLI 집계 규칙
 │   ├── OPERATIONS_SLO_CANDIDATES.md     # 1차 운영 SLO 후보
 │   ├── OPERATIONS_QUALITY_GATES.md      # AI 품질 게이트 기준
-│   └── OPERATIONS_INCIDENT_WORKFLOW.md  # 알림/점검/배포 판단 흐름
+│   ├── OPERATIONS_INCIDENT_WORKFLOW.md  # 알림/점검/배포 판단 흐름
+│   └── OCI_AI_PERFORMANCE_BASELINE.md   # OCI AI 서비스 성능 기준선 실행 가이드
 └── CLAUDE.md                       # Claude 호환용 저장소 참고 문서
 ```
 
