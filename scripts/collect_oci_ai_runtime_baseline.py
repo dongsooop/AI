@@ -22,6 +22,19 @@ from typing import Any
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "operations" / "oci_ai_runtime_baseline.json"
 KEY_VALUE_RE = re.compile(r"([a-zA-Z_][a-zA-Z0-9_]*)=([^\s]+)")
+PROFILE_DEFAULTS: dict[str, dict[str, Any]] = {
+    "custom": {},
+    "oci-a1-flex-shared": {
+        "expected_architecture": "arm64",
+        "oci_ocpu_count": 8.0,
+        "expected_ram_gb": 24.0,
+        "main_api_and_chatbot": "same",
+        "ollama_and_chatbot": "same",
+        "ollama_model": "gpt-oss:20b",
+        "docker_deployment": True,
+        "timetable_queue_workers": 2,
+    },
+}
 
 
 def parse_mapping(values: list[str], option: str) -> dict[str, str]:
@@ -180,18 +193,39 @@ def parse_runtime_log(path: Path) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Collect an OCI AI runtime baseline during a bounded load window")
+    parser.add_argument("--profile", choices=tuple(PROFILE_DEFAULTS), default="custom")
     parser.add_argument("--duration", type=float, default=60, help="sampling window in seconds")
     parser.add_argument("--interval", type=float, default=1, help="process/readiness sampling interval")
     parser.add_argument("--process", action="append", default=[], metavar="NAME=PID", help="process to sample")
     parser.add_argument("--readiness", action="append", default=[], metavar="NAME=URL", help="readiness URL to sample")
     parser.add_argument("--runtime-log", action="append", default=[], metavar="NAME=PATH", help="measurement-window log")
     parser.add_argument("--ocpus", type=float, default=None, help="OCI shape OCPU count from the console/API")
-    parser.add_argument("--main-chatbot-topology", choices=("same", "separate", "unknown"), default="unknown")
-    parser.add_argument("--ollama-topology", choices=("same", "separate", "unknown"), default="unknown")
+    parser.add_argument("--expected-ram-gb", type=float, default=None, help="configured OCI RAM, not observed host RAM")
+    parser.add_argument("--main-chatbot-topology", choices=("same", "separate", "unknown"), default=None)
+    parser.add_argument("--ollama-topology", choices=("same", "separate", "unknown"), default=None)
+    parser.add_argument("--ollama-model", default=None)
+    parser.add_argument("--timetable-queue-workers", type=int, default=None)
+    parser.add_argument("--docker-deployment", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--out", default=str(DEFAULT_REPORT_PATH), help="output report path")
     args = parser.parse_args()
     if args.duration <= 0 or args.interval <= 0:
         raise ValueError("--duration and --interval must be positive")
+    profile = PROFILE_DEFAULTS[args.profile]
+    expected_ocpus = args.ocpus if args.ocpus is not None else profile.get("oci_ocpu_count")
+    expected_ram_gb = args.expected_ram_gb if args.expected_ram_gb is not None else profile.get("expected_ram_gb")
+    main_chatbot_topology = args.main_chatbot_topology or profile.get("main_api_and_chatbot", "unknown")
+    ollama_topology = args.ollama_topology or profile.get("ollama_and_chatbot", "unknown")
+    ollama_model = args.ollama_model or profile.get("ollama_model")
+    queue_workers = (
+        args.timetable_queue_workers
+        if args.timetable_queue_workers is not None
+        else profile.get("timetable_queue_workers")
+    )
+    docker_deployment = (
+        args.docker_deployment
+        if args.docker_deployment is not None
+        else profile.get("docker_deployment")
+    )
 
     processes = {name: int(value) for name, value in parse_mapping(args.process, "--process").items()}
     readiness_urls = parse_mapping(args.readiness, "--readiness")
@@ -255,13 +289,22 @@ def main() -> int:
             "architecture": platform.machine(),
             "cpu_model": cpu_model(),
             "logical_cpu_count": os.cpu_count(),
-            "oci_ocpu_count": args.ocpus,
+            "oci_ocpu_count": expected_ocpus,
             "ram_mb": total_ram_mb(),
             "platform": platform.platform(),
         },
         "topology": {
-            "main_api_and_chatbot": args.main_chatbot_topology,
-            "ollama_and_chatbot": args.ollama_topology,
+            "main_api_and_chatbot": main_chatbot_topology,
+            "ollama_and_chatbot": ollama_topology,
+        },
+        "deployment_profile": {
+            "name": args.profile,
+            "shape": "VM.Standard.A1.Flex (user-confirmation pending)" if args.profile == "oci-a1-flex-shared" else None,
+            "expected_architecture": profile.get("expected_architecture"),
+            "expected_ram_gb": expected_ram_gb,
+            "docker_deployment": docker_deployment,
+            "ollama_model": ollama_model,
+            "timetable_queue_workers": queue_workers,
         },
         "processes": process_metrics,
         "readiness": readiness_metrics,
@@ -275,7 +318,11 @@ def main() -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print("[OK] OCI AI runtime baseline")
-    print(json.dumps({"host": report["host"], "topology": report["topology"]}, ensure_ascii=False))
+    print(json.dumps({
+        "host": report["host"],
+        "topology": report["topology"],
+        "deployment_profile": report["deployment_profile"],
+    }, ensure_ascii=False))
     print(f"report={out_path}")
     return 0
 
