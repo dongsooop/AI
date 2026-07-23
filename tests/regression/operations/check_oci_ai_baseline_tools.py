@@ -74,6 +74,7 @@ def main() -> int:
             ocr_image=None,
             allow_ocr_api_side_effects=False,
             chatbot_query="private-query-must-not-leak",
+            chatbot_query_file=None,
             text_filter_text="private-text-must-not-leak",
             cache_state="warm",
             readiness_interval=0.01,
@@ -133,6 +134,9 @@ def main() -> int:
     rows = summary_tool.baseline_rows(None, invalid_rag, None)
     assert rows[0]["status"] == "environment_invalid"
     assert rows[0]["p95_ms"] is None
+    load_rows = summary_tool.load_rows([report])
+    assert all(row["cache_state"] == "warm" for row in load_rows)
+    assert all(row["query_variants"] == 1 for row in load_rows)
     sanitized = summary_tool.sanitized_runtime({
         "host": {"architecture": "arm64"},
         "processes": {"ollama": {"pid": 123, "peak_rss_mb": 100}},

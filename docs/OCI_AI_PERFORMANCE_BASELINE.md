@@ -112,8 +112,11 @@ python tests/regression/operations/run_ai_service_load.py \
   --scenario chatbot \
   --concurrency 1 \
   --requests-per-service 10 \
+  --chatbot-query-file tests/regression/operations/chatbot_load_queries.json \
   --cache-state cold
 ```
+
+같은 chatbot 질의를 반복하면 서비스 캐시 성능을 측정하게 됩니다. Ollama와 전체 chatbot 처리시간을 측정할 때는 `chatbot_load_queries.json`처럼 서로 다른 비민감 질의 세트를 사용합니다. 리포트에는 질의 본문을 저장하지 않고 사용한 variant 수만 기록합니다. 의도적으로 cache hit 성능을 측정할 때만 단일 `--chatbot-query`를 반복하고 `--cache-state warm`으로 표시합니다.
 
 텍스트 필터 단독 부하는 인증이 필요 없는 `/text_filter_single`을 사용하며 학습 샘플 로그를 변경하지 않습니다.
 

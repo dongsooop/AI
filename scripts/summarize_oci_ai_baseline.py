@@ -123,6 +123,8 @@ def load_rows(payloads: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "service": service,
                 "scenario": scenario,
                 "concurrency": concurrency,
+                "cache_state": payload.get("cache_state"),
+                "query_variants": payload.get("chatbot_query_variant_count"),
                 "status": payload.get("status"),
                 "p50_ms": latency.get("p50"),
                 "p95_ms": latency.get("p95"),
@@ -180,12 +182,12 @@ def render_markdown(summary: dict[str, Any]) -> str:
         "",
         "Raw prompts, bearer tokens, base URLs, process IDs, and raw log lines are intentionally excluded.",
         "",
-        "| Service | Scenario | Concurrency | Status | p50 ms | p95 ms | Max ms | Peak RSS MB | Error rate | Fallback rate |",
-        "| --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Service | Scenario | Concurrency | Cache | Query variants | Status | p50 ms | p95 ms | Max ms | Peak RSS MB | Error rate | Fallback rate |",
+        "| --- | --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in summary["rows"]:
         lines.append("| " + " | ".join(markdown_value(row.get(key)) for key in (
-            "service", "scenario", "concurrency", "status", "p50_ms", "p95_ms", "max_ms",
+            "service", "scenario", "concurrency", "cache_state", "query_variants", "status", "p50_ms", "p95_ms", "max_ms",
             "peak_rss_mb", "error_rate", "fallback_rate",
         )) + " |")
     lines.extend(["", "## Missing or invalid inputs", ""])

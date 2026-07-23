@@ -24,6 +24,7 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "operations" / "ai_service_load_report.json"
 DEFAULT_CHATBOT_QUERY = "컴퓨터소프트웨어공학과 소개를 알려줘"
 DEFAULT_TEXT_FILTER_TEXT = "오늘 수업 자료를 확인하고 과제를 제출했습니다."
+DEFAULT_CHATBOT_QUERIES_PATH = ROOT_DIR / "tests" / "regression" / "operations" / "chatbot_load_queries.json"
 SERVICES = ("ocr", "chatbot", "text-filter")
 
 
@@ -65,6 +66,28 @@ def load_tokens(token_file: Path | None) -> list[str]:
             if line.strip() and not line.lstrip().startswith("#")
         )
     return list(dict.fromkeys(tokens))
+
+
+def load_chatbot_queries(path: Path | None, fallback: str) -> list[str]:
+    if path is None:
+        return [fallback]
+    if not path.exists():
+        raise ValueError(f"chatbot query file not found: {path}")
+    if path.suffix.lower() == ".json":
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        items = payload.get("queries", payload.get("cases", [])) if isinstance(payload, dict) else payload
+        if not isinstance(items, list):
+            raise ValueError(f"chatbot query JSON must contain queries or cases: {path}")
+        queries = [
+            str(item.get("query", "") if isinstance(item, dict) else item).strip()
+            for item in items
+        ]
+    else:
+        queries = [line.strip() for line in path.read_text(encoding="utf-8").splitlines()]
+    queries = [query for query in queries if query and not query.startswith("#")]
+    if not queries:
+        raise ValueError(f"no chatbot queries found: {path}")
+    return queries
 
 
 def json_spec(service: str, url: str, payload: dict[str, Any], token: str | None) -> RequestSpec:
@@ -179,12 +202,19 @@ def build_specs(args: argparse.Namespace, services: list[str], tokens: list[str]
     if "chatbot" in services:
         if not token:
             raise ValueError("chatbot load requires AI_BASELINE_BEARER_TOKEN or --token-file")
-        specs["chatbot"] = [json_spec(
-            "chatbot",
-            f"{args.chatbot_base_url.rstrip('/')}/chatbot",
-            {"text": args.chatbot_query},
-            token,
-        )]
+        queries = load_chatbot_queries(
+            Path(args.chatbot_query_file) if args.chatbot_query_file else None,
+            args.chatbot_query,
+        )
+        specs["chatbot"] = [
+            json_spec(
+                "chatbot",
+                f"{args.chatbot_base_url.rstrip('/')}/chatbot",
+                {"text": query},
+                token,
+            )
+            for query in queries
+        ]
     if "text-filter" in services:
         specs["text-filter"] = [json_spec(
             "text-filter",
@@ -286,7 +316,7 @@ async def run_load(args: argparse.Namespace) -> dict[str, Any]:
                 request_index = counters[service]
             if args.duration is not None and time.monotonic() - started >= args.duration:
                 return
-            spec_index = request_index - 1 if service == "ocr" else worker_index
+            spec_index = request_index - 1 if service in {"ocr", "chatbot"} else worker_index
             spec = service_specs[spec_index % len(service_specs)]
             result = await asyncio.to_thread(send_request, spec, args.timeout)
             result["request_index"] = request_index
@@ -343,6 +373,7 @@ async def run_load(args: argparse.Namespace) -> dict[str, Any]:
         "profile": args.profile,
         "concurrency_per_service": args.concurrency,
         "cache_state": args.cache_state,
+        "chatbot_query_variant_count": len(specs.get("chatbot", [])),
         "duration_target_seconds": args.duration,
         "requests_per_service_target": None if args.duration is not None else args.requests_per_service,
         "elapsed_seconds": elapsed,
@@ -378,6 +409,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ocr-image")
     parser.add_argument("--allow-ocr-api-side-effects", action="store_true")
     parser.add_argument("--chatbot-query", default=DEFAULT_CHATBOT_QUERY)
+    parser.add_argument(
+        "--chatbot-query-file",
+        default=None,
+        help=f"JSON queries/cases or line-delimited queries; recommended default set: {DEFAULT_CHATBOT_QUERIES_PATH}",
+    )
     parser.add_argument("--text-filter-text", default=DEFAULT_TEXT_FILTER_TEXT)
     parser.add_argument("--cache-state", choices=("cold", "warm", "mixed", "unknown"), default="unknown")
     parser.add_argument("--readiness-interval", type=float, default=1)
