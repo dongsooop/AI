@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -33,6 +34,10 @@ def main() -> int:
     summary_tool = load_module(
         "summarize_oci_ai_baseline",
         ROOT_DIR / "scripts" / "summarize_oci_ai_baseline.py",
+    )
+    collector_tool = load_module(
+        "collect_oci_ai_runtime_baseline",
+        ROOT_DIR / "scripts" / "collect_oci_ai_runtime_baseline.py",
     )
     base_url = "http://private-host.invalid"
     secret = "regression-token-must-not-leak"
@@ -145,6 +150,37 @@ def main() -> int:
     serialized_sanitized = json.dumps(sanitized)
     assert "123" not in serialized_sanitized
     assert "/private/log" not in serialized_sanitized
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        runtime_log = Path(temp_dir) / "measurement.log"
+        runtime_log.write_text(
+            "2026-07-23 | INFO | main | req-1 | request_started path=/chatbot\n"
+            "2026-07-23 | INFO | main | req-2 | request_started path=/chatbot\n"
+            "2026-07-23 | INFO | main | req-1 | event=chatbot_retrieval_runtime "
+            "duration_ms=12 status=fallback fallback_reason=dense_unavailable bm25_fallback_tier=2\n"
+            "2026-07-23 | INFO | main | req-1 | request_completed path=/chatbot "
+            "duration_ms=120 status_code=200\n"
+            "2026-07-23 | ERROR | main | req-2 | request_failed path=/chatbot\n",
+            encoding="utf-8",
+        )
+        parsed = collector_tool.parse_runtime_log(runtime_log)
+        assert parsed["max_concurrent_requests"] == 2, parsed
+        assert parsed["request_metrics"]["/chatbot"]["request_count"] == 2, parsed
+        assert parsed["request_metrics"]["/chatbot"]["error_rate"] == 0.5, parsed
+        retrieval = parsed["runtime_events"]["chatbot_retrieval_runtime"]
+        assert retrieval["fallback_rate"] == 1.0, retrieval
+        assert retrieval["bm25_fallback_tiers"] == {"2": 1}, retrieval
+
+    issues = collector_tool.collection_issues(
+        {"main-api": 999999},
+        {"main-api": {"sample_count": 0}},
+        {"chatbot-api": Path("/private/missing.log")},
+        {"chatbot-api": {"path": "/private/missing.log", "error": "not_found"}},
+    )
+    assert issues == [
+        "process_no_samples:main-api",
+        "runtime_log_not_found:chatbot-api",
+    ], issues
     print("[OK] OCI AI baseline tools")
     return 0
 

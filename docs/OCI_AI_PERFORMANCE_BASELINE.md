@@ -68,6 +68,10 @@ python scripts/collect_oci_ai_runtime_baseline.py \
 - `logs.*.runtime_events.chatbot_retrieval_runtime.bm25_fallback_tiers`: BM25 tier 분포
 - `logs.*.max_concurrent_requests`: 로그 구간 최대 동시 요청 수
 
+지정한 PID에서 표본을 얻지 못했거나 `--runtime-log` 파일이 없으면 수집기는
+리포트를 남기되 `status=incomplete`, `issues` 목록과 종료 코드 2를 반환합니다.
+이 상태의 리포트는 운영 기준선 완료 자료로 사용하지 않습니다.
+
 `oci-a1-flex-shared` 프로필은 8 OCPU, 24GB RAM, 동일 인스턴스, Docker, `gpt-oss:20b`, queue worker 2를 기대값으로 기록합니다. `host.ram_mb`는 수집기가 관찰한 호스트 값이고 `deployment_profile.expected_ram_gb`는 OCI 구성값이므로 구분해서 봅니다.
 
 ## 2. OCR 기준선

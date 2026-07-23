@@ -191,6 +191,26 @@ def parse_runtime_log(path: Path) -> dict[str, Any]:
     }
 
 
+def collection_issues(
+    processes: dict[str, int],
+    process_metrics: dict[str, Any],
+    runtime_logs: dict[str, Path],
+    log_metrics: dict[str, Any],
+) -> list[str]:
+    """Return sanitized issue codes for configured inputs that produced no data."""
+    issues = [
+        f"process_no_samples:{name}"
+        for name in processes
+        if not process_metrics.get(name, {}).get("sample_count")
+    ]
+    issues.extend(
+        f"runtime_log_not_found:{name}"
+        for name in runtime_logs
+        if log_metrics.get(name, {}).get("error") == "not_found"
+    )
+    return issues
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Collect an OCI AI runtime baseline during a bounded load window")
     parser.add_argument("--profile", choices=tuple(PROFILE_DEFAULTS), default="custom")
@@ -279,10 +299,14 @@ def main() -> int:
     for name, path in runtime_logs.items():
         log_metrics[name] = parse_runtime_log(path) if path.exists() else {"path": str(path), "error": "not_found"}
 
+    issues = collection_issues(processes, process_metrics, runtime_logs, log_metrics)
+
     report = {
         "schema_version": 1,
         "suite": "oci_ai_runtime_baseline",
         "service": "all",
+        "status": "incomplete" if issues else "completed",
+        "issues": issues,
         "measured_at": datetime.now(timezone.utc).isoformat(),
         "measurement_window_seconds": round(time.monotonic() - started, 2),
         "host": {
@@ -317,14 +341,14 @@ def main() -> int:
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    print("[OK] OCI AI runtime baseline")
+    print("[OK] OCI AI runtime baseline" if not issues else "[INCOMPLETE] OCI AI runtime baseline")
     print(json.dumps({
         "host": report["host"],
         "topology": report["topology"],
         "deployment_profile": report["deployment_profile"],
     }, ensure_ascii=False))
     print(f"report={out_path}")
-    return 0
+    return 0 if not issues else 2
 
 
 if __name__ == "__main__":

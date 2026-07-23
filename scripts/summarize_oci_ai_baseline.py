@@ -151,6 +151,8 @@ def sanitized_runtime(runtime: dict[str, Any] | None) -> dict[str, Any]:
             if isinstance(log, dict):
                 runtime_events[service] = log.get("runtime_events", {})
     return {
+        "status": runtime.get("status"),
+        "issues": runtime.get("issues", []),
         "host": {
             "architecture": host.get("architecture"),
             "cpu_model": host.get("cpu_model"),
