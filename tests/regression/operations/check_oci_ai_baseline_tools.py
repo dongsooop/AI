@@ -68,7 +68,7 @@ def main() -> int:
     try:
         args = argparse.Namespace(
             scenario="mixed",
-            profile="oci-a1-flex-shared",
+            profile="oci-runtime",
             concurrency=2,
             duration=None,
             requests_per_service=4,
@@ -111,7 +111,7 @@ def main() -> int:
 
     ocr_args = argparse.Namespace(
         allow_ocr_api_side_effects=False,
-        ocr_image=str(ROOT_DIR / "docs" / "OCI_AI_PERFORMANCE_BASELINE.md"),
+        ocr_image=str(ROOT_DIR / "docs" / "operations" / "OCI_AI_PERFORMANCE_BASELINE.md"),
         concurrency=2,
         duration=None,
         requests_per_service=2,

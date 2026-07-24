@@ -1,4 +1,4 @@
-# 장애 기준 정책
+# 운영 장애 기준 정책
 
 이 문서는 동숲 백엔드에 SLO를 적용하기 전에 먼저 합의해야 하는 장애 판단 기준을 정리합니다.
 
@@ -100,8 +100,8 @@ SLO 수치를 선언하기 전에 다음 기준을 먼저 만족해야 합니다
 
 이 문서가 1단계 기준입니다. 이후 단계에서는 다음 순서로 확장합니다.
 
-1. 서비스별 SLI 후보와 수집 위치를 `docs/OPERATIONS_SLI_MAP.md`에 매핑합니다.
-2. 기존 로그에서 SLI를 집계할 수 있는지 `docs/OPERATIONS_LOG_SLI_COLLECTION.md`에 정리합니다.
-3. 장애 시스템 구축 후 적용할 1차 운영 SLO 후보를 `docs/OPERATIONS_SLO_CANDIDATES.md`에 선언합니다.
-4. AI 품질 지표를 `docs/OPERATIONS_QUALITY_GATES.md`의 릴리즈 품질 게이트로 분리합니다.
-5. SLO 위반 시 알림, 점검, 배포 판단 흐름을 `docs/OPERATIONS_INCIDENT_WORKFLOW.md`에 연결합니다.
+1. 서비스별 SLI 후보와 수집 위치를 `docs/operations/OPERATIONS_SLI_MAP.md`에 매핑합니다.
+2. 기존 로그에서 SLI를 집계할 수 있는지 `docs/operations/OPERATIONS_LOG_SLI_COLLECTION.md`에 정리합니다.
+3. 장애 시스템 구축 후 적용할 1차 운영 SLO 후보를 `docs/operations/OPERATIONS_SLO_CANDIDATES.md`에 선언합니다.
+4. AI 품질 지표를 `docs/operations/OPERATIONS_QUALITY_GATES.md`의 릴리즈 품질 게이트로 분리합니다.
+5. SLO 위반 시 알림, 점검, 배포 판단 흐름을 `docs/operations/OPERATIONS_INCIDENT_WORKFLOW.md`에 연결합니다.

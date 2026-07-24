@@ -24,16 +24,7 @@ DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "operations" / "oci_ai_ru
 KEY_VALUE_RE = re.compile(r"([a-zA-Z_][a-zA-Z0-9_]*)=([^\s]+)")
 PROFILE_DEFAULTS: dict[str, dict[str, Any]] = {
     "custom": {},
-    "oci-a1-flex-shared": {
-        "expected_architecture": "arm64",
-        "oci_ocpu_count": 8.0,
-        "expected_ram_gb": 24.0,
-        "main_api_and_chatbot": "same",
-        "ollama_and_chatbot": "same",
-        "ollama_model": "gpt-oss:20b",
-        "docker_deployment": True,
-        "timetable_queue_workers": 2,
-    },
+    "oci-runtime": {},
 }
 
 
@@ -323,7 +314,7 @@ def main() -> int:
         },
         "deployment_profile": {
             "name": args.profile,
-            "shape": "VM.Standard.A1.Flex (user-confirmation pending)" if args.profile == "oci-a1-flex-shared" else None,
+            "shape": None,
             "expected_architecture": profile.get("expected_architecture"),
             "expected_ram_gb": expected_ram_gb,
             "docker_deployment": docker_deployment,

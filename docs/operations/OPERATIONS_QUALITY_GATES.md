@@ -1,8 +1,8 @@
-# 릴리즈 품질 게이트
+# 운영 릴리즈 품질 게이트
 
 이 문서는 AI 품질 지표를 운영 SLO와 분리해 배포 전 릴리즈 품질 게이트로 관리하는 기준을 정리합니다.
 
-`docs/OPERATIONS_SLO_CANDIDATES.md`의 1차 운영 SLO는 availability, latency, error, fallback 중심으로 둡니다. RAG 답변 품질, OCR 인식 품질, 텍스트 필터 오탐/미탐은 사용자 경험에 중요하지만 실시간 장애 알림보다 회귀 리포트와 리뷰 판단에 더 적합하므로 이 문서에서 별도로 다룹니다.
+`docs/operations/OPERATIONS_SLO_CANDIDATES.md`의 1차 운영 SLO는 availability, latency, error, fallback 중심으로 둡니다. RAG 답변 품질, OCR 인식 품질, 텍스트 필터 오탐/미탐은 사용자 경험에 중요하지만 실시간 장애 알림보다 회귀 리포트와 리뷰 판단에 더 적합하므로 이 문서에서 별도로 다룹니다.
 
 ## 적용 원칙
 
@@ -101,4 +101,4 @@ OCR 품질 게이트는 로컬 측정값만으로 운영 품질을 확정하지 
 
 ## 다음 단계
 
-다음 단계에서는 SLO 또는 품질 게이트 위반 시 어떤 알림, 점검, 배포 판단 흐름으로 이어질지 `docs/OPERATIONS_INCIDENT_WORKFLOW.md`의 incident workflow로 연결합니다.
+다음 단계에서는 SLO 또는 품질 게이트 위반 시 어떤 알림, 점검, 배포 판단 흐름으로 이어질지 `docs/operations/OPERATIONS_INCIDENT_WORKFLOW.md`의 incident workflow로 연결합니다.

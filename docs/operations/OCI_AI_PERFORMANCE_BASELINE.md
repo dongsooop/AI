@@ -1,4 +1,4 @@
-# OCI AI 서비스 성능 기준선 실행 가이드
+# OCI AI 서비스 성능 기준선 수집 가이드
 
 이 문서는 OCR, RAG 챗봇, 텍스트 필터의 현재 성능과 품질을 같은 형식으로 기록하기 위한 1단계 실행 가이드입니다.
 
@@ -29,23 +29,24 @@
 
 “현재 운영 성능을 숫자로 설명할 수 있는 상태”는 마지막 열까지 채워졌을 때 달성한 것으로 봅니다. 로컬 또는 `oci-constrained` 결과는 운영값의 대체물이 아니라 비교용 사전 점검값입니다.
 
-## 현재 운영 프로필
+## 운영 프로필 입력 원칙
 
-사용자 확인을 바탕으로 다음 프로필을 사용합니다. 정확한 OCI 콘솔 shape 이름은 아직 확인 전이므로 `VM.Standard.A1.Flex`는 추정값으로 표시합니다.
+공개 문서와 소스 코드에는 실제 OCI shape, OCPU, RAM, 서비스 배치 관계, 모델명,
+worker 수를 고정하지 않습니다. 수집 시 OCI 콘솔과 배포 설정에서 확인한 값을
+각 CLI 인자로 전달하고, 원본 리포트는 로컬에서만 보관합니다.
 
-| 항목 | 값 |
+| 운영 정보 | 수집기 인자 |
 | --- | --- |
-| profile | `oci-a1-flex-shared` |
-| architecture | ARM64, Ampere 추정 |
-| OCPU / RAM | 8 OCPU / 24GB |
-| 인스턴스 | 1대 |
-| 컨테이너 | main API, chatbot API, Ollama |
-| Ollama 모델 | `gpt-oss:20b` |
-| 시간표 queue worker | 2 |
-| OCR thread worker 비교값 | 2, 8 |
-| Python | 3.11.x |
+| OCPU | `--ocpus` |
+| 구성 RAM | `--expected-ram-gb` |
+| main API와 chatbot 배치 | `--main-chatbot-topology` |
+| Ollama 배치 | `--ollama-topology` |
+| Ollama 모델 | `--ollama-model` |
+| 시간표 queue worker | `--timetable-queue-workers` |
+| Docker 배포 여부 | `--docker-deployment` 또는 `--no-docker-deployment` |
 
-세 컨테이너는 분리되어 있지만 CPU와 RAM을 공유합니다. 따라서 단독 서비스 결과와 chatbot+OCR+text-filter 혼합 부하 결과를 모두 기록합니다.
+`oci-runtime` 프로필은 공개 가능한 실행 구분자일 뿐, 실제 운영값을 자동으로
+채우지 않습니다.
 
 ## 1. 서버와 런타임 구간 수집
 
@@ -53,7 +54,7 @@ OCI 콘솔에서 shape의 OCPU 수를 확인하고, main API와 챗봇 및 Ollam
 
 ```bash
 python scripts/collect_oci_ai_runtime_baseline.py \
-  --profile oci-a1-flex-shared \
+  --profile oci-runtime \
   --duration 300 \
   --interval 1 \
   --process main-api=MAIN_API_PID \
@@ -82,7 +83,9 @@ python scripts/collect_oci_ai_runtime_baseline.py \
 리포트를 남기되 `status=incomplete`, `issues` 목록과 종료 코드 2를 반환합니다.
 이 상태의 리포트는 운영 기준선 완료 자료로 사용하지 않습니다.
 
-`oci-a1-flex-shared` 프로필은 8 OCPU, 24GB RAM, 동일 인스턴스, Docker, `gpt-oss:20b`, queue worker 2를 기대값으로 기록합니다. `host.ram_mb`는 수집기가 관찰한 호스트 값이고 `deployment_profile.expected_ram_gb`는 OCI 구성값이므로 구분해서 봅니다.
+`host.ram_mb`는 수집기가 관찰한 호스트 값이고
+`deployment_profile.expected_ram_gb`는 실행 시 전달한 OCI 구성값이므로
+구분해서 봅니다.
 
 ## 2. OCR 기준선
 
@@ -152,7 +155,7 @@ python tests/regression/operations/run_ai_service_load.py \
   --scenario ocr \
   --concurrency 2 \
   --requests-per-service 4 \
-  --token-file /private/tmp/oci-baseline-tokens.txt \
+  --token-file /tmp/oci-baseline-tokens.txt \
   --ocr-image data/image/3.jpeg \
   --allow-ocr-api-side-effects
 ```
@@ -164,7 +167,7 @@ python tests/regression/operations/run_ai_service_load.py \
   --scenario mixed \
   --concurrency 2 \
   --requests-per-service 4 \
-  --token-file /private/tmp/oci-baseline-tokens.txt \
+  --token-file /tmp/oci-baseline-tokens.txt \
   --ocr-image data/image/3.jpeg \
   --allow-ocr-api-side-effects \
   --cache-state warm

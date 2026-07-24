@@ -397,7 +397,7 @@ async def run_load(args: argparse.Namespace) -> dict[str, Any]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run bounded Dongsooop AI service load scenarios")
     parser.add_argument("--scenario", choices=(*SERVICES, "mixed"), required=True)
-    parser.add_argument("--profile", default="oci-a1-flex-shared")
+    parser.add_argument("--profile", default="oci-runtime")
     parser.add_argument("--concurrency", type=int, default=1, help="workers per selected service")
     target = parser.add_mutually_exclusive_group()
     target.add_argument("--duration", type=float, default=None)

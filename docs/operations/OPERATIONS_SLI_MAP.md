@@ -2,7 +2,7 @@
 
 이 문서는 장애 시스템 구축 이후 SLO 후보로 확장할 수 있는 SLI(Service Level Indicator)를 정리합니다.
 
-1단계 기준 문서인 `docs/OPERATIONS_FAILURE_POLICY.md`의 상태 구분을 따릅니다. 여기서는 SLO 목표 수치를 선언하지 않고, 어떤 지표를 어디서 얻을 수 있는지만 매핑합니다.
+1단계 기준 문서인 `docs/operations/OPERATIONS_FAILURE_POLICY.md`의 상태 구분을 따릅니다. 여기서는 SLO 목표 수치를 선언하지 않고, 어떤 지표를 어디서 얻을 수 있는지만 매핑합니다.
 
 ## 분류 원칙
 
@@ -95,4 +95,4 @@
 - chatbot LLM timeout, empty response, deterministic fallback을 같은 degraded로 볼지 분리할지
 - 품질 게이트 리포트의 실패를 배포 차단으로 볼 임계값
 
-이 규칙은 `docs/OPERATIONS_LOG_SLI_COLLECTION.md`에서 구체화합니다.
+이 규칙은 `docs/operations/OPERATIONS_LOG_SLI_COLLECTION.md`에서 구체화합니다.

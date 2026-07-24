@@ -15,9 +15,9 @@ Dongsooop 백엔드 브랜치를 푸시, PR 생성, 공개하기 전에 실제 �
 
 1. `docs/AGENTS.md`: 프로젝트 공통 가드레일
 2. `docs/PLANS.md`: 현재 아키텍처와 서비스 경계
-3. `docs/BRANCH_REVIEW_GUIDE.md`: 브랜치 리뷰 기준
-4. `docs/REVIEW_SEVERITY.md`: 발견 사항 severity 판정 기준
-5. `docs/CHECKLIST.md`: 실제 점검 체크리스트
+3. `docs/review/BRANCH_REVIEW_GUIDE.md`: 브랜치 리뷰 기준
+4. `docs/review/REVIEW_SEVERITY.md`: 발견 사항 severity 판정 기준
+5. `docs/review/CHECKLIST.md`: 실제 점검 체크리스트
 
 PR 본문 초안을 작성할 때는 `.github/pull_request_template.md`도 확인합니다.
 
@@ -46,7 +46,7 @@ PR 본문 초안을 작성할 때는 `.github/pull_request_template.md`도 확�
 
 ## Severity 판정
 
-발견 사항 형식과 severity 기준은 `docs/REVIEW_SEVERITY.md`를 따릅니다.
+발견 사항 형식과 severity 기준은 `docs/review/REVIEW_SEVERITY.md`를 따릅니다.
 
 ## RAG 평가 리포트 요약
 

@@ -1,4 +1,4 @@
-# Branch Review Guide
+# 브랜치 리뷰 가이드
 
 이 문서는 이 저장소에서 GPT 기반 에이전트가 브랜치 작업 내용을 리뷰할 때 따를 기준을 정의합니다.
 
@@ -187,7 +187,7 @@ RAG 품질 검증을 위한 회귀 케이스는 공개 가능한 질문/기대 �
 
 문제가 없다면 그 사실을 명시하고, 아직 검증하지 못한 영역이 있으면 함께 적습니다.
 
-각 발견 사항의 출력 형식과 severity 판정은 `docs/REVIEW_SEVERITY.md`를 따릅니다.
+각 발견 사항의 출력 형식과 severity 판정은 `docs/review/REVIEW_SEVERITY.md`를 따릅니다.
 
 ## 작업 운영 도구 경계
 
@@ -197,6 +197,6 @@ OMX CLI나 oh-my-codex에서 얻은 아이디어는 체크리스트, 리뷰 출�
 
 - `docs/AGENTS.md`는 공통 작업 원칙을 설명합니다.
 - `docs/PLANS.md`는 현재 구조와 변경 방향을 설명합니다.
-- `docs/BRANCH_REVIEW_GUIDE.md`는 브랜치 리뷰 기준을 정의합니다.
-- `docs/REVIEW_SEVERITY.md`는 발견 사항 severity 판정 기준을 정의합니다.
-- `docs/CHECKLIST.md`는 리뷰 기준을 실제 점검 순서로 바꿔둔 문서입니다.
+- `docs/review/BRANCH_REVIEW_GUIDE.md`는 브랜치 리뷰 기준을 정의합니다.
+- `docs/review/REVIEW_SEVERITY.md`는 발견 사항 severity 판정 기준을 정의합니다.
+- `docs/review/CHECKLIST.md`는 리뷰 기준을 실제 점검 순서로 바꿔둔 문서입니다.

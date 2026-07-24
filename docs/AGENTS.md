@@ -28,12 +28,12 @@
 
 1. `docs/AGENTS.md` — 공통 작업 제약과 아키텍처 가드레일
 2. `docs/PLANS.md` — 현재 코드 구조와 변경 방향
-3. `docs/BRANCH_REVIEW_GUIDE.md` — 브랜치 리뷰 기준
-4. `docs/CHECKLIST.md` — 실제 점검 순서
+3. `docs/review/BRANCH_REVIEW_GUIDE.md` — 브랜치 리뷰 기준
+4. `docs/review/CHECKLIST.md` — 실제 점검 순서
 
 브랜치 리뷰처럼 반복되는 검토 작업은 가능하면 `$reviewing-dongsooop-branch` skill을 먼저 사용합니다.
 
-사용자가 "지금 브랜치 작업 검토해줘", "현재 변경 검토해줘", "푸시 전 점검해줘", "브랜치 리뷰해줘"처럼 현재 작업물 검토를 요청하면 제안만 하지 말고 실제 점검을 진행합니다. 이때 `docs/PLANS.md` → `docs/BRANCH_REVIEW_GUIDE.md` → `docs/CHECKLIST.md` 순서로 확인하고, 그 기준에 따라 변경 범위, 보안, 기능, 공개 가능 여부, Docker/의존성, 환경변수 정합성, 남은 리스크를 빠짐없이 검토합니다.
+사용자가 "지금 브랜치 작업 검토해줘", "현재 변경 검토해줘", "푸시 전 점검해줘", "브랜치 리뷰해줘"처럼 현재 작업물 검토를 요청하면 제안만 하지 말고 실제 점검을 진행합니다. 이때 `docs/PLANS.md` → `docs/review/BRANCH_REVIEW_GUIDE.md` → `docs/review/CHECKLIST.md` 순서로 확인하고, 그 기준에 따라 변경 범위, 보안, 기능, 공개 가능 여부, Docker/의존성, 환경변수 정합성, 남은 리스크를 빠짐없이 검토합니다.
 
 브랜치 검토 응답에는 `.github/pull_request_template.md` 형식에 맞춘 PR 본문 초안도 함께 작성합니다. 현재 브랜치 변경 내용을 기준으로 `관련 이슈`, `🎯 배경`, `🔍 주요 내용` 섹션을 채우며, 이슈 번호를 알 수 없으면 `Closes #이슈번호` 자리표시자를 유지합니다. 마지막에는 현재 변경에 어울리는 커밋 메시지 후보 3개를 함께 제안합니다.
 
