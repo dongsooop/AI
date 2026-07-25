@@ -1,6 +1,6 @@
-# 로그 기반 SLI 수집 준비
+# 운영 로그 기반 SLI 수집 준비
 
-이 문서는 `docs/OPERATIONS_SLI_MAP.md`에서 정리한 SLI 후보를 현재 로그에서 어떻게 집계할지 정의합니다.
+이 문서는 `docs/operations/OPERATIONS_SLI_MAP.md`에서 정리한 SLI 후보를 현재 로그에서 어떻게 집계할지 정의합니다.
 
 현재 단계에서는 `/metrics` 엔드포인트나 알림 시스템을 추가하지 않습니다. 먼저 request log, runtime log, readiness payload, regression report를 안정적인 SLI 입력으로 사용하는 규칙을 고정합니다.
 
@@ -147,4 +147,4 @@ readiness는 장애 감지의 빠른 신호입니다. 실제 사용자 영향은
 
 ## 다음 단계
 
-다음 단계에서는 이 집계 규칙을 바탕으로 장애 시스템 구축 후 적용할 1차 운영 SLO 후보를 `docs/OPERATIONS_SLO_CANDIDATES.md`에 선언합니다. SLO 수치는 아직 임의로 박지 않고, baseline이 필요한 항목은 `TBD after baseline`로 남깁니다.
+다음 단계에서는 이 집계 규칙을 바탕으로 장애 시스템 구축 후 적용할 1차 운영 SLO 후보를 `docs/operations/OPERATIONS_SLO_CANDIDATES.md`에 선언합니다. SLO 수치는 아직 임의로 박지 않고, baseline이 필요한 항목은 `TBD after baseline`로 남깁니다.

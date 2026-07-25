@@ -1,4 +1,4 @@
-# CHECKLIST.md
+# 브랜치 리뷰 체크리스트
 
 이 문서는 이 저장소에서 GPT 기반 에이전트가 실제 리뷰와 점검을 수행할 때 사용하는 운영 체크리스트입니다.
 
@@ -12,7 +12,7 @@
 
 - `docs/AGENTS.md` — 저장소 공통 작업 원칙
 - `docs/PLANS.md` — 현재 코드 구조와 변경 방향
-- `docs/BRANCH_REVIEW_GUIDE.md` — 브랜치 리뷰 기준
+- `docs/review/BRANCH_REVIEW_GUIDE.md` — 브랜치 리뷰 기준
 
 ## 핵심 점검 목표
 

@@ -5,7 +5,9 @@ import json
 import math
 import os
 import platform
+import resource
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -115,6 +117,13 @@ def average_int(values: List[int]) -> Optional[int]:
     return int(round(sum(values) / len(values)))
 
 
+def peak_rss_mb() -> float:
+    rss = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    if sys.platform != "darwin":
+        rss *= 1024
+    return round(rss / (1024 * 1024), 2)
+
+
 def resolve_case_path(path_value: str) -> Path:
     path = Path(path_value)
     if path.is_absolute():
@@ -156,11 +165,16 @@ def summarize_runs(runs: List[Dict[str, Any]]) -> Dict[str, Any]:
     first_run = runs[0] if runs else {}
     return {
         "average_total_duration_ms": average_int(total_durations),
+        "p50_total_duration_ms": percentile(total_durations, 50.0),
         "max_total_duration_ms": max(total_durations) if total_durations else None,
         "p95_total_duration_ms": percentile(total_durations, 95.0),
         "average_grid_detection_duration_ms": average_int(grid_durations),
+        "p50_grid_detection_duration_ms": percentile(grid_durations, 50.0),
+        "p95_grid_detection_duration_ms": percentile(grid_durations, 95.0),
         "max_grid_detection_duration_ms": max(grid_durations) if grid_durations else None,
         "average_ocr_duration_ms": average_int(ocr_durations),
+        "p50_ocr_duration_ms": percentile(ocr_durations, 50.0),
+        "p95_ocr_duration_ms": percentile(ocr_durations, 95.0),
         "max_ocr_duration_ms": max(ocr_durations) if ocr_durations else None,
         "average_schedule_count": average_int(schedule_counts),
         "max_schedule_count": max(schedule_counts) if schedule_counts else None,
@@ -281,11 +295,16 @@ def aggregate_metrics(case_results: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {
         "measured_run_count": len(runs),
         "average_total_duration_ms": average_int(total_durations),
+        "p50_total_duration_ms": percentile(total_durations, 50.0),
         "max_total_duration_ms": max(total_durations) if total_durations else None,
         "p95_total_duration_ms": percentile(total_durations, 95.0),
         "average_grid_detection_duration_ms": average_int(grid_durations),
+        "p50_grid_detection_duration_ms": percentile(grid_durations, 50.0),
+        "p95_grid_detection_duration_ms": percentile(grid_durations, 95.0),
         "max_grid_detection_duration_ms": max(grid_durations) if grid_durations else None,
         "average_ocr_duration_ms": average_int(ocr_durations),
+        "p50_ocr_duration_ms": percentile(ocr_durations, 50.0),
+        "p95_ocr_duration_ms": percentile(ocr_durations, 95.0),
         "max_ocr_duration_ms": max(ocr_durations) if ocr_durations else None,
         "total_extracted_schedule_count": sum(int(run.get("schedule_count", 0)) for run in runs),
         "total_cell_count": sum(int(run.get("total_cell_count", 0)) for run in runs),
@@ -332,7 +351,9 @@ def main() -> int:
     cv2, ocr_engine = load_ocr_dependencies(out_path, cases_path)
     runtime_profile = apply_runtime_profile(ocr_engine, args.profile, args.ocr_workers)
 
+    process_cpu_started = time.process_time()
     case_results = [evaluate_case(case, args.repeat, args.warmup, cv2, ocr_engine) for case in cases]
+    process_cpu_seconds = round(time.process_time() - process_cpu_started, 3)
     errors = [
         f"{result['id']}:{error}"
         for result in case_results
@@ -356,6 +377,10 @@ def main() -> int:
         metrics=aggregate_metrics(case_results),
         errors=errors,
     )
+    summary["metrics"].update({
+        "process_cpu_seconds": process_cpu_seconds,
+        "peak_rss_mb": peak_rss_mb(),
+    })
     output = {
         "schema_version": 1,
         "suite": SUITE,

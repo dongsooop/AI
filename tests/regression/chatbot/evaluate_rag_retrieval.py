@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import re
+import resource
 import statistics
 import sys
 import time
@@ -35,6 +36,21 @@ REFUSAL_RE = re.compile(
 
 DEFAULT_CASES_PATH = Path(__file__).with_name("rag_eval_cases.json")
 DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "chatbot" / "rag_eval_report.json"
+
+
+def percentile(values: list[float], percentile_value: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = max(0, min(len(ordered) - 1, int(((percentile_value / 100) * len(ordered)) + 0.999999) - 1))
+    return round(ordered[index], 2)
+
+
+def peak_rss_mb() -> float:
+    rss = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    if sys.platform != "darwin":
+        rss *= 1024
+    return round(rss / (1024 * 1024), 2)
 
 
 def _load_cases_file(path: Path) -> list[dict]:
@@ -424,6 +440,10 @@ def summarize(results: list[dict]) -> dict:
     source_required_results = [r for r in search_results if r.get("source_url_required")]
     latencies = [float(r.get("retrieval_latency_ms", 0.0)) for r in results]
     answer_latencies = [float(r.get("answer_latency_ms", 0.0)) for r in search_results]
+    total_latencies = [
+        float(r.get("retrieval_latency_ms", 0.0)) + float(r.get("answer_latency_ms", 0.0))
+        for r in results
+    ]
     passed = sum(1 for r in results if r["passed"])
     failed = sum(1 for r in results if not r["passed"])
 
@@ -469,8 +489,17 @@ def summarize(results: list[dict]) -> dict:
         "metrics": metrics,
         "errors": [],
         "avg_retrieval_latency_ms": round(statistics.mean(latencies), 2) if latencies else 0.0,
-        "p95_retrieval_latency_ms": round(statistics.quantiles(latencies, n=20)[18], 2) if len(latencies) >= 20 else 0.0,
+        "p50_retrieval_latency_ms": percentile(latencies, 50),
+        "p95_retrieval_latency_ms": percentile(latencies, 95),
+        "max_retrieval_latency_ms": round(max(latencies), 2) if latencies else 0.0,
         "avg_answer_latency_ms": round(statistics.mean(answer_latencies), 2) if answer_latencies else 0.0,
+        "p50_answer_latency_ms": percentile(answer_latencies, 50),
+        "p95_answer_latency_ms": percentile(answer_latencies, 95),
+        "max_answer_latency_ms": round(max(answer_latencies), 2) if answer_latencies else 0.0,
+        "avg_evaluation_case_latency_ms": round(statistics.mean(total_latencies), 2) if total_latencies else 0.0,
+        "p50_evaluation_case_latency_ms": percentile(total_latencies, 50),
+        "p95_evaluation_case_latency_ms": percentile(total_latencies, 95),
+        "max_evaluation_case_latency_ms": round(max(total_latencies), 2) if total_latencies else 0.0,
     }
 
     by_category = {}
@@ -529,6 +558,7 @@ def main() -> int:
 
     configure_default_artifact_env()
 
+    process_cpu_started = time.process_time()
     results = []
     for case in cases:
         kind = case.get("kind", "search")
@@ -539,9 +569,12 @@ def main() -> int:
         else:
             raise ValueError(f"unknown case kind: {kind}")
 
+    summary = summarize(results)
+    summary["process_cpu_seconds"] = round(time.process_time() - process_cpu_started, 3)
+    summary["peak_rss_mb"] = peak_rss_mb()
     report = {
         "cases_file": str(Path(args.cases)),
-        "summary": summarize(results),
+        "summary": summary,
         "results": results,
     }
 

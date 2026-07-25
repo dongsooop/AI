@@ -1,0 +1,16 @@
+{
+  "metadata": {
+    "purpose": "Distinct non-sensitive chatbot prompts for cold and mixed OCI load measurements.",
+    "privacy": "No user or operational data. Query text must not be copied into generated reports."
+  },
+  "queries": [
+    "동양미래대학교 학생으로서 학교생활을 잘하려면 어떤 습관이 좋을까?",
+    "시험 기간에 공부 계획을 효율적으로 세우는 방법을 알려줘.",
+    "팀 프로젝트에서 역할을 공정하게 나누는 방법을 알려줘.",
+    "새 학기에 학교생활에 적응하는 방법을 알려줘.",
+    "과제와 시험 준비를 함께 관리하는 방법을 알려줘.",
+    "수업 내용을 오래 기억하기 위한 복습 방법을 알려줘.",
+    "대학생이 발표 긴장을 줄이기 위해 준비할 수 있는 방법은 뭐야?",
+    "학교에서 협업할 때 원활하게 의견을 조율하는 방법을 알려줘."
+  ]
+}

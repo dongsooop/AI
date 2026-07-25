@@ -115,16 +115,21 @@
 │           └── agents/
 │               └── openai.yaml     # Codex UI 메타데이터
 ├── docs/
+│   ├── README.md                   # 공개 문서 인덱스
 │   ├── AGENTS.md                   # GPT 에이전트 공통 작업 지침
 │   ├── PLANS.md                    # 현재 구조와 목표 구조 계획서
-│   ├── BRANCH_REVIEW_GUIDE.md      # 브랜치 리뷰 기준 문서
-│   ├── CHECKLIST.md                # 실제 점검 순서 체크리스트
-│   ├── OPERATIONS_FAILURE_POLICY.md     # 장애/degraded/품질 회귀 기준
-│   ├── OPERATIONS_SLI_MAP.md            # 운영 SLI 후보와 수집 위치
-│   ├── OPERATIONS_LOG_SLI_COLLECTION.md # 로그 기반 SLI 집계 규칙
-│   ├── OPERATIONS_SLO_CANDIDATES.md     # 1차 운영 SLO 후보
-│   ├── OPERATIONS_QUALITY_GATES.md      # AI 품질 게이트 기준
-│   └── OPERATIONS_INCIDENT_WORKFLOW.md  # 알림/점검/배포 판단 흐름
+│   ├── review/
+│   │   ├── BRANCH_REVIEW_GUIDE.md # 브랜치 리뷰 기준 문서
+│   │   ├── CHECKLIST.md           # 실제 점검 순서 체크리스트
+│   │   └── REVIEW_SEVERITY.md     # 발견 사항 심각도 기준
+│   └── operations/
+│       ├── OPERATIONS_FAILURE_POLICY.md     # 장애/degraded/품질 회귀 기준
+│       ├── OPERATIONS_SLI_MAP.md            # 운영 SLI 후보와 수집 위치
+│       ├── OPERATIONS_LOG_SLI_COLLECTION.md # 로그 기반 SLI 집계 규칙
+│       ├── OPERATIONS_SLO_CANDIDATES.md     # 1차 운영 SLO 후보
+│       ├── OPERATIONS_QUALITY_GATES.md      # AI 품질 게이트 기준
+│       ├── OPERATIONS_INCIDENT_WORKFLOW.md  # 알림/점검/배포 판단 흐름
+│       └── OCI_AI_PERFORMANCE_BASELINE.md   # OCI AI 성능 기준선 수집 가이드
 └── CLAUDE.md                       # Claude 호환용 저장소 참고 문서
 ```
 
@@ -218,7 +223,7 @@
 3. 한 번에 대규모로 바꾸기보다 점진적으로 이동합니다.
 4. 꼭 필요하지 않다면 기능 변경과 대규모 구조 변경을 같은 브랜치에 섞지 않습니다.
 5. 파일 이동 시 import, 런타임 엔트리포인트, Docker 경로 가정, 환경변수 경로를 함께 점검합니다.
-6. 책임 구분, 경계, 실행 경로가 바뀌면 `docs/PLANS.md`를 함께 수정하고 `docs/BRANCH_REVIEW_GUIDE.md`, `docs/CHECKLIST.md` 기준으로 리뷰합니다.
+6. 책임 구분, 경계, 실행 경로가 바뀌면 `docs/PLANS.md`를 함께 수정하고 `docs/review/BRANCH_REVIEW_GUIDE.md`, `docs/review/CHECKLIST.md` 기준으로 리뷰합니다.
 7. 생성 산출물과 프라이빗 데이터는 리팩토링 중에도 애플리케이션 소스와 분리된 상태를 유지합니다.
 
 ## 작업 우선순위
@@ -236,7 +241,7 @@
 - 시간표 분석은 한국어 지원이 포함된 Tesseract OCR에 의존합니다.
 - 일부 챗봇 인덱싱 유틸은 KoNLPy/JPype1 사용을 위해 Java가 필요합니다.
 - 인증은 `.env`의 JWT 관련 값을 사용합니다.
-- 장애, degraded, 품질 회귀의 운영상 구분은 `docs/OPERATIONS_FAILURE_POLICY.md`를 기준으로 보고, SLI 후보와 로그 기반 집계 규칙은 `docs/OPERATIONS_SLI_MAP.md`와 `docs/OPERATIONS_LOG_SLI_COLLECTION.md`를 참고합니다. 장애 시스템 구축 후 적용할 1차 운영 SLO 후보는 `docs/OPERATIONS_SLO_CANDIDATES.md`에 두고, AI 품질 지표는 `docs/OPERATIONS_QUALITY_GATES.md`의 릴리즈 품질 게이트로 분리합니다. SLO 또는 품질 게이트 위반 시 점검 흐름은 `docs/OPERATIONS_INCIDENT_WORKFLOW.md`를 따릅니다.
+- 장애, degraded, 품질 회귀의 운영상 구분은 `docs/operations/OPERATIONS_FAILURE_POLICY.md`를 기준으로 보고, SLI 후보와 로그 기반 집계 규칙은 `docs/operations/OPERATIONS_SLI_MAP.md`와 `docs/operations/OPERATIONS_LOG_SLI_COLLECTION.md`를 참고합니다. 장애 시스템 구축 후 적용할 1차 운영 SLO 후보는 `docs/operations/OPERATIONS_SLO_CANDIDATES.md`에 두고, AI 품질 지표는 `docs/operations/OPERATIONS_QUALITY_GATES.md`의 릴리즈 품질 게이트로 분리합니다. SLO 또는 품질 게이트 위반 시 점검 흐름은 `docs/operations/OPERATIONS_INCIDENT_WORKFLOW.md`를 따릅니다.
 
 ## 권장 변경 전략
 
@@ -295,6 +300,6 @@ python debug/timetable/debug_timetable.py
 
 - `docs/AGENTS.md`: 공통 작업 원칙
 - `docs/PLANS.md`: 현재 구조 스냅샷 + 목표 구조 방향 + 전환 규칙
-- `docs/BRANCH_REVIEW_GUIDE.md`: 브랜치 리뷰 기준
-- `docs/CHECKLIST.md`: 실제 점검 순서 체크리스트
+- `docs/review/BRANCH_REVIEW_GUIDE.md`: 브랜치 리뷰 기준
+- `docs/review/CHECKLIST.md`: 실제 점검 순서 체크리스트
 - `CLAUDE.md`: Claude 호환을 위한 참고 문서
