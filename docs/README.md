@@ -24,6 +24,7 @@
 - [릴리즈 품질 게이트](operations/OPERATIONS_QUALITY_GATES.md)
 - [운영 알림 및 점검 흐름](operations/OPERATIONS_INCIDENT_WORKFLOW.md)
 - [OCI AI 성능 기준선 수집](operations/OCI_AI_PERFORMANCE_BASELINE.md)
+- [텍스트 필터 ONNX shadow 실험](operations/TEXT_FILTER_ONNX_SHADOW.md)
 
 ## 공개 범위
 
