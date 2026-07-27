@@ -43,3 +43,24 @@ pass rate, false positive/negative, cold start, p50/p95/max latency, peak RSS와
 
 이 조건을 모두 확인하기 전에는 `TEXT_FILTER_INFERENCE_BACKEND` feature flag나
 ONNX runtime 경로를 운영 서비스에 추가하지 않습니다.
+
+## 실험 결과
+
+Linux ARM64 컨테이너에서 backend별 독립 프로세스 측정을 3회 실행하고 중앙값을
+비교했습니다. 각 케이스는 warmup 1회 후 5회 반복 측정했습니다.
+
+| Backend | Pass rate | FP | FN | Cold start | p95 latency | Peak RSS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| PyTorch | 0.5714 | 0 | 6 | 1330.46 ms | 130.52 ms | 662.96 MB |
+| ONNX FP32 | 0.5714 | 0 | 6 | 697.00 ms | 65.45 ms | 880.48 MB |
+| ONNX INT8 | 0.5000 | 0 | 7 | 571.40 ms | 21.49 ms | 326.78 MB |
+
+FP32는 PyTorch와 케이스별 판정이 같고 p95 latency가 약 49.85% 감소했지만,
+peak RSS가 약 32.81% 증가했습니다. INT8은 p95 latency가 약 83.54%,
+peak RSS가 약 50.71% 감소했지만 `korean_initial_consonant_01` 케이스에서
+false negative가 1건 증가했습니다.
+
+현재 golden case는 14건으로 운영 전환을 판단하기에 충분하지 않고, 실제 OCI
+인스턴스에서도 같은 결과를 확인하지 않았습니다. 정확도 회귀 또는 RSS 증가가
+없는 후보가 없으므로 운영 backend는 PyTorch를 유지합니다. ONNX feature flag와
+운영 추론 경로는 추가하지 않습니다.
