@@ -46,7 +46,9 @@ def install_fake_schedule_index() -> None:
 
     def schedule_search(query: str, top_k: int = 8) -> str:
         if "개강" in query:
-            return "2026-03-02 개강"
+            return "- 개강: 2026-03-02"
+        if "학사일정" in query:
+            return "- 수강신청: 2026-02-10 ~ 2026-02-12"
         return ""
 
     module.schedule_search = schedule_search
@@ -65,6 +67,12 @@ def check_tool_routing() -> list[str]:
         errors.append(f"schedule_route_failed:{schedule}")
     if not schedule.reason:
         errors.append("schedule_reason_missing")
+    if not schedule.text.startswith("개강 일정\n"):
+        errors.append(f"schedule_heading_unexpected:{schedule.text}")
+
+    generic_schedule = tools.run_mode_tools("fast", "학사일정 알려줘")
+    if not generic_schedule.text.startswith("학사일정 안내\n"):
+        errors.append(f"generic_schedule_heading_unexpected:{generic_schedule.text}")
 
     contact = tools.run_oss_fast_path_tools("학생성공지원팀 전화번호 알려줘")
     if contact.name != "confident_search_answer" or not contact.resolved:

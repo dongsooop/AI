@@ -383,6 +383,11 @@ def run_quality_checks() -> tuple[list[dict], list[str]]:
             if "학생종합관리시스템" not in (direct_answer or {}).get("answer", ""):
                 errors.append("spaced_do_it_direct_answer_missing_system")
 
+            if rich_index._unit_term_score("호텔과", "호텔관광학과") < 5:
+                errors.append("contact_department_abbreviation_match_failed")
+            if rich_index._unit_term_score("호탤과", "호텔관광학과") < 4:
+                errors.append("contact_department_typo_match_failed")
+
             for noise_query in ("just do it!", "how do it work?", "can you do it?", "어떻게 do it?"):
                 noise_answer = rich_index.metadata_direct_answer(noise_query)
                 if noise_answer:

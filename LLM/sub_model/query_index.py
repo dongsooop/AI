@@ -1,6 +1,8 @@
 import re
 import time
+import unicodedata
 from functools import lru_cache
+from difflib import SequenceMatcher
 
 import numpy as np
 import pandas as pd
@@ -239,6 +241,30 @@ def _compact(s: str) -> str:
     return re.sub(r"\s+", "", (s or "").lower())
 
 
+def _unit_root(value: str) -> str:
+    return re.sub(r"(공학부|공학과|학부|학과|전공|과|팀|센터|본부|처|단|부|원)$", "", _compact(value))
+
+
+def _unit_term_score(term: str, candidate: str) -> int:
+    """Match common department abbreviations and one-jamo Korean typos."""
+    term_root = _unit_root(term)
+    candidate_root = _unit_root(candidate)
+    if not term_root or not candidate_root:
+        return 0
+    if term_root == candidate_root:
+        return 6
+    if term_root in candidate_root or candidate_root in term_root:
+        return 5
+    if len(term_root) < 2:
+        return 0
+
+    candidate_prefix = candidate_root[:len(term_root)]
+    term_jamo = unicodedata.normalize("NFD", term_root)
+    prefix_jamo = unicodedata.normalize("NFD", candidate_prefix)
+    similarity = SequenceMatcher(None, term_jamo, prefix_jamo).ratio()
+    return 4 if similarity >= 0.8 else 0
+
+
 def _looks_like_doit_query(query: str) -> bool:
     text = query or ""
     return bool(SPACED_DO_IT_RE.search(text) or COMPACT_DOIT_RE.search(text))
@@ -320,12 +346,16 @@ def _metadata_contact_answer(query: str) -> dict | None:
         text = _compact(_answer_text_from_row(row))
         score = 0
         for term in compact_terms:
-            if term and term in unit:
-                score += 5
+            unit_score = _unit_term_score(term, unit)
+            if unit_score:
+                score += unit_score
             if term and term in title:
                 score += 3
             if term and term in text:
                 score += 1
+            source_marker = f"(출처:학부ㆍ학과/{unit})"
+            if unit_score and source_marker in text:
+                score += 3
         if (row.get("phone") or "").strip():
             score += 2
         if (row.get("email") or "").strip():
