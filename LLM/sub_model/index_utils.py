@@ -114,7 +114,10 @@ PHONE_RE = re.compile(r"\b0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}\b")
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 UNIT_RE  = re.compile(r"([가-힣A-Za-z·\s\-/()]{2,40}?(?:팀|센터|처|단|과|부|본부|위원회|연구소|지원실|실|연대|학부|학과))")
 CONTACT_UNIT_SUFFIX_RE = re.compile(r"(팀|센터|처|단|본부|위원회|연구소|지원실|연대|학부|학과)$")
-INVALID_CONTACT_UNIT_RE = re.compile(r"(담당부|서명과|시그니처|다운로드|파일|조합|타입|구분|항목|내용)")
+INVALID_CONTACT_UNIT_RE = re.compile(
+    r"(담당부|서명과|시그니처|다운로드|파일|조합|타입|구분|항목|내용|"
+    r"연락처|교수소개|공지|앨범)"
+)
 
 DASH_CHARS_RE = re.compile(r"[\u2010\u2011\u2012\u2013\u2014\u2212\uFE58\uFE63\uFF0D]")
 EDITOR_ONLY_RE = re.compile(r"해당\s*영역은\s*편집모드에서만\s*보여지는\s*영역입니다\.?")
@@ -358,8 +361,8 @@ def extract_units_and_contacts(row):
     if not out:
         phones = PHONE_RE.findall(text)
         emails = EMAIL_RE.findall(text)
-        if phones or emails:
-            cand = hint if hint else "미상"
+        if (phones or emails) and _is_contact_unit_candidate(hint):
+            cand = hint
             out.append({
                 "unit": cand,
                 "phone": phones[-1] if phones else "없음",

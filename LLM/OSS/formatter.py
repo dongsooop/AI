@@ -65,7 +65,14 @@ REPO_ROOT = _resolve_repo_root()
 def _normalize_heading_from_query(user_text: str) -> str:
     text = re.sub(r"\s+", " ", (user_text or "").strip())
     text = re.sub(r"[?？!！]+$", "", text).strip()
+    text = re.sub(
+        r"\s*(?:언제(?:야|예요|인가요)?|알려\s*줘|알려\s*주세요|보여\s*줘|보여\s*주세요)$",
+        "",
+        text,
+    ).strip()
     if not text:
+        return "학사일정 안내"
+    if text in {"학사일정", "학사 일정", "일정"}:
         return "학사일정 안내"
     if text.endswith("일정") or text.endswith("안내"):
         return text
