@@ -53,6 +53,9 @@ GENERIC_LABEL_RE = GENERIC_CONTACT_LABEL_RE
 NON_TARGET_TEAM_PAT = NON_TARGET_TEAM_RE
 
 STOP_TOKENS = {"담당", "담당부", "전화", "전화번호", "연락처", "문의", "상담", "번호"}
+PROFESSOR_ROOM_RE = re.compile(r"(?:교수(?:님)?\s*연구실|교수연구실|연구실\s*(?:위치|어디))")
+PROFESSOR_NAME_RE = re.compile(r"([가-힣]{2,4})\s*교수(?:님)?")
+GENERIC_PROFESSOR_WORDS = {"어느", "무슨", "담당", "학과", "우리"}
 
 
 def _resolve_repo_root() -> Path:
@@ -247,6 +250,23 @@ def dept_clarification_message(user_text: str) -> Optional[str]:
             return f"학과명이 축약되어 후보가 여러 개예요. 풀네임으로 입력해 주세요. 예: {picks}"
         return "학과명이 축약되어 정확한 매칭이 어려워요. 학과 풀네임으로 입력해 주세요. 예: 컴퓨터소프트웨어공학과 담당자 연락처"
     return None
+
+
+def professor_room_clarification_message(user_text: str) -> Optional[str]:
+    text = re.sub(r"\s+", " ", (user_text or "").strip())
+    if not PROFESSOR_ROOM_RE.search(text):
+        return None
+    if detect_dept_hint(text):
+        return None
+
+    named_professor = PROFESSOR_NAME_RE.search(text)
+    if named_professor and named_professor.group(1) not in GENERIC_PROFESSOR_WORDS:
+        return None
+
+    return (
+        "어느 교수님의 연구실인지 확인이 필요해요. "
+        "교수명이나 학과명을 함께 입력해 주세요. 예: 컴퓨터소프트웨어공학과 교수연구실 위치"
+    )
 
 
 def expand_synonyms(user_text: str) -> list[str]:

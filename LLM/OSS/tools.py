@@ -5,6 +5,7 @@ import logging
 from core.settings import get_settings
 from LLM.OSS.formatter import (
     dept_clarification_message,
+    professor_room_clarification_message,
     render_chatty_schedule,
 )
 from LLM.OSS.modes import looks_like_schedule, looks_like_topic
@@ -120,6 +121,22 @@ def _clarification_tool(user_text: str) -> ToolResult:
     )
 
 
+def _professor_room_clarification_tool(user_text: str) -> ToolResult:
+    try:
+        clarification = professor_room_clarification_message(user_text)
+    except Exception:
+        return EMPTY_TOOL_RESULT
+    if not clarification:
+        return EMPTY_TOOL_RESULT
+    return ToolResult(
+        name="professor_room_clarification",
+        text=clarification,
+        engine="fast",
+        confidence=0.95,
+        reason="professor room query needs professor or department clarification",
+    )
+
+
 def _postprocess_tool(mode: str, user_text: str) -> ToolResult:
     try:
         sub_answer = call_submodel(user_text)
@@ -154,6 +171,10 @@ def _confident_search_tool(user_text: str) -> ToolResult:
 
 
 def run_mode_tools(mode: str, user_text: str) -> ToolResult:
+    professor_room_clarification = _professor_room_clarification_tool(user_text)
+    if professor_room_clarification.resolved:
+        return professor_room_clarification
+
     if mode == "fast":
         for tool in (
             lambda: _schedule_tool(user_text, ceremonial_first=True),

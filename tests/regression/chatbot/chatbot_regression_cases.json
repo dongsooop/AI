@@ -105,6 +105,13 @@
     "none_of_text_contains": ["기획예산팀", "4597/subview.do", "4341/subview.do"]
   },
   {
+    "id": "professor_room_needs_clarification",
+    "text": "교수연구실이 어디야?",
+    "engine_in": ["fast"],
+    "all_of_text_contains": ["교수명이나 학과명"],
+    "none_of_text_contains": ["안전교육", "4877/subview.do"]
+  },
+  {
     "id": "privacy_policy",
     "text": "개인정보처리방침",
     "engine_in": ["policy", "topic", "oss"],
