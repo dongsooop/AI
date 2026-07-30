@@ -60,6 +60,28 @@
     "requires_source_url": true
   },
   {
+    "id": "contact_hotel_department_shorthand",
+    "category": "contact",
+    "kind": "search",
+    "query": "호텔과 담당자 연락처",
+    "expected_url_contains": ["4701/subview.do"],
+    "expected_title_contains": ["호텔관광학과"],
+    "answer_must_contain_all": ["호텔관광학과", "02-2610-1986"],
+    "answer_must_not_contain": ["기획예산팀", "02-2610-5121", "02-2610-1961", "기 연락처"],
+    "requires_source_url": true
+  },
+  {
+    "id": "contact_hotel_department_typo_context",
+    "category": "contact",
+    "kind": "search",
+    "query": "그건 기획예산팀이잖아 호텔관광학과 담당자ㅜ연락처",
+    "expected_url_contains": ["4701/subview.do"],
+    "expected_title_contains": ["호텔관광학과"],
+    "answer_must_contain_all": ["호텔관광학과", "02-2610-1986"],
+    "answer_must_not_contain": ["기획예산팀 전화번호", "02-2610-5121", "02-2610-1961", "기 연락처"],
+    "requires_source_url": true
+  },
+  {
     "id": "policy_leave_absence",
     "category": "policy",
     "kind": "search",
@@ -217,6 +239,17 @@
     "expected_url_contains": ["4647/subview.do"],
     "expected_title_contains": ["시각디자인과"],
     "answer_must_contain_any": ["시각디자인과", "4649/subview.do"],
+    "requires_source_url": true
+  },
+  {
+    "id": "department_hotel_shorthand",
+    "category": "department",
+    "kind": "search",
+    "query": "호텔과",
+    "expected_url_contains": ["4701/subview.do"],
+    "expected_title_contains": ["호텔관광학과"],
+    "answer_must_contain_any": ["호텔관광학과", "4701/subview.do"],
+    "answer_must_not_contain": ["기획예산팀", "4597/subview.do", "4341/subview.do"],
     "requires_source_url": true
   },
   {
