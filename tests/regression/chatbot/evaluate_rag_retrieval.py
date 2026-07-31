@@ -107,6 +107,7 @@ def validate_cases(cases: list[dict]) -> list[str]:
         "expected_title_contains",
         "answer_must_contain_any",
         "answer_must_contain_all",
+        "answer_must_not_contain",
     ]
     bool_fields = ["requires_source_url", "requires_date", "expects_refusal"]
 
@@ -299,6 +300,11 @@ def evaluate_search_case(case: dict, top_k: int, answer_top_k: int) -> dict:
     source_url_match = answer_url_match if case.get("requires_source_url", False) else True
     answer_any = contains_any(answer, case.get("answer_must_contain_any", []))
     answer_all = contains_all(answer, case.get("answer_must_contain_all", []))
+    forbidden_answer_terms = [
+        needle
+        for needle in case.get("answer_must_not_contain", [])
+        if needle and needle in answer
+    ]
     date_pass = bool(DATE_RE.search(answer)) if case.get("requires_date", False) else True
     refused = is_refusal_answer(answer)
     expected_refusal = bool(case.get("expects_refusal", False))
@@ -314,6 +320,7 @@ def evaluate_search_case(case: dict, top_k: int, answer_top_k: int) -> dict:
         "top3_url_match": top3_url_match,
         "top1_title_match": title_matches(hits, case.get("expected_title_contains", [])),
         "answer_keyword_match": answer_any and answer_all,
+        "forbidden_answer_terms": forbidden_answer_terms,
         "source_url_match": source_url_match,
         "source_url_required": bool(case.get("requires_source_url", False)),
         "date_match": date_pass,
@@ -338,6 +345,7 @@ def evaluate_search_case(case: dict, top_k: int, answer_top_k: int) -> dict:
             not answer_error,
             top3_url_match if expected_urls and not expected_refusal else True,
             answer_any and answer_all,
+            not forbidden_answer_terms,
             source_url_match,
             date_pass,
             refusal_match,
@@ -594,6 +602,8 @@ def main() -> int:
                 reasons.append("top3_url")
             if not r["answer_keyword_match"]:
                 reasons.append("answer_keyword")
+            if r.get("forbidden_answer_terms"):
+                reasons.append(f"forbidden_answer:{r['forbidden_answer_terms']}")
             if not r["source_url_match"]:
                 reasons.append("source_url")
             if not r["date_match"]:

@@ -74,6 +74,16 @@ def check_tool_routing() -> list[str]:
     if not generic_schedule.text.startswith("학사일정 안내\n"):
         errors.append(f"generic_schedule_heading_unexpected:{generic_schedule.text}")
 
+    professor_room = tools.run_mode_tools("oss", "교수연구실이 어디야?")
+    if professor_room.name != "professor_room_clarification" or not professor_room.resolved:
+        errors.append(f"professor_room_clarification_failed:{professor_room}")
+    if "교수명이나 학과명" not in professor_room.text:
+        errors.append(f"professor_room_clarification_text_unexpected:{professor_room.text}")
+
+    specific_professor_room = tools.run_mode_tools("oss", "홍길동 교수님 연구실이 어디야?")
+    if specific_professor_room.name == "professor_room_clarification":
+        errors.append(f"specific_professor_room_overblocked:{specific_professor_room}")
+
     contact = tools.run_oss_fast_path_tools("학생성공지원팀 전화번호 알려줘")
     if contact.name != "confident_search_answer" or not contact.resolved:
         errors.append(f"contact_route_failed:{contact}")

@@ -84,6 +84,34 @@
     "any_of_text_contains": ["02-2610-5247", "전화번호", "풀네임으로 다시 입력"]
   },
   {
+    "id": "contact_hotel_department_shorthand",
+    "text": "호텔과 담당자 연락처",
+    "engine_in": ["fast"],
+    "all_of_text_contains": ["호텔관광학과", "02-2610-1986", "4701/subview.do"],
+    "none_of_text_contains": ["기획예산팀", "02-2610-5121", "02-2610-1961", "기 연락처"]
+  },
+  {
+    "id": "contact_hotel_department_typo_context",
+    "text": "그건 기획예산팀이잖아 호텔관광학과 담당자ㅜ연락처",
+    "engine_in": ["fast"],
+    "all_of_text_contains": ["호텔관광학과", "02-2610-1986", "4701/subview.do"],
+    "none_of_text_contains": ["기획예산팀 전화번호", "02-2610-5121", "02-2610-1961", "기 연락처"]
+  },
+  {
+    "id": "topic_hotel_department_shorthand",
+    "text": "호텔과",
+    "engine_in": ["topic", "oss"],
+    "all_of_text_contains": ["호텔관광학과", "4701/subview.do"],
+    "none_of_text_contains": ["기획예산팀", "4597/subview.do", "4341/subview.do"]
+  },
+  {
+    "id": "professor_room_needs_clarification",
+    "text": "교수연구실이 어디야?",
+    "engine_in": ["fast"],
+    "all_of_text_contains": ["교수명이나 학과명"],
+    "none_of_text_contains": ["안전교육", "4877/subview.do"]
+  },
+  {
     "id": "privacy_policy",
     "text": "개인정보처리방침",
     "engine_in": ["policy", "topic", "oss"],
