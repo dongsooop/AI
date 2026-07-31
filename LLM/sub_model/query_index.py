@@ -97,13 +97,37 @@ DOIT_URL = "https://doit.dongyang.ac.kr/main/Login.aspx"
 def _canonical_unit_from_query(q: str) -> str | None:
     toks = re.findall(HANGUL_TOKEN_PATTERN, q or "")
     generic_contact_terms = {"연락처", "전화", "전화번호", "문의", "상담", "담당자"}
-    units = [
+    candidates = [
         t for t in toks
         if t not in generic_contact_terms and re.search(UNIT_QUERY_SUFFIX_PATTERN, t)
     ]
     # Korean corrections usually put the requested unit after the rejected or
     # previously answered unit ("기획예산실 말고 호텔과 연락처").
-    return units[-1] if units else None
+    for candidate in reversed(candidates):
+        if UNIT_SUFFIX_RE.search(candidate) or _known_unit_alias(candidate):
+            return candidate
+    return None
+
+
+@lru_cache(maxsize=256)
+def _known_unit_alias(candidate: str) -> bool:
+    """Accept a bare '-과' abbreviation only when it matches indexed unit metadata."""
+    if not candidate.endswith("과") or len(_unit_root(candidate)) < 2:
+        return False
+
+    indexed_df = globals().get("search_df")
+    if indexed_df is None or indexed_df.empty:
+        return False
+
+    rows = indexed_df[indexed_df["doc_type"].isin(["contact", "department"])]
+    for column in ("unit", "leaf_title", "title"):
+        if column not in rows.columns:
+            continue
+        if rows[column].fillna("").astype(str).map(
+            lambda value: _unit_term_score(candidate, value) >= 4
+        ).any():
+            return True
+    return False
 
 def _preclean_text(s: str) -> str:
     if not isinstance(s, str):
