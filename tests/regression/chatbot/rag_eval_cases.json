@@ -82,6 +82,17 @@
     "requires_source_url": true
   },
   {
+    "id": "contact_hotel_department_correction_context",
+    "category": "contact",
+    "kind": "search",
+    "query": "기획예산실 번호잖아 호텔과 담당자 연락처를 알려달라구",
+    "expected_url_contains": ["4701/subview.do"],
+    "expected_title_contains": ["호텔관광학과"],
+    "answer_must_contain_all": ["호텔관광학과", "02-2610-1986"],
+    "answer_must_not_contain": ["기획예산팀 전화번호", "02-2610-5121", "02-2610-1961"],
+    "requires_source_url": true
+  },
+  {
     "id": "policy_leave_absence",
     "category": "policy",
     "kind": "search",

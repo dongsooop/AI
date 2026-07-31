@@ -76,6 +76,13 @@ BOARD_PAGE_PENALTY = 0.8
 HOME_PAGE_RERANK_BOOST = 1.2
 PAGE_DOC_RERANK_BOOST = 1.0
 TITLE_UNIT_MATCH_BOOST = 0.6
+CONTACT_UNIT_RETRIEVAL_BOOST = 0.55
+CONTACT_CANONICAL_SOURCE_BOOST = 0.60
+GENERAL_UNIT_RETRIEVAL_BOOST = 0.65
+CANONICAL_UNIT_PAGE_BOOST = 0.35
+NON_CONTACT_DOC_PENALTY = 0.32
+EXACT_LEAF_RETRIEVAL_BOOST = 0.42
+QUERY_TERM_COVERAGE_BOOST = 0.16
 ANSWER_TEXT_COL = "text_for_answer"
 PRIVACY_QUERY_RE = re.compile(r"(개인정보|영상정보|처리방침|이메일\s*무단|이전방침|이용안내)")
 POLICY_QUERY_RE = re.compile(r"(휴학|복학|등록|장학|졸업|수강|학칙|규정|절차|신청|자격|요건)")
@@ -89,8 +96,14 @@ DOIT_URL = "https://doit.dongyang.ac.kr/main/Login.aspx"
 
 def _canonical_unit_from_query(q: str) -> str | None:
     toks = re.findall(HANGUL_TOKEN_PATTERN, q or "")
-    units = [t for t in toks if UNIT_SUFFIX_RE.search(t)]
-    return max(units, key=len) if units else None
+    generic_contact_terms = {"연락처", "전화", "전화번호", "문의", "상담", "담당자"}
+    units = [
+        t for t in toks
+        if t not in generic_contact_terms and re.search(UNIT_QUERY_SUFFIX_PATTERN, t)
+    ]
+    # Korean corrections usually put the requested unit after the rejected or
+    # previously answered unit ("기획예산실 말고 호텔과 연락처").
+    return units[-1] if units else None
 
 def _preclean_text(s: str) -> str:
     if not isinstance(s, str):
@@ -515,6 +528,87 @@ def _minmax(x):
 
 # 최신성 점수 함수 제거됨 (학교 기본 정보만 제공)
 
+
+def _metadata_retrieval_bonus(query: str) -> np.ndarray:
+    """Use high-precision index metadata to break close hybrid-search ties."""
+    bonus = np.zeros(len(search_df), dtype=float)
+    query_text = query or ""
+
+    contact_like = any(k in query_text for k in CONTACT_KWS)
+    if contact_like:
+        target_unit = _canonical_unit_from_query(query_text)
+        if target_unit:
+            unit_scores = []
+            canonical_sources = []
+            source_re = re.compile(
+                rf"\(출처:[^)]*/\s*{re.escape(_compact(target_unit))}\s*\)"
+            )
+            for _, row in search_df.iterrows():
+                candidates = (
+                    row.get("unit", ""),
+                    row.get("title", ""),
+                    row.get("leaf_title", ""),
+                )
+                best = max((_unit_term_score(target_unit, str(value)) for value in candidates), default=0)
+                unit_scores.append(best / 6.0)
+                answer_text = _compact(_answer_text_from_row(row))
+                source_match = source_re.search(answer_text)
+                if not source_match:
+                    source_path = re.search(r"\(출처:([^)]*)\)", answer_text)
+                    source_leaf = source_path.group(1).rsplit("/", 1)[-1] if source_path else ""
+                    source_match = _unit_term_score(target_unit, source_leaf) >= 4
+                canonical_sources.append(bool(source_match))
+            bonus += CONTACT_UNIT_RETRIEVAL_BOOST * np.asarray(unit_scores, dtype=float)
+            bonus += CONTACT_CANONICAL_SOURCE_BOOST * np.asarray(canonical_sources, dtype=float)
+        return bonus
+
+    target_unit = _canonical_unit_from_query(query_text)
+    if target_unit:
+        unit_scores = []
+        canonical_pages = []
+        for _, row in search_df.iterrows():
+            candidates = (
+                row.get("unit", ""),
+                row.get("title", ""),
+                row.get("leaf_title", ""),
+            )
+            best = max((_unit_term_score(target_unit, str(value)) for value in candidates), default=0)
+            unit_scores.append(best / 6.0)
+            leaf_score = _unit_term_score(target_unit, str(row.get("leaf_title", "")))
+            canonical_pages.append(
+                leaf_score >= 4 and str(row.get("doc_type", "")) == "department"
+            )
+        is_contact = search_df["doc_type"].eq("contact").astype(float).to_numpy()
+        bonus += GENERAL_UNIT_RETRIEVAL_BOOST * np.asarray(unit_scores, dtype=float)
+        bonus += CANONICAL_UNIT_PAGE_BOOST * np.asarray(canonical_pages, dtype=float)
+        bonus -= NON_CONTACT_DOC_PENALTY * is_contact
+
+    terms = _query_match_terms(query_text)
+    if not terms:
+        return bonus
+
+    leaf_titles = search_df["leaf_title"].fillna("").astype(str)
+    searchable_titles = (
+        search_df["title"].fillna("").astype(str)
+        + " "
+        + search_df["breadcrumb"].fillna("").astype(str)
+        + " "
+        + leaf_titles
+    )
+    compact_terms = [_compact(term) for term in terms if _compact(term)]
+    exact_leaf = leaf_titles.map(
+        lambda value: any(_compact(value) == term for term in compact_terms)
+    ).astype(float)
+    coverage = searchable_titles.map(
+        lambda value: (
+            sum(term in _compact(value) for term in compact_terms) / len(compact_terms)
+        )
+    ).astype(float)
+    bonus += EXACT_LEAF_RETRIEVAL_BOOST * exact_leaf.to_numpy()
+    bonus += QUERY_TERM_COVERAGE_BOOST * coverage.to_numpy()
+    return bonus
+
+
 def hybrid_search(query, top_k=8, alpha=DEFAULT_DENSE_WEIGHT, contact_boost=CONTACT_DOC_BOOST):
     start = time.monotonic()
     query = _normalize_doit_query(query)
@@ -558,7 +652,7 @@ def hybrid_search(query, top_k=8, alpha=DEFAULT_DENSE_WEIGHT, contact_boost=CONT
             is_old_privacy = search_df["is_privacy_old"].astype(float).to_numpy()
             bonus -= 0.12 * is_privacy + 0.18 * is_old_privacy
 
-        scores = base + bonus
+        scores = base + bonus + _metadata_retrieval_bonus(query_text)
         out = search_df.copy()
         out["score"] = scores
         if "url" in out.columns:
