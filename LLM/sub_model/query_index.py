@@ -584,28 +584,27 @@ def _metadata_retrieval_bonus(query: str) -> np.ndarray:
                 canonical_sources.append(bool(source_match))
             bonus += CONTACT_UNIT_RETRIEVAL_BOOST * np.asarray(unit_scores, dtype=float)
             bonus += CONTACT_CANONICAL_SOURCE_BOOST * np.asarray(canonical_sources, dtype=float)
-        return bonus
-
-    target_unit = _canonical_unit_from_query(query_text)
-    if target_unit:
-        unit_scores = []
-        canonical_pages = []
-        for _, row in search_df.iterrows():
-            candidates = (
-                row.get("unit", ""),
-                row.get("title", ""),
-                row.get("leaf_title", ""),
-            )
-            best = max((_unit_term_score(target_unit, str(value)) for value in candidates), default=0)
-            unit_scores.append(best / 6.0)
-            leaf_score = _unit_term_score(target_unit, str(row.get("leaf_title", "")))
-            canonical_pages.append(
-                leaf_score >= 4 and str(row.get("doc_type", "")) == "department"
-            )
-        is_contact = search_df["doc_type"].eq("contact").astype(float).to_numpy()
-        bonus += GENERAL_UNIT_RETRIEVAL_BOOST * np.asarray(unit_scores, dtype=float)
-        bonus += CANONICAL_UNIT_PAGE_BOOST * np.asarray(canonical_pages, dtype=float)
-        bonus -= NON_CONTACT_DOC_PENALTY * is_contact
+    else:
+        target_unit = _canonical_unit_from_query(query_text)
+        if target_unit:
+            unit_scores = []
+            canonical_pages = []
+            for _, row in search_df.iterrows():
+                candidates = (
+                    row.get("unit", ""),
+                    row.get("title", ""),
+                    row.get("leaf_title", ""),
+                )
+                best = max((_unit_term_score(target_unit, str(value)) for value in candidates), default=0)
+                unit_scores.append(best / 6.0)
+                leaf_score = _unit_term_score(target_unit, str(row.get("leaf_title", "")))
+                canonical_pages.append(
+                    leaf_score >= 4 and str(row.get("doc_type", "")) == "department"
+                )
+            is_contact = search_df["doc_type"].eq("contact").astype(float).to_numpy()
+            bonus += GENERAL_UNIT_RETRIEVAL_BOOST * np.asarray(unit_scores, dtype=float)
+            bonus += CANONICAL_UNIT_PAGE_BOOST * np.asarray(canonical_pages, dtype=float)
+            bonus -= NON_CONTACT_DOC_PENALTY * is_contact
 
     terms = _query_match_terms(query_text)
     if not terms:

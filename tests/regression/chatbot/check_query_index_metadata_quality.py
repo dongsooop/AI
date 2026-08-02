@@ -399,6 +399,18 @@ def run_quality_checks() -> tuple[list[dict], list[str]]:
                         f"contact_unit_false_suffix:{query}:{actual_unit}:{expected_unit}"
                     )
 
+            no_target_contact_bonus = rich_index._metadata_retrieval_bonus("연락처 알려줘")
+            if not np.any(no_target_contact_bonus > 0):
+                errors.append("contact_query_common_metadata_bonus_missing")
+
+            targeted_contact_bonus = rich_index._metadata_retrieval_bonus("학생성공지원팀 연락처")
+            student_row = rich_index.search_df["url"].eq("https://www.dongyang.ac.kr/example/contact")
+            if not np.any(
+                targeted_contact_bonus[student_row.to_numpy()]
+                > rich_index.CONTACT_UNIT_RETRIEVAL_BOOST
+            ):
+                errors.append("targeted_contact_common_metadata_bonus_missing")
+
             for noise_query in ("just do it!", "how do it work?", "can you do it?", "어떻게 do it?"):
                 noise_answer = rich_index.metadata_direct_answer(noise_query)
                 if noise_answer:
