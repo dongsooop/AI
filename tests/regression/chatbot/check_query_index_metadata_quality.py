@@ -387,6 +387,37 @@ def run_quality_checks() -> tuple[list[dict], list[str]]:
                 errors.append("contact_department_abbreviation_match_failed")
             if rich_index._unit_term_score("호탤과", "호텔관광학과") < 4:
                 errors.append("contact_department_typo_match_failed")
+            unit_query_cases = {
+                "학생성공지원팀 연락처 검색 결과": "학생성공지원팀",
+                "컴퓨터공학부 연락처와 교육 성과": "컴퓨터공학부",
+                "컴퓨터공학부 연락처가 맞는지 확인한 결과": "컴퓨터공학부",
+            }
+            for query, expected_unit in unit_query_cases.items():
+                actual_unit = rich_index._canonical_unit_from_query(query)
+                if actual_unit != expected_unit:
+                    errors.append(
+                        f"contact_unit_false_suffix:{query}:{actual_unit}:{expected_unit}"
+                    )
+
+            no_target_contact_bonus = rich_index._metadata_retrieval_bonus("연락처 알려줘")
+            contact_rows = (
+                rich_index.search_df["url"].eq("https://www.dongyang.ac.kr/example/contact")
+                & rich_index.search_df["doc_type"].eq("contact")
+            ).to_numpy()
+            if not np.any(contact_rows) or not np.any(no_target_contact_bonus[contact_rows] > 0):
+                errors.append("contact_query_common_metadata_bonus_missing")
+
+            targeted_contact_bonus = rich_index._metadata_retrieval_bonus("학생성공지원팀 연락처")
+            target_rows = (
+                rich_index.search_df["url"].eq("https://www.dongyang.ac.kr/example/contact")
+                & rich_index.search_df["doc_type"].eq("contact")
+                & rich_index.search_df["unit"].eq("학생성공지원팀")
+            ).to_numpy()
+            if not np.any(target_rows) or not np.any(
+                targeted_contact_bonus[target_rows]
+                > rich_index.CONTACT_UNIT_RETRIEVAL_BOOST
+            ):
+                errors.append("targeted_contact_common_metadata_bonus_missing")
 
             for noise_query in ("just do it!", "how do it work?", "can you do it?", "어떻게 do it?"):
                 noise_answer = rich_index.metadata_direct_answer(noise_query)

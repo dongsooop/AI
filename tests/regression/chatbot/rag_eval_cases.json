@@ -82,6 +82,47 @@
     "requires_source_url": true
   },
   {
+    "id": "contact_hotel_department_correction_context",
+    "category": "contact",
+    "kind": "search",
+    "query": "기획예산실 번호잖아 호텔과 담당자 연락처를 알려달라구",
+    "expected_url_contains": ["4701/subview.do"],
+    "expected_title_contains": ["호텔관광학과"],
+    "answer_must_contain_all": ["호텔관광학과", "02-2610-1986"],
+    "answer_must_not_contain": ["기획예산팀 전화번호", "02-2610-5121", "02-2610-1961"],
+    "requires_source_url": true
+  },
+  {
+    "id": "contact_student_success_result_suffix",
+    "category": "contact",
+    "kind": "search",
+    "query": "학생성공지원팀 연락처 검색 결과",
+    "expected_url_contains": ["4377/subview.do"],
+    "expected_title_contains": ["학생성공지원팀"],
+    "answer_must_contain_any": ["02-", "전화", "연락처"],
+    "requires_source_url": true
+  },
+  {
+    "id": "contact_computer_engineering_achievement_suffix",
+    "category": "contact",
+    "kind": "search",
+    "query": "컴퓨터공학부 연락처와 교육 성과",
+    "expected_url_contains": ["4560/subview.do"],
+    "expected_title_contains": ["컴퓨터공학부"],
+    "answer_must_contain_any": ["02-2610-1842", "전화", "연락처"],
+    "requires_source_url": true
+  },
+  {
+    "id": "contact_hotel_result_suffix",
+    "category": "contact",
+    "kind": "search",
+    "query": "호텔과 연락처가 맞는지 확인한 결과",
+    "expected_url_contains": ["4701/subview.do"],
+    "expected_title_contains": ["호텔관광학과"],
+    "answer_must_contain_all": ["호텔관광학과", "02-2610-1986"],
+    "requires_source_url": true
+  },
+  {
     "id": "policy_leave_absence",
     "category": "policy",
     "kind": "search",
