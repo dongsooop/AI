@@ -401,7 +401,7 @@ def run_quality_checks() -> tuple[list[dict], list[str]]:
 
             no_target_contact_bonus = rich_index._metadata_retrieval_bonus("연락처 알려줘")
             contact_rows = (
-                rich_index.search_df["url"].eq("https://dongyang.ac.kr/example/contact")
+                rich_index.search_df["url"].eq("https://www.dongyang.ac.kr/example/contact")
                 & rich_index.search_df["doc_type"].eq("contact")
             ).to_numpy()
             if not np.any(contact_rows) or not np.any(no_target_contact_bonus[contact_rows] > 0):
