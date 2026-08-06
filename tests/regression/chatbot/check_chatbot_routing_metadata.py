@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import ast
 import json
 import sys
 from dataclasses import FrozenInstanceError
@@ -10,6 +11,82 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from LLM.OSS.routing import RoutingMetadata
+
+
+def check_service_metadata_propagation() -> list[str]:
+    errors = []
+    service_path = ROOT_DIR / "LLM" / "OSS" / "service.py"
+    tree = ast.parse(service_path.read_text(encoding="utf-8"), filename=str(service_path))
+    parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
+
+    summary_calls = []
+    cache_return_calls = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            continue
+        if node.func.id == "_log_chatbot_summary":
+            summary_calls.append(node)
+        elif node.func.id == "cache_and_return":
+            cache_return_calls.append(node)
+
+    if not summary_calls:
+        errors.append("chatbot_summary_calls_missing")
+    for call in summary_calls:
+        has_routing = len(call.args) >= 4 or any(keyword.arg == "routing" for keyword in call.keywords)
+        if not has_routing:
+            errors.append(f"summary_routing_metadata_missing:line_{call.lineno}")
+        legacy_keywords = {
+            keyword.arg
+            for keyword in call.keywords
+            if keyword.arg in {"fallback", "fallback_reason", "direct_answer_route"}
+        }
+        if legacy_keywords:
+            errors.append(f"summary_legacy_metadata_args:line_{call.lineno}:{sorted(legacy_keywords)}")
+
+    if not cache_return_calls:
+        errors.append("cache_return_calls_missing")
+    for call in cache_return_calls:
+        has_routing = len(call.args) >= 2 or any(keyword.arg == "routing" for keyword in call.keywords)
+        if not has_routing:
+            errors.append(f"cache_return_routing_metadata_missing:line_{call.lineno}")
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Return):
+            continue
+        owner = parents.get(node)
+        while owner is not None and not isinstance(owner, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            owner = parents.get(owner)
+        if owner is None or owner.name != "chat_with_oss":
+            continue
+
+        if (
+            isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "cache_and_return"
+        ):
+            continue
+
+        parent = parents.get(node)
+        siblings = next(
+            (
+                value
+                for _, value in ast.iter_fields(parent)
+                if isinstance(value, list) and node in value
+            ),
+            [],
+        )
+        index = siblings.index(node) if siblings else -1
+        previous = siblings[index - 1] if index > 0 else None
+        has_summary_before_return = (
+            isinstance(previous, ast.Expr)
+            and isinstance(previous.value, ast.Call)
+            and isinstance(previous.value.func, ast.Name)
+            and previous.value.func.id == "_log_chatbot_summary"
+        )
+        if not has_summary_before_return:
+            errors.append(f"return_summary_metadata_missing:line_{node.lineno}")
+
+    return errors
 
 
 def check_routing_metadata() -> list[str]:
@@ -80,7 +157,7 @@ def check_routing_metadata() -> list[str]:
 
 
 def main() -> int:
-    errors = check_routing_metadata()
+    errors = check_routing_metadata() + check_service_metadata_propagation()
     print(json.dumps({"ok": not errors, "errors": errors}, ensure_ascii=False))
     return 1 if errors else 0
 
