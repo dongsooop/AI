@@ -2,6 +2,11 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 
+def normalize_intent_override(intent: Optional[str]) -> Optional[str]:
+    normalized = (intent or "").strip()
+    return normalized or None
+
+
 @dataclass(frozen=True)
 class RoutingMetadata:
     """Internal metadata describing how a chatbot response was selected.

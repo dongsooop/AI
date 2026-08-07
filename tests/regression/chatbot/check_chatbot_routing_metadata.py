@@ -10,7 +10,7 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from LLM.OSS.routing import RoutingMetadata
+from LLM.OSS.routing import RoutingMetadata, normalize_intent_override
 
 
 def check_service_metadata_propagation() -> list[str]:
@@ -91,6 +91,18 @@ def check_service_metadata_propagation() -> list[str]:
 
 def check_routing_metadata() -> list[str]:
     errors = []
+
+    normalization_cases = (
+        (None, None),
+        ("", None),
+        ("   ", None),
+        ("oss", "oss"),
+        ("  fast  ", "fast"),
+    )
+    for raw, expected in normalization_cases:
+        actual = normalize_intent_override(raw)
+        if actual != expected:
+            errors.append(f"intent_override_normalization_failed:{raw!r}:{actual!r}")
 
     metadata = RoutingMetadata(
         intent="oss",

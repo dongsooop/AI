@@ -31,7 +31,7 @@ from LLM.OSS.modes import (
     looks_like_schedule,
     looks_like_topic,
 )
-from LLM.OSS.routing import RoutingMetadata
+from LLM.OSS.routing import RoutingMetadata, normalize_intent_override
 from LLM.OSS.tools import (
     ToolResult,
     run_empty_oss_fallback_tools,
@@ -221,8 +221,9 @@ async def chat_with_oss(req: ChatReq) -> dict:
         _log_chatbot_summary(user_text, start, response, routing)
         return response
 
-    mode = req.engine or decide_mode(user_text)
-    intent_source = "request_override" if req.engine else "rule"
+    requested_engine = normalize_intent_override(req.engine)
+    mode = requested_engine or decide_mode(user_text)
+    intent_source = "request_override" if requested_engine else "rule"
     if mode == "oss" and len(compact_user_text) <= 2:
         response = {"engine": "greet", "text": "네, 무엇을 도와드릴까요?"}
         routing = _routing_metadata(
