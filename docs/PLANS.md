@@ -77,6 +77,7 @@
 │   │   ├── llm_client.py           # OSS/OpenAI 호환 LLM client 생성 및 호출
 │   │   ├── chat_log_store.py       # 챗봇 DB 로그 저장 및 DB/SSH pool 관리
 │   │   ├── tools.py                # 비용 우선 deterministic tool routing
+│   │   ├── routing.py              # 내부 routing/source/fallback metadata 모델
 │   │   ├── formatter.py            # 응답 포맷팅
 │   │   ├── modes.py                # 챗봇 모드 정의
 │   │   └── postprocess/
@@ -167,8 +168,21 @@
 - `LLM/OSS/llm_client.py`
 - `LLM/OSS/chat_log_store.py`
 - `LLM/OSS/tools.py`
+- `LLM/OSS/routing.py`
 - `LLM/OSS/formatter.py`
 - `LLM/OSS/modes.py`
+
+### 챗봇 routing metadata 흐름
+
+챗봇은 기존 deterministic routing 동작과 사용자 응답 형식을 유지하면서 내부 처리 결정을 `RoutingMetadata`로 정규화합니다.
+
+- `modes.py`는 규칙 기반 최초 질의 분류를 담당하며, 분류 결과는 내부 `intent`로 기록합니다.
+- `tools.py`의 `ToolResult`는 선택된 tool의 `decision_source`, 확인된 `source_urls`, confidence, LLM 필요 여부를 전달합니다.
+- `routing.py`의 `RoutingMetadata`는 `intent`, route stage, tool, 출처 존재 여부, fallback 원인과 LLM 필요 여부를 하나의 내부 모델로 표현합니다.
+- `service.py`는 guard, cache, 정적 응답, deterministic tool, grounded LLM, 최종 fallback을 포함한 모든 응답 경로에 metadata를 연결하고 `chatbot_request_summary` 로그로 남깁니다.
+- 실제 출처 URL은 사용자 응답의 기존 `url` 필드가 필요한 경우에만 반환하며, 운영 summary 로그에는 URL 원문 대신 `source_count`와 `has_source`만 기록합니다.
+
+이 metadata는 내부 관측과 회귀 검증을 위한 것이며 외부 챗봇 응답은 기존 `{engine, text, url?}` 계약을 유지합니다. 현재 질의 분류와 tool 선택은 deterministic 규칙을 그대로 사용하고, Ollama structured output 기반 분류는 이 흐름에 연결하지 않습니다.
 
 ### 챗봇 후처리
 
