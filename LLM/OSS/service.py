@@ -517,8 +517,8 @@ async def chat_with_oss(req: ChatReq) -> dict:
     final_decision_source = "llm"
     final_llm_required = True
     if not fused:
-        recovery = run_mode_tools("topic", user_text)
-        if looks_like_topic(user_text) and recovery.text:
+        recovery = run_mode_tools("topic", user_text) if looks_like_topic(user_text) else None
+        if recovery is not None and recovery.text:
             fused = recovery.text
             final_result = recovery
             final_decision_source = recovery.decision_source
