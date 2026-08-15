@@ -89,9 +89,24 @@ OCR 성능 SLI는 로컬 측정값만으로 목표를 정하지 않습니다. �
 | --- | --- | --- |
 | chatbot 5xx rate | request log | `service=chatbot-api`, `status_code >= 500` |
 | chatbot p95 request latency | request log | `service=chatbot-api`, `path`별 p95 |
-| chatbot summary p95 latency | `chatbot_request_summary.duration_ms` | `mode`, `engine`, `cache_hit`, `direct_answer_route`별 보조 분해 |
+| chatbot summary p95 latency | `chatbot_request_summary.duration_ms` | `intent`, `route_stage`, `tool`, `decision_source`, `engine`, `cache_hit`별 보조 분해 |
 
 request log는 API 계층의 전체 지연을 보고, `chatbot_request_summary`는 챗봇 내부 처리 흐름을 봅니다. 두 값은 목적이 다르므로 같은 그래프에서 비교하되 서로 대체하지 않습니다.
+
+`chatbot_request_summary`와 `chatbot_tool_route`의 routing metadata는 다음 기준으로 해석합니다.
+
+| 필드 | 의미 | 운영 해석 |
+| --- | --- | --- |
+| `intent` | `decide_mode()` 또는 요청 override로 정해진 최초 내부 분류 | 사용자 응답의 `engine`과 다를 수 있으며 routing 분포를 보는 기준 |
+| `route_stage` / `stage` | 최종 응답 또는 tool 시도가 처리된 단계 | `mode_tools`, `oss_fast_path`, `grounded_llm`, `cache` 등 경로별 latency/fallback 분해 |
+| `tool` | 최종 선택되거나 시도된 내부 tool 이름 | 특정 tool의 선택률과 fallback 집중 구간 확인 |
+| `decision_source` | 결정을 만든 방식 | `rule`, `retrieval`, `llm`, `cache`, `request_override`, `none`으로 구분 |
+| `confidence` | tool에 설정된 내부 휴리스틱 신뢰도 | 모델 확률이나 답변 품질 점수가 아니며 단독 SLI·배포 차단 기준으로 사용하지 않음 |
+| `source_count`, `has_source` | 확인된 출처 URL의 개수와 존재 여부 | 출처 사용 추세를 보는 비식별 보조 신호이며 URL 원문은 summary 로그에 기록하지 않음 |
+| `llm_required` | 해당 최종 경로 또는 tool 결과가 LLM 생성을 필요로 했는지 | deterministic 경로와 LLM 의존 경로를 분리해 관찰 |
+| `fallback`, `fallback_reason` | 우선 경로 이탈 여부와 원인 | 기존 degraded 집계 의미를 유지하고 route stage/tool과 함께 원인 분석 |
+
+`mode`는 기존 로그 호환성을 위해 유지되며 현재 `intent`와 같은 최초 분류값을 기록합니다. `engine`은 실제 사용자 응답에 포함되는 처리 엔진이므로 `intent`와 다를 수 있습니다. `source_count`와 `has_source`는 출처 정확도를 보장하는 품질 지표가 아니며, 출처 정합성은 RAG 회귀 리포트의 `source_url_pass_rate`로 판단합니다.
 
 ### 챗봇 LLM/RAG
 
