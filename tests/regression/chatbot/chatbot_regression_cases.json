@@ -1,5 +1,19 @@
 [
   {
+    "id": "graduation_general_three_year_scope",
+    "text": "일반학생 3년제 2026년 졸업학점",
+    "engine_in": ["grad"],
+    "all_of_text_contains": ["일반학생", "2023년 이후", "총 졸업학점 110학점", "전공최저이수 78학점"],
+    "none_of_text_contains": ["총 졸업학점 120학점", "자유전공학과"]
+  },
+  {
+    "id": "graduation_admission_is_not_graduation_year",
+    "text": "일반학생 3년제 22학번 졸업학점",
+    "engine_in": ["grad"],
+    "all_of_text_contains": ["졸업대상 연도", "입력해 주세요"],
+    "none_of_text_contains": ["110학점", "120학점", "78학점"]
+  },
+  {
     "id": "graduation_ambiguous",
     "text": "졸업",
     "engine_in": ["grad"],

@@ -87,15 +87,16 @@ def _direct_answer_tool(user_text: str, engine: str) -> ToolResult:
         return EMPTY_TOOL_RESULT
     if not direct:
         return EMPTY_TOOL_RESULT
+    needs_clarification = bool(direct.get("needs_clarification"))
     return ToolResult(
-        name="metadata_direct_answer",
+        name="graduation_scope_clarification" if needs_clarification else "metadata_direct_answer",
         text=direct["answer"],
         url=direct.get("url"),
         engine=engine,
         confidence=0.95,
-        decision_source="retrieval",
+        decision_source="rule" if needs_clarification else "retrieval",
         source_urls=_source_urls(direct.get("url")),
-        reason="metadata direct answer matched",
+        reason="graduation applicability needs clarification" if needs_clarification else "metadata direct answer matched",
     )
 
 

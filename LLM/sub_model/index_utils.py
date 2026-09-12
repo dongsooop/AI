@@ -1,5 +1,9 @@
 import re, json, gzip
 from datetime import datetime, timezone, timedelta
+try:
+    from .graduation_rules import parse_graduation_rules, render_rule
+except ImportError:  # build_index.py also supports direct script execution.
+    from graduation_rules import parse_graduation_rules, render_rule
 
 KST = timezone(timedelta(hours=9))
 
@@ -304,6 +308,20 @@ def chunk_document(row, max_tokens: int | None = None) -> list[dict]:
             "has_credit": bool(CREDIT_RE.search(chunk)),
             "has_policy_keyword": bool(POLICY_KEYWORD_RE.search(chunk)),
             "is_privacy_old": doc_type == "privacy" and bool(re.search(r"이전|구\)|\(\s*구", title)),
+        })
+    for rule in parse_graduation_rules(title, content):
+        answer_text = render_rule(rule)
+        out.append({
+            "chunk_index": len(out), "title": title, "url": url,
+            "breadcrumb": breadcrumb, "leaf_title": leaf_title,
+            "doc_type": "policy", "chunk_type": "graduation_rule",
+            "section_title": "졸업학점 적용 기준", "text": answer_text,
+            "text_for_embedding": normalize_text(f"{title} {answer_text}"),
+            "text_for_bm25": normalize_text(f"{title} {answer_text}"),
+            "text_for_answer": answer_text,
+            "graduation_scope": json.dumps(rule, ensure_ascii=False),
+            "has_phone": False, "has_email": False, "has_date": bool(rule['year_basis']),
+            "has_credit": True, "has_policy_keyword": True, "is_privacy_old": False,
         })
     return out
 

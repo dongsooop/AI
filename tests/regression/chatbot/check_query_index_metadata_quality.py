@@ -346,6 +346,30 @@ def run_quality_checks() -> tuple[list[dict], list[str]]:
             contact_hits = rich_index.hybrid_search("졸업 문의 전화번호", top_k=len(rich_df), alpha=0.0)
             if not contact_hits["doc_type"].eq("contact").any():
                 errors.append("academic_contact_query_lost_contact_documents")
+            legacy_grad = rich_index.build_answer("3년제 졸업학점")
+            if not legacy_grad.get("needs_clarification") or "120학점" in legacy_grad['answer']:
+                errors.append("unscoped_legacy_graduation_number_used")
+            from check_graduation_scope import TABLE
+            from LLM.sub_model.graduation_rules import parse_graduation_rules
+            original_df = rich_index.search_df
+            try:
+                scoped_rows = []
+                for rule in parse_graduation_rules("졸업", TABLE):
+                    row = original_df.iloc[0].copy()
+                    row['graduation_scope'] = json.dumps(rule, ensure_ascii=False)
+                    scoped_rows.append(row)
+                rich_index.search_df = pd.DataFrame(scoped_rows)
+                for query, total in (("일반학생 2년제 2026년 졸업학점", 75),
+                                     ("일반학생 3년제 2026년 졸업학점", 110)):
+                    direct = rich_index.metadata_direct_answer(query)
+                    built = rich_index.build_answer(query)
+                    if direct != built or direct.get('needs_clarification') or f"총 졸업학점 {total}학점" not in direct['answer']:
+                        errors.append(f"graduation_scope_route_mismatch:{query}")
+                rich_index.search_df['graduation_scope'] = '[]'
+                if not rich_index.metadata_direct_answer("졸업학점").get('needs_clarification'):
+                    errors.append("invalid_graduation_metadata_accepted")
+            finally:
+                rich_index.search_df = original_df
             rich_hits_by_case = {
                 case["id"]: rich_index.hybrid_search(case["query"], top_k=5, alpha=0.0)
                 for case in cases
