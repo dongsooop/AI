@@ -1,5 +1,19 @@
 [
   {
+    "id": "graduation_ambiguous",
+    "text": "졸업",
+    "engine_in": ["grad"],
+    "all_of_text_contains": ["어떤 내용", "졸업학점", "졸업식 일정", "졸업유예"],
+    "none_of_text_contains": ["https://", "자유전공학과", "확인할 수 있습니다"]
+  },
+  {
+    "id": "graduation_ambiguous_polite",
+    "text": "졸업에 대해 알려주세요",
+    "engine_in": ["grad"],
+    "all_of_text_contains": ["어떤 내용", "구체적으로 입력"],
+    "none_of_text_contains": ["https://", "자유전공학과"]
+  },
+  {
     "id": "schedule_tuition",
     "text": "등록금납부",
     "engine_in": ["fast"],
