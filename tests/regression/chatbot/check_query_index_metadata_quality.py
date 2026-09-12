@@ -339,6 +339,13 @@ def run_quality_checks() -> tuple[list[dict], list[str]]:
 
         with tempfile.TemporaryDirectory() as rich_td, tempfile.TemporaryDirectory() as sparse_td:
             rich_index = import_query_index(rich_df, Path(rich_td))
+            for query in ("졸업", "졸업학점", "휴학 안내"):
+                academic_hits = rich_index.hybrid_search(query, top_k=len(rich_df), alpha=0.0)
+                if academic_hits["doc_type"].eq("contact").any():
+                    errors.append(f"academic_query_contains_contact_document:{query}")
+            contact_hits = rich_index.hybrid_search("졸업 문의 전화번호", top_k=len(rich_df), alpha=0.0)
+            if not contact_hits["doc_type"].eq("contact").any():
+                errors.append("academic_contact_query_lost_contact_documents")
             rich_hits_by_case = {
                 case["id"]: rich_index.hybrid_search(case["query"], top_k=5, alpha=0.0)
                 for case in cases

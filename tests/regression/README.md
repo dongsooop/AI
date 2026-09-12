@@ -13,6 +13,7 @@ python tests/regression/chatbot/evaluate_rag_retrieval.py --validate-only
 python tests/regression/chatbot/evaluate_rag_retrieval.py
 python tests/regression/chatbot/check_chatbot_tool_routing.py
 python tests/regression/chatbot/check_grad_source_binding.py
+python tests/regression/chatbot/check_contact_extraction.py
 python tests/regression/timetable/check_timetable_ocr_diagnostics.py
 python tests/regression/timetable/measure_timetable_ocr_baseline.py
 python tests/regression/timetable/analyze_timetable_empty_cell_skip.py

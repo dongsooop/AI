@@ -333,8 +333,8 @@ try:
 except Exception as exc:
     print(f"⚠️ BM25 pickle 저장 실패(토큰 코퍼스는 저장됨): {exc}")
 
-if not contact_docs.empty:
-    contact_docs.to_csv(CONTACTS_CSV, index=False, encoding="utf-8-sig")
+# An empty rebuild must clear any previously generated contact documents too.
+contact_docs.to_csv(CONTACTS_CSV, index=False, encoding="utf-8-sig")
 
 meta = {
     "built_at": datetime.now().isoformat(),

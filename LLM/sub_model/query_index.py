@@ -678,6 +678,8 @@ def hybrid_search(query, top_k=8, alpha=DEFAULT_DENSE_WEIGHT, contact_boost=CONT
         scores = base + bonus + _metadata_retrieval_bonus(query_text)
         out = search_df.copy()
         out["score"] = scores
+        if POLICY_QUERY_RE.search(query_text) and not any(k in query_text for k in CONTACT_KWS):
+            out = out[out["doc_type"].ne("contact")]
         if "url" in out.columns:
             rep_idx = out.groupby(["url","doc_type"], dropna=False)["score"].idxmax()
             out = out.loc[rep_idx]
