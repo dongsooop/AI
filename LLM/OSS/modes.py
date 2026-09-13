@@ -101,6 +101,17 @@ def is_ambiguous_graduation_query(user_text: str) -> bool:
     return bool(AMBIGUOUS_GRAD_RE.fullmatch(compact))
 
 
+def ambiguous_academic_topic(user_text: str) -> str:
+    compact = re.sub(r"\s+", "", user_text or "").rstrip("?!？！.。~…")
+    match = re.fullmatch(
+        r"(등록금|등록|성적|수강신청)(?:은|이|에대해(?:서)?|관련(?:해서)?)?"
+        r"(?:정보|안내)?(?:좀)?"
+        r"(?:알려(?:줘|주세요|줄래|줄래요)|궁금(?:해|해요|합니다)|해줘|해주세요)?",
+        compact,
+    )
+    return match[1] if match else ""
+
+
 def decide_mode(user_text: str) -> str:
     text = (user_text or "").strip()
     compact = re.sub(r"\s+", "", text)

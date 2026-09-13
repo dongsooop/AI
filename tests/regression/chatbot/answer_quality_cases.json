@@ -584,5 +584,88 @@
       "성적",
       "일정"
     ]
+  },
+  {
+    "id": "registration_topic_clarification",
+    "text": "등록",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "expected_tools": [
+      "academic_topic_clarification"
+    ],
+    "all_of_text_contains": [
+      "어떤 내용",
+      "등록금 납부 방법",
+      "등록금 분할납부 방법",
+      "등록금 납부 기간"
+    ],
+    "none_of_text_regex": [
+      "\\d"
+    ],
+    "url_policy": "forbidden"
+  },
+  {
+    "id": "tuition_topic_clarification",
+    "text": "등록금 알려줘",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "expected_tools": [
+      "academic_topic_clarification"
+    ],
+    "all_of_text_contains": [
+      "어떤 내용",
+      "등록금 납부 방법",
+      "등록금 납부 기간"
+    ],
+    "none_of_text_regex": [
+      "\\d"
+    ],
+    "url_policy": "forbidden"
+  },
+  {
+    "id": "grades_topic_clarification",
+    "text": "성적",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "expected_tools": [
+      "academic_topic_clarification"
+    ],
+    "all_of_text_contains": [
+      "어떤 내용",
+      "성적열람 기간",
+      "성적 이의신청 방법",
+      "성적증명서 발급"
+    ],
+    "none_of_text_regex": [
+      "\\d"
+    ],
+    "url_policy": "forbidden"
+  },
+  {
+    "id": "courses_topic_clarification",
+    "text": "수강신청",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "expected_tools": [
+      "academic_topic_clarification"
+    ],
+    "all_of_text_contains": [
+      "어떤 내용",
+      "수강신청 방법",
+      "수강신청 기간",
+      "수강정정 방법"
+    ],
+    "none_of_text_regex": [
+      "\\d"
+    ],
+    "url_policy": "forbidden"
   }
 ]

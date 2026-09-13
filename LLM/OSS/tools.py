@@ -8,7 +8,7 @@ from LLM.OSS.formatter import (
     professor_room_clarification_message,
     render_chatty_schedule,
 )
-from LLM.OSS.modes import is_academic_procedure_query, is_ambiguous_graduation_query, looks_like_schedule, looks_like_topic
+from LLM.OSS.modes import ambiguous_academic_topic, is_academic_procedure_query, is_ambiguous_graduation_query, looks_like_schedule, looks_like_topic
 from LLM.OSS.postprocess import run_postprocess
 from LLM.sub_model.query_index import build_answer, confident_search_answer, metadata_direct_answer
 from LLM.sub_model.schedule_index import schedule_search
@@ -188,6 +188,25 @@ def _confident_search_tool(user_text: str) -> ToolResult:
         decision_source="retrieval",
         source_urls=_source_urls(confident.get("url")),
         reason="high confidence search answer matched",
+    )
+
+
+def run_academic_clarification_tool(user_text: str) -> ToolResult:
+    topic = ambiguous_academic_topic(user_text)
+    if not topic:
+        return EMPTY_TOOL_RESULT
+    examples = {
+        "등록": "'등록금 납부 방법', '등록금 분할납부 방법', '등록금 납부 기간'",
+        "등록금": "'등록금 납부 방법', '등록금 분할납부 방법', '등록금 납부 기간'",
+        "성적": "'성적열람 기간', '성적 이의신청 방법', '성적증명서 발급'",
+        "수강신청": "'수강신청 방법', '수강신청 기간', '수강정정 방법'",
+    }
+    return ToolResult(
+        name="academic_topic_clarification",
+        text=f"{topic} 관련해서 어떤 내용이 궁금한가요? {examples[topic]}처럼 구체적으로 입력해 주세요.",
+        engine="policy",
+        confidence=0.95,
+        reason="academic query needs a specific purpose",
     )
 
 
