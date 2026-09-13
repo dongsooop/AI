@@ -66,6 +66,21 @@ class GraduationScopeTests(unittest.TestCase):
     def test_two_year_program_does_not_use_larger_three_year_number(self):
         self.check_fact("일반학생 2년제 2026년 졸업학점", "총 졸업학점 75학점", "전공최저이수 52학점")
 
+    def test_conflicting_year_bases_do_not_depend_on_requested_credit_field(self):
+        for suffix in ("졸업학점", "졸업 전공학점"):
+            self.check_clarification(f"일반학생 기계과 2008학번 3년제 2026년 {suffix}", "적용 기준을 확정")
+
+    def test_historical_appendix_does_not_cover_unsupported_program(self):
+        for suffix in ("졸업학점", "졸업 전공학점"):
+            self.check_clarification(f"일반학생 기계과 2008학번 4년제 {suffix}", "전문학사")
+
+    def test_historical_appendix_cannot_bypass_unknown_graduation_date(self):
+        for date in ("2020년", "2023년1월"):
+            self.check_clarification(f"일반학생 기계과 2008학번 3년제 {date} 졸업 전공학점", "확인하지 못했어요")
+
+    def test_historical_appendix_resolves_a_matching_parent_reference(self):
+        self.check_fact("일반학생 기계과 2008학번 3년제 2022년 졸업 전공학점", "전공최저이수 60학점")
+
     def test_admission_year_cannot_be_used_as_graduation_year(self):
         self.check_clarification("일반학생 3년제 22학번 졸업학점", "졸업대상 연도")
         self.check_clarification("일반학생 3년제 2022년 입학 졸업학점", "졸업대상 연도")

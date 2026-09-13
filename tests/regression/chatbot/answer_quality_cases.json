@@ -374,5 +374,105 @@
       "https://www.dongyang.ac.kr/dmu/4841/subview.do"
     ],
     "single_source": true
+  },
+  {
+    "id": "grad_conflicting_years_total",
+    "text": "일반학생 기계과 2008학번 3년제 2026년 졸업학점",
+    "behavior": "clarification",
+    "engine_in": [
+      "grad"
+    ],
+    "all_of_text_contains": [
+      "적용 기준을 확정"
+    ],
+    "allowed_credit_values": [],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ]
+  },
+  {
+    "id": "grad_conflicting_years_major",
+    "text": "일반학생 기계과 2008학번 3년제 2026년 졸업 전공학점",
+    "behavior": "clarification",
+    "engine_in": [
+      "grad"
+    ],
+    "all_of_text_contains": [
+      "적용 기준을 확정"
+    ],
+    "allowed_credit_values": [],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ]
+  },
+  {
+    "id": "grad_unsupported_four_year",
+    "text": "일반학생 기계과 2008학번 4년제 졸업 전공학점",
+    "behavior": "clarification",
+    "engine_in": [
+      "grad"
+    ],
+    "all_of_text_contains": [
+      "전문학사"
+    ],
+    "allowed_credit_values": [],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ]
+  },
+  {
+    "id": "grad_historical_unknown_year",
+    "text": "일반학생 기계과 2008학번 3년제 2020년 졸업 전공학점",
+    "behavior": "clarification",
+    "engine_in": [
+      "grad"
+    ],
+    "all_of_text_contains": [
+      "확인하지 못했어요"
+    ],
+    "allowed_credit_values": [],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ]
+  },
+  {
+    "id": "grad_historical_unknown_month",
+    "text": "일반학생 기계과 2008학번 3년제 2023년1월 졸업 전공학점",
+    "behavior": "clarification",
+    "engine_in": [
+      "grad"
+    ],
+    "all_of_text_contains": [
+      "확인하지 못했어요"
+    ],
+    "allowed_credit_values": [],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ]
   }
 ]

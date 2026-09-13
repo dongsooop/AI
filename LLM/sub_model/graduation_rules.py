@@ -176,6 +176,8 @@ def answer_graduation_scope(query, records):
         return respond("졸업학점 확인에는 현재 학년이 아니라 편입·전과 당시 학년과 학기가 필요해요. 당시 조건을 적어 주세요.")
     if re.search(r"복학|복학생|재입학|전공심화|학사학위|(?<!전문)학사(?:과정)?졸업|외국인|산업체|계약학과|학력자", compact):
         return respond("해당 졸업학점은 본인에게 적용되는 교육과정 확인이 필요해요. 학과와 적용 교육과정 연도를 확인해 주세요.")
+    if scope['program'] and scope['program'] not in (2, 3):
+        return respond("현재 졸업학점 자료는 2년제·3년제 전문학사 기준이에요. 해당 학제의 적용 교육과정을 학과에 확인해 주세요.")
     if not records:
         return respond("현재 자료에서 적용 조건이 확인되는 졸업학점 기준을 찾지 못했어요. 학과 사무실에 적용 교육과정을 확인해 주세요.")
 
@@ -183,10 +185,6 @@ def answer_graduation_scope(query, records):
     for key in ('student', 'program', 'grade', 'semester'):
         if scope[key]:
             candidates = [r for r in candidates if r[key] == scope[key] or (key == 'program' and not r[key])]
-    if scope['major']:
-        candidates = [r for r in candidates if r['major'] is not None]
-    else:
-        candidates = [r for r in candidates if r['total'] is not None]
     departments = {r['department'] for r in records if r['department']}
     department = next((name for name in sorted(departments, key=len, reverse=True) if name in compact), "")
     if department:
@@ -199,8 +197,25 @@ def answer_graduation_scope(query, records):
         year = scope['years'].get('graduation', 0)
         candidates = [r for r in candidates if r['year_basis'] != 'graduation' or
                       (month in (2, 8) if r['year_to'] else 1 <= month <= 12 and (year > r['year_from'] or month >= 2))]
+    # Check both tables before selecting the requested credit field. Otherwise
+    # adding "전공" can silently replace the graduation-year rule with an old
+    # admission-year appendix, even for the very same student conditions.
+    if 'graduation' in scope['years']:
+        general = [r for r in candidates if r['student'] == 'general']
+        historical = [r for r in general if r['year_basis'] == 'admission']
+        graduation = [r for r in general if r['year_basis'] == 'graduation']
+        if historical and not graduation:
+            candidates = [r for r in candidates if r not in historical]
+        elif historical and 'admission' in scope['years']:
+            if any(g['major'] is not None and g['major'] != h['major']
+                   for g in graduation for h in historical):
+                return respond("입학연도별 기준과 졸업대상 연도별 전공학점 기준이 달라 적용 기준을 확정하기 어려워요. 학과에 본인의 적용 교육과정을 확인해 주세요.")
+    if scope['major']:
+        candidates = [r for r in candidates if r['major'] is not None]
+    else:
+        candidates = [r for r in candidates if r['total'] is not None]
     if scope['major'] and (scope['student'] == 'general' or {r['student'] for r in candidates} == {'general'}):
-        preferred_basis = 'admission' if 'admission' in scope['years'] else 'graduation'
+        preferred_basis = 'admission' if 'admission' in scope['years'] and 'graduation' not in scope['years'] else 'graduation'
         preferred = [r for r in candidates if r['year_basis'] == preferred_basis]
         if preferred:
             candidates = preferred
