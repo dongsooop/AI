@@ -55,6 +55,7 @@ jobs:
           python tests/regression/chatbot/check_graduation_scope.py
           python tests/regression/chatbot/check_chatbot_routing_metadata.py
           python tests/regression/chatbot/check_answer_quality_gate.py
+          python tests/regression/chatbot/check_academic_procedure_routing.py
 
       - name: Write summary
         if: always()

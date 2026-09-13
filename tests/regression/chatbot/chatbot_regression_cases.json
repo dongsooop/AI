@@ -275,5 +275,97 @@
     "expected_urls": [
       "https://www.dongyang.ac.kr/dmu/4778/subview.do"
     ]
+  },
+  {
+    "id": "tuition_payment_method",
+    "text": "등록금 납부 방법",
+    "behavior": "guidance",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "공식 안내",
+      "등록금납부"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4793/subview.do"
+    ]
+  },
+  {
+    "id": "grade_certificate_issuance",
+    "text": "성적증명서 발급",
+    "behavior": "guidance",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "공식 안내",
+      "교내자동발급"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4801/subview.do"
+    ]
+  },
+  {
+    "id": "course_registration_method",
+    "text": "수강신청 방법",
+    "behavior": "guidance",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "공식 안내",
+      "수강신청"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4752/subview.do"
+    ]
+  },
+  {
+    "id": "tuition_installment_method",
+    "text": "등록금 분할납부 방법",
+    "behavior": "guidance",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "공식 안내",
+      "등록금납부"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4793/subview.do"
+    ]
+  },
+  {
+    "id": "course_registration_calendar",
+    "text": "수강신청 언제야?",
+    "behavior": "answer",
+    "engine_in": [
+      "fast"
+    ],
+    "all_of_text_contains": [
+      "수강신청",
+      "일정"
+    ]
+  },
+  {
+    "id": "grade_view_calendar",
+    "text": "성적열람 기간",
+    "behavior": "answer",
+    "engine_in": [
+      "fast"
+    ],
+    "all_of_text_contains": [
+      "성적",
+      "일정"
+    ]
   }
 ]

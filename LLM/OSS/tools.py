@@ -8,7 +8,7 @@ from LLM.OSS.formatter import (
     professor_room_clarification_message,
     render_chatty_schedule,
 )
-from LLM.OSS.modes import is_ambiguous_graduation_query, looks_like_schedule, looks_like_topic
+from LLM.OSS.modes import is_academic_procedure_query, is_ambiguous_graduation_query, looks_like_schedule, looks_like_topic
 from LLM.OSS.postprocess import run_postprocess
 from LLM.sub_model.query_index import build_answer, confident_search_answer, metadata_direct_answer
 from LLM.sub_model.schedule_index import schedule_search
@@ -101,6 +101,8 @@ def _direct_answer_tool(user_text: str, engine: str) -> ToolResult:
 
 
 def _schedule_tool(user_text: str, *, ceremonial_first: bool = False) -> ToolResult:
+    if is_academic_procedure_query(user_text):
+        return EMPTY_TOOL_RESULT
     if ceremonial_first and not any(keyword in user_text for keyword in ("종강", "졸업식", "종업식", "학위수여식")):
         return EMPTY_TOOL_RESULT
 
@@ -205,6 +207,8 @@ def run_graduation_clarification_tool(user_text: str) -> ToolResult:
 
 
 def run_mode_tools(mode: str, user_text: str) -> ToolResult:
+    if mode == "fast" and is_academic_procedure_query(user_text):
+        mode = "policy"
     professor_room_clarification = _professor_room_clarification_tool(user_text)
     if professor_room_clarification.resolved:
         return professor_room_clarification

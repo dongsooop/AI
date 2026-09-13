@@ -73,7 +73,20 @@ def looks_like_topic(text: str) -> bool:
     return bool(UNIT_SUFFIX_RE.search(stripped)) and len(stripped) <= 12
 
 
+def is_academic_procedure_query(text: str) -> bool:
+    compact = re.sub(r"\s+", "", text or "")
+    if CONTACT_INTENT_RE.search(compact):
+        return False
+    # A certificate is a document, not the grade-entry event on the calendar.
+    if re.search(r"성적증명서|제증명", compact):
+        return True
+    return bool(re.search(r"등록|납부|성적|수강신청|수강정정", compact)
+                and re.search(r"방법|절차|어떻게|하는법|조건|자격|준비서류|필요서류", compact))
+
+
 def looks_like_schedule(text: str) -> bool:
+    if is_academic_procedure_query(text):
+        return False
     source = text or ""
     if any(keyword in source for keyword in SCHEDULE_HINTS_BASE):
         return True
@@ -101,6 +114,8 @@ def decide_mode(user_text: str) -> str:
         return "relation"
     if any(keyword in text for keyword in RULE_BOOK_KWS):
         return "rule_book"
+    if is_academic_procedure_query(text):
+        return "policy"
     if CEREMONY_RE.search(text):
         return "fast"
     if "학사일정" in text or "학사 일정" in text or "학사일정" in compact or looks_like_schedule(text):
