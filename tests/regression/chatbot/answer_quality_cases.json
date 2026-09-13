@@ -1,0 +1,378 @@
+[
+  {
+    "id": "broad_graduation",
+    "text": "졸업",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "어떤 내용",
+      "졸업학점",
+      "졸업식 일정"
+    ],
+    "url_policy": "forbidden",
+    "expected_tools": [
+      "graduation_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "broad_graduation_polite",
+    "text": "졸업에 대해 알려주세요",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "구체적으로 입력"
+    ],
+    "url_policy": "forbidden",
+    "expected_tools": [
+      "graduation_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "credit_missing_group",
+    "text": "졸업학점",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "일반학생/편입/전과/자유전공"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "admission_not_graduation",
+    "text": "일반학생 3년제 22학번 졸업학점",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "졸업대상 연도",
+      "입력해 주세요"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "transfer_missing_stage",
+    "text": "2022년 편입 3년제 졸업학점",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "학년과 학기"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "free_wrong_program",
+    "text": "자유전공학과 3년제 졸업학점",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "확인하지 못했어요"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "general_three",
+    "text": "일반학생 3년제 2026년 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "일반학생",
+      "3년제",
+      "2023년 이후",
+      "총 졸업학점 110학점",
+      "전공최저이수 78학점"
+    ],
+    "none_of_text_contains": [
+      "120학점",
+      "자유전공",
+      "연락처"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      78,
+      110
+    ]
+  },
+  {
+    "id": "general_two",
+    "text": "일반학생 2년제 2026년 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "일반학생",
+      "2년제",
+      "총 졸업학점 75학점",
+      "전공최저이수 52학점"
+    ],
+    "none_of_text_contains": [
+      "110학점",
+      "120학점",
+      "자유전공",
+      "연락처"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      52,
+      75
+    ]
+  },
+  {
+    "id": "general_historical",
+    "text": "일반학생 3년제 2022년 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "2022년",
+      "총 졸업학점 120학점",
+      "별표1"
+    ],
+    "none_of_text_contains": [
+      "78학점",
+      "연락처"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      120
+    ]
+  },
+  {
+    "id": "transfer_2021",
+    "text": "2021년 편입 3년제 3학년1학기 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "편입학생",
+      "2021년 편입",
+      "3학년 1학기",
+      "총 졸업학점 120학점",
+      "전공최저이수 30학점"
+    ],
+    "none_of_text_contains": [
+      "110학점",
+      "연락처"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      30,
+      120
+    ]
+  },
+  {
+    "id": "transfer_2022",
+    "text": "2022년 편입 3년제 3학년1학기 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "2022년 이후 편입",
+      "총 졸업학점 110학점",
+      "전공최저이수 26학점"
+    ],
+    "none_of_text_contains": [
+      "120학점",
+      "연락처"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      26,
+      110
+    ]
+  },
+  {
+    "id": "changed_major",
+    "text": "전과 2년제 2학년1학기 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "전과학생",
+      "총 졸업학점 75학점",
+      "전공최저이수 26학점",
+      "전과 학기부터"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      26,
+      75
+    ],
+    "none_of_text_contains": [
+      "연락처"
+    ]
+  },
+  {
+    "id": "free_major",
+    "text": "자유전공학과 2년제 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "자유전공",
+      "총 졸업학점 75학점",
+      "전공최저이수 39학점",
+      "전공 배정 학기부터"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      39,
+      75
+    ],
+    "none_of_text_contains": [
+      "연락처"
+    ]
+  },
+  {
+    "id": "historical_department",
+    "text": "일반학생 기계과 2008학번 졸업 전공최저이수학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "기계과",
+      "2008년 입학",
+      "전공최저이수 60학점"
+    ],
+    "none_of_text_contains": [
+      "90학점",
+      "총 졸업학점",
+      "연락처"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      60
+    ]
+  },
+  {
+    "id": "professor_room",
+    "text": "교수연구실이 어디야?",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "교수명이나 학과명"
+    ],
+    "url_policy": "forbidden",
+    "expected_tools": [
+      "professor_room_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "contact_missing_unit",
+    "text": "연락처",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "학과(또는 부서) 풀네임"
+    ],
+    "url_policy": "forbidden",
+    "expected_tools": [
+      "dept_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "leave_overview",
+    "text": "휴학",
+    "behavior": "guidance",
+    "all_of_text_contains": [
+      "휴학",
+      "공식 안내"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4784/subview.do"
+    ],
+    "single_source": true
+  },
+  {
+    "id": "scholarship_overview",
+    "text": "장학금",
+    "behavior": "guidance",
+    "all_of_text_contains": [
+      "장학금",
+      "공식 안내"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4794/subview.do"
+    ],
+    "single_source": true
+  },
+  {
+    "id": "dorm_overview",
+    "text": "기숙사",
+    "behavior": "guidance",
+    "all_of_text_contains": [
+      "기숙사",
+      "공식 안내"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4841/subview.do"
+    ],
+    "single_source": true
+  }
+]
