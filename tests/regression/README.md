@@ -12,6 +12,13 @@
 python tests/regression/chatbot/evaluate_rag_retrieval.py --validate-only
 python tests/regression/chatbot/evaluate_rag_retrieval.py
 python tests/regression/chatbot/check_chatbot_tool_routing.py
+python tests/regression/chatbot/check_grad_source_binding.py
+python tests/regression/chatbot/check_contact_extraction.py
+python tests/regression/chatbot/check_graduation_clarification.py
+python tests/regression/chatbot/check_graduation_scope.py
+python tests/regression/chatbot/check_answer_quality_gate.py
+python tests/regression/chatbot/evaluate_chatbot_answers.py --validate-only
+python tests/regression/chatbot/evaluate_chatbot_answers.py --strict
 python tests/regression/timetable/check_timetable_ocr_diagnostics.py
 python tests/regression/timetable/measure_timetable_ocr_baseline.py
 python tests/regression/timetable/analyze_timetable_empty_cell_skip.py
@@ -20,6 +27,10 @@ python tests/regression/text_filtering/check_text_filter_normalization.py
 python tests/regression/text_filtering/check_text_filter_word_matcher.py
 python tests/regression/text_filtering/check_text_filter_match_details_response.py
 ```
+
+`check_grad_source_binding.py`는 설정을 테스트 값으로 대체하고 실제 졸업 formatter와
+후처리 경로를 검사합니다. 모델·서버·추가 패키지 없이 본문/출처 일치, 제목 목록의
+안내 응답 전환, 적용 조건 보존, 출처 없는 설명의 노출 방지를 검증합니다.
 
 ## Evaluation Metrics Policy
 

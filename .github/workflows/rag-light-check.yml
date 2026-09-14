@@ -23,10 +23,12 @@ jobs:
       - name: Install lightweight regression dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy pandas pyarrow python-dotenv fastapi==0.111.0
+          python -m pip install numpy pandas pyarrow python-dotenv fastapi==0.111.0 cachetools httpx
 
       - name: Validate RAG eval question set
-        run: python tests/regression/chatbot/evaluate_rag_retrieval.py --validate-only
+        run: |
+          python tests/regression/chatbot/evaluate_rag_retrieval.py --validate-only
+          python tests/regression/chatbot/evaluate_chatbot_answers.py --validate-only
 
       - name: Compile RAG regression scripts
         run: |
@@ -44,6 +46,18 @@ jobs:
           python tests/regression/chatbot/check_chatbot_tool_routing.py
           python tests/regression/chatbot/check_query_index_compat.py
           python tests/regression/chatbot/check_query_index_metadata_quality.py
+
+      - name: Check final-answer safeguards
+        run: |
+          python tests/regression/chatbot/check_grad_source_binding.py
+          python tests/regression/chatbot/check_contact_extraction.py
+          python tests/regression/chatbot/check_graduation_clarification.py
+          python tests/regression/chatbot/check_graduation_scope.py
+          python tests/regression/chatbot/check_chatbot_routing_metadata.py
+          python tests/regression/chatbot/check_answer_quality_gate.py
+          python tests/regression/chatbot/check_academic_procedure_routing.py
+          python tests/regression/chatbot/check_academic_clarification.py
+          python tests/regression/chatbot/check_support_guidance.py
 
       - name: Write summary
         if: always()

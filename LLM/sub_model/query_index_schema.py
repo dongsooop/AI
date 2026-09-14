@@ -3,7 +3,7 @@ import pandas as pd
 
 
 TEXT_FALLBACK_COLS = ["text_for_embedding", "text_for_bm25", "text_for_answer"]
-METADATA_TEXT_COLS = ["chunk_type", "breadcrumb", "leaf_title", "section_title"]
+METADATA_TEXT_COLS = ["chunk_type", "breadcrumb", "leaf_title", "section_title", "graduation_scope"]
 METADATA_BOOL_COLS = [
     "has_phone",
     "has_email",

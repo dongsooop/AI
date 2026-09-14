@@ -36,6 +36,9 @@ from LLM.OSS.tools import (
     ToolResult,
     run_empty_oss_fallback_tools,
     run_final_fallback_tools,
+    run_graduation_clarification_tool,
+    run_academic_clarification_tool,
+    run_support_guidance_tool,
     run_mode_tools,
     run_oss_fast_path_tools,
 )
@@ -224,6 +227,20 @@ async def chat_with_oss(req: ChatReq) -> dict:
     requested_engine = normalize_intent_override(req.engine)
     mode = requested_engine or decide_mode(user_text)
     intent_source = "request_override" if requested_engine else "rule"
+    # Clarify before cache lookup or short-query greetings so an old search
+    # answer (or an explicit engine override) cannot bypass the clarification.
+    clarification = run_graduation_clarification_tool(user_text)
+    if not clarification.resolved:
+        clarification = run_academic_clarification_tool(user_text)
+    if not clarification.resolved:
+        clarification = run_support_guidance_tool(user_text)
+    if clarification.resolved:
+        response = clarification.to_response()
+        routing = _routing_metadata(mode, "clarification", result=clarification)
+        latency = int((time.monotonic() - start) * 1000)
+        log_chatbot(user_text, response["engine"], response["text"], None, False, latency)
+        _log_chatbot_summary(user_text, start, response, routing)
+        return response
     if mode == "oss" and len(compact_user_text) <= 2:
         response = {"engine": "greet", "text": "네, 무엇을 도와드릴까요?"}
         routing = _routing_metadata(

@@ -1,0 +1,781 @@
+[
+  {
+    "id": "broad_graduation",
+    "text": "졸업",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "어떤 내용",
+      "졸업학점",
+      "졸업식 일정"
+    ],
+    "url_policy": "forbidden",
+    "expected_tools": [
+      "graduation_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "broad_graduation_polite",
+    "text": "졸업에 대해 알려주세요",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "구체적으로 입력"
+    ],
+    "url_policy": "forbidden",
+    "expected_tools": [
+      "graduation_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "credit_missing_group",
+    "text": "졸업학점",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "일반학생/편입/전과/자유전공"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "admission_not_graduation",
+    "text": "일반학생 3년제 22학번 졸업학점",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "졸업대상 연도",
+      "입력해 주세요"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "transfer_missing_stage",
+    "text": "2022년 편입 3년제 졸업학점",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "학년과 학기"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "free_wrong_program",
+    "text": "자유전공학과 3년제 졸업학점",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "확인하지 못했어요"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "general_three",
+    "text": "일반학생 3년제 2026년 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "일반학생",
+      "3년제",
+      "2023년 이후",
+      "총 졸업학점 110학점",
+      "전공최저이수 78학점"
+    ],
+    "none_of_text_contains": [
+      "120학점",
+      "자유전공",
+      "연락처"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      78,
+      110
+    ]
+  },
+  {
+    "id": "general_two",
+    "text": "일반학생 2년제 2026년 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "일반학생",
+      "2년제",
+      "총 졸업학점 75학점",
+      "전공최저이수 52학점"
+    ],
+    "none_of_text_contains": [
+      "110학점",
+      "120학점",
+      "자유전공",
+      "연락처"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      52,
+      75
+    ]
+  },
+  {
+    "id": "general_historical",
+    "text": "일반학생 3년제 2022년 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "2022년",
+      "총 졸업학점 120학점",
+      "별표1"
+    ],
+    "none_of_text_contains": [
+      "78학점",
+      "연락처"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      120
+    ]
+  },
+  {
+    "id": "transfer_2021",
+    "text": "2021년 편입 3년제 3학년1학기 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "편입학생",
+      "2021년 편입",
+      "3학년 1학기",
+      "총 졸업학점 120학점",
+      "전공최저이수 30학점"
+    ],
+    "none_of_text_contains": [
+      "110학점",
+      "연락처"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      30,
+      120
+    ]
+  },
+  {
+    "id": "transfer_2022",
+    "text": "2022년 편입 3년제 3학년1학기 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "2022년 이후 편입",
+      "총 졸업학점 110학점",
+      "전공최저이수 26학점"
+    ],
+    "none_of_text_contains": [
+      "120학점",
+      "연락처"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      26,
+      110
+    ]
+  },
+  {
+    "id": "changed_major",
+    "text": "전과 2년제 2학년1학기 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "전과학생",
+      "총 졸업학점 75학점",
+      "전공최저이수 26학점",
+      "전과 학기부터"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      26,
+      75
+    ],
+    "none_of_text_contains": [
+      "연락처"
+    ]
+  },
+  {
+    "id": "free_major",
+    "text": "자유전공학과 2년제 졸업학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "자유전공",
+      "총 졸업학점 75학점",
+      "전공최저이수 39학점",
+      "전공 배정 학기부터"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      39,
+      75
+    ],
+    "none_of_text_contains": [
+      "연락처"
+    ]
+  },
+  {
+    "id": "historical_department",
+    "text": "일반학생 기계과 2008학번 졸업 전공최저이수학점",
+    "behavior": "answer",
+    "all_of_text_contains": [
+      "기계과",
+      "2008년 입학",
+      "전공최저이수 60학점"
+    ],
+    "none_of_text_contains": [
+      "90학점",
+      "총 졸업학점",
+      "연락처"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "metadata_direct_answer"
+    ],
+    "allowed_credit_values": [
+      60
+    ]
+  },
+  {
+    "id": "professor_room",
+    "text": "교수연구실이 어디야?",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "교수명이나 학과명"
+    ],
+    "url_policy": "forbidden",
+    "expected_tools": [
+      "professor_room_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "contact_missing_unit",
+    "text": "연락처",
+    "behavior": "clarification",
+    "all_of_text_contains": [
+      "학과(또는 부서) 풀네임"
+    ],
+    "url_policy": "forbidden",
+    "expected_tools": [
+      "dept_clarification"
+    ],
+    "none_of_text_regex": [
+      "\\d+\\s*학점"
+    ]
+  },
+  {
+    "id": "leave_overview",
+    "text": "휴학",
+    "behavior": "guidance",
+    "all_of_text_contains": [
+      "휴학",
+      "공식 안내",
+      "일반휴학",
+      "군휴학",
+      "휴학연기"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4784/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "support_topic_guidance"
+    ]
+  },
+  {
+    "id": "scholarship_overview",
+    "text": "장학금",
+    "behavior": "guidance",
+    "all_of_text_contains": [
+      "장학금",
+      "공식 안내",
+      "교내",
+      "국가",
+      "교외"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4794/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "support_topic_guidance"
+    ]
+  },
+  {
+    "id": "dorm_overview",
+    "text": "기숙사",
+    "behavior": "guidance",
+    "all_of_text_contains": [
+      "기숙사",
+      "공식 안내",
+      "입사 신청 방법",
+      "기숙사 비용",
+      "기숙사 시설"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4841/subview.do"
+    ],
+    "single_source": true,
+    "expected_tools": [
+      "support_topic_guidance"
+    ]
+  },
+  {
+    "id": "grad_conflicting_years_total",
+    "text": "일반학생 기계과 2008학번 3년제 2026년 졸업학점",
+    "behavior": "clarification",
+    "engine_in": [
+      "grad"
+    ],
+    "all_of_text_contains": [
+      "적용 기준을 확정"
+    ],
+    "allowed_credit_values": [],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ]
+  },
+  {
+    "id": "grad_conflicting_years_major",
+    "text": "일반학생 기계과 2008학번 3년제 2026년 졸업 전공학점",
+    "behavior": "clarification",
+    "engine_in": [
+      "grad"
+    ],
+    "all_of_text_contains": [
+      "적용 기준을 확정"
+    ],
+    "allowed_credit_values": [],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ]
+  },
+  {
+    "id": "grad_unsupported_four_year",
+    "text": "일반학생 기계과 2008학번 4년제 졸업 전공학점",
+    "behavior": "clarification",
+    "engine_in": [
+      "grad"
+    ],
+    "all_of_text_contains": [
+      "전문학사"
+    ],
+    "allowed_credit_values": [],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ]
+  },
+  {
+    "id": "grad_historical_unknown_year",
+    "text": "일반학생 기계과 2008학번 3년제 2020년 졸업 전공학점",
+    "behavior": "clarification",
+    "engine_in": [
+      "grad"
+    ],
+    "all_of_text_contains": [
+      "확인하지 못했어요"
+    ],
+    "allowed_credit_values": [],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ]
+  },
+  {
+    "id": "grad_historical_unknown_month",
+    "text": "일반학생 기계과 2008학번 3년제 2023년1월 졸업 전공학점",
+    "behavior": "clarification",
+    "engine_in": [
+      "grad"
+    ],
+    "all_of_text_contains": [
+      "확인하지 못했어요"
+    ],
+    "allowed_credit_values": [],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4778/subview.do"
+    ],
+    "expected_tools": [
+      "graduation_scope_clarification"
+    ]
+  },
+  {
+    "id": "tuition_payment_method",
+    "text": "등록금 납부 방법",
+    "behavior": "guidance",
+    "engine_in": [
+      "policy"
+    ],
+    "expected_tools": [
+      "policy_search_postprocess"
+    ],
+    "all_of_text_contains": [
+      "공식 안내",
+      "등록금납부"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4793/subview.do"
+    ]
+  },
+  {
+    "id": "grade_certificate_issuance",
+    "text": "성적증명서 발급",
+    "behavior": "guidance",
+    "engine_in": [
+      "policy"
+    ],
+    "expected_tools": [
+      "policy_search_postprocess"
+    ],
+    "all_of_text_contains": [
+      "공식 안내",
+      "교내자동발급"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4801/subview.do"
+    ]
+  },
+  {
+    "id": "course_registration_method",
+    "text": "수강신청 방법",
+    "behavior": "guidance",
+    "engine_in": [
+      "policy"
+    ],
+    "expected_tools": [
+      "policy_search_postprocess"
+    ],
+    "all_of_text_contains": [
+      "공식 안내",
+      "수강신청"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4752/subview.do"
+    ]
+  },
+  {
+    "id": "tuition_installment_method",
+    "text": "등록금 분할납부 방법",
+    "behavior": "guidance",
+    "engine_in": [
+      "policy"
+    ],
+    "expected_tools": [
+      "policy_search_postprocess"
+    ],
+    "all_of_text_contains": [
+      "공식 안내",
+      "등록금납부"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4793/subview.do"
+    ]
+  },
+  {
+    "id": "course_registration_calendar",
+    "text": "수강신청 언제야?",
+    "behavior": "answer",
+    "engine_in": [
+      "fast"
+    ],
+    "expected_tools": [
+      "schedule_search"
+    ],
+    "all_of_text_contains": [
+      "수강신청",
+      "일정"
+    ]
+  },
+  {
+    "id": "grade_view_calendar",
+    "text": "성적열람 기간",
+    "behavior": "answer",
+    "engine_in": [
+      "fast"
+    ],
+    "expected_tools": [
+      "schedule_search"
+    ],
+    "all_of_text_contains": [
+      "성적",
+      "일정"
+    ]
+  },
+  {
+    "id": "registration_topic_clarification",
+    "text": "등록",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "expected_tools": [
+      "academic_topic_clarification"
+    ],
+    "all_of_text_contains": [
+      "어떤 내용",
+      "등록금 납부 방법",
+      "등록금 분할납부 방법",
+      "등록금 납부 기간"
+    ],
+    "none_of_text_regex": [
+      "\\d"
+    ],
+    "url_policy": "forbidden"
+  },
+  {
+    "id": "tuition_topic_clarification",
+    "text": "등록금 알려줘",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "expected_tools": [
+      "academic_topic_clarification"
+    ],
+    "all_of_text_contains": [
+      "어떤 내용",
+      "등록금 납부 방법",
+      "등록금 납부 기간"
+    ],
+    "none_of_text_regex": [
+      "\\d"
+    ],
+    "url_policy": "forbidden"
+  },
+  {
+    "id": "grades_topic_clarification",
+    "text": "성적",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "expected_tools": [
+      "academic_topic_clarification"
+    ],
+    "all_of_text_contains": [
+      "어떤 내용",
+      "성적열람 기간",
+      "성적 이의신청 방법",
+      "성적증명서 발급"
+    ],
+    "none_of_text_regex": [
+      "\\d"
+    ],
+    "url_policy": "forbidden"
+  },
+  {
+    "id": "courses_topic_clarification",
+    "text": "수강신청",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "expected_tools": [
+      "academic_topic_clarification"
+    ],
+    "all_of_text_contains": [
+      "어떤 내용",
+      "수강신청 방법",
+      "수강신청 기간",
+      "수강정정 방법"
+    ],
+    "none_of_text_regex": [
+      "\\d"
+    ],
+    "url_policy": "forbidden"
+  },
+  {
+    "id": "scholarship_scope",
+    "text": "장학금 신청 조건",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "장학금 이름",
+      "대상 학기"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4794/subview.do"
+    ],
+    "none_of_text_regex": [
+      "\\d[\\d,]*\\s*(?:원|학점|개월|일간)"
+    ],
+    "expected_tools": [
+      "support_topic_guidance"
+    ]
+  },
+  {
+    "id": "dorm_cost_scope",
+    "text": "기숙사비 얼마야?",
+    "behavior": "clarification",
+    "engine_in": [
+      "dorm"
+    ],
+    "all_of_text_contains": [
+      "이용 시기",
+      "실 유형"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4841/subview.do"
+    ],
+    "none_of_text_regex": [
+      "\\d[\\d,]*\\s*(?:원|학점|개월|일간)"
+    ],
+    "expected_tools": [
+      "support_topic_guidance"
+    ]
+  },
+  {
+    "id": "dorm_application_scope",
+    "text": "기숙사 입사 신청 방법",
+    "behavior": "clarification",
+    "engine_in": [
+      "dorm"
+    ],
+    "all_of_text_contains": [
+      "이용 시기",
+      "모집 공고"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4841/subview.do"
+    ],
+    "none_of_text_regex": [
+      "\\d[\\d,]*\\s*(?:원|학점|개월|일간)"
+    ],
+    "expected_tools": [
+      "support_topic_guidance"
+    ]
+  },
+  {
+    "id": "leave_type_scope",
+    "text": "휴학 신청 방법",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "일반휴학·군휴학·휴학연기",
+      "희망 학기"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4784/subview.do"
+    ],
+    "none_of_text_regex": [
+      "\\d[\\d,]*\\s*(?:원|학점|개월|일간)"
+    ],
+    "expected_tools": [
+      "support_topic_guidance"
+    ]
+  }
+]
