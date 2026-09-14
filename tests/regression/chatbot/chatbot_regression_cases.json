@@ -438,5 +438,136 @@
       "\\d"
     ],
     "url_policy": "forbidden"
+  },
+  {
+    "id": "scholarship_scope",
+    "text": "장학금 신청 조건",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "장학금 이름",
+      "대상 학기"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4794/subview.do"
+    ],
+    "none_of_text_regex": [
+      "\\d[\\d,]*\\s*(?:원|학점|개월|일간)"
+    ]
+  },
+  {
+    "id": "dorm_cost_scope",
+    "text": "기숙사비 얼마야?",
+    "behavior": "clarification",
+    "engine_in": [
+      "dorm"
+    ],
+    "all_of_text_contains": [
+      "이용 시기",
+      "실 유형"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4841/subview.do"
+    ],
+    "none_of_text_regex": [
+      "\\d[\\d,]*\\s*(?:원|학점|개월|일간)"
+    ]
+  },
+  {
+    "id": "dorm_application_scope",
+    "text": "기숙사 입사 신청 방법",
+    "behavior": "clarification",
+    "engine_in": [
+      "dorm"
+    ],
+    "all_of_text_contains": [
+      "이용 시기",
+      "모집 공고"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4841/subview.do"
+    ],
+    "none_of_text_regex": [
+      "\\d[\\d,]*\\s*(?:원|학점|개월|일간)"
+    ]
+  },
+  {
+    "id": "leave_type_scope",
+    "text": "휴학 신청 방법",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "일반휴학·군휴학·휴학연기",
+      "희망 학기"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4784/subview.do"
+    ],
+    "none_of_text_regex": [
+      "\\d[\\d,]*\\s*(?:원|학점|개월|일간)"
+    ]
+  },
+  {
+    "id": "leave_overview",
+    "text": "휴학",
+    "behavior": "guidance",
+    "all_of_text_contains": [
+      "휴학",
+      "공식 안내",
+      "일반휴학",
+      "군휴학",
+      "휴학연기"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4784/subview.do"
+    ],
+    "single_source": true
+  },
+  {
+    "id": "scholarship_overview",
+    "text": "장학금",
+    "behavior": "guidance",
+    "all_of_text_contains": [
+      "장학금",
+      "공식 안내",
+      "교내",
+      "국가",
+      "교외"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4794/subview.do"
+    ],
+    "single_source": true
+  },
+  {
+    "id": "dorm_overview",
+    "text": "기숙사",
+    "behavior": "guidance",
+    "all_of_text_contains": [
+      "기숙사",
+      "공식 안내",
+      "입사 신청 방법",
+      "기숙사 비용",
+      "기숙사 시설"
+    ],
+    "url_policy": "required",
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4841/subview.do"
+    ],
+    "single_source": true
   }
 ]

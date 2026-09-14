@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 import logging
+from urllib.parse import urlparse
 
 from core.settings import get_settings
 from LLM.OSS.formatter import (
@@ -10,6 +11,7 @@ from LLM.OSS.formatter import (
 )
 from LLM.OSS.modes import ambiguous_academic_topic, is_academic_procedure_query, is_ambiguous_graduation_query, looks_like_schedule, looks_like_topic
 from LLM.OSS.postprocess import run_postprocess
+from LLM.OSS.support_guidance import support_guidance
 from LLM.sub_model.query_index import build_answer, confident_search_answer, metadata_direct_answer
 from LLM.sub_model.schedule_index import schedule_search
 
@@ -189,6 +191,27 @@ def _confident_search_tool(user_text: str) -> ToolResult:
         source_urls=_source_urls(confident.get("url")),
         reason="high confidence search answer matched",
     )
+
+
+def run_support_guidance_tool(user_text: str) -> ToolResult:
+    guidance = support_guidance(user_text)
+    if guidance is None:
+        return EMPTY_TOOL_RESULT
+    topic, mode, page, message = guidance
+    source = _postprocess_tool(mode, topic)
+    # Only attach the matching source page returned by retrieval. A fallback
+    # homepage or an unrelated result must not become evidence for this guide.
+    parsed = urlparse(source.url or "")
+    url = source.url if (parsed.scheme in ('http', 'https')
+                        and parsed.hostname == 'www.dongyang.ac.kr'
+                        and parsed.path == f'/dmu/{page}/subview.do') else None
+    if url:
+        message += f"\n공식 안내: {url}"
+    else:
+        message += "\n관련 공식 안내 링크를 현재 검색 결과에서 확인하지 못했어요."
+    return ToolResult(name="support_topic_guidance", text=message, url=url,
+                      engine=mode, confidence=0.8, source_urls=_source_urls(url),
+                      reason="support query needs topic or applicability selection")
 
 
 def run_academic_clarification_tool(user_text: str) -> ToolResult:

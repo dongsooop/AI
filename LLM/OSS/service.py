@@ -38,6 +38,7 @@ from LLM.OSS.tools import (
     run_final_fallback_tools,
     run_graduation_clarification_tool,
     run_academic_clarification_tool,
+    run_support_guidance_tool,
     run_mode_tools,
     run_oss_fast_path_tools,
 )
@@ -231,6 +232,8 @@ async def chat_with_oss(req: ChatReq) -> dict:
     clarification = run_graduation_clarification_tool(user_text)
     if not clarification.resolved:
         clarification = run_academic_clarification_tool(user_text)
+    if not clarification.resolved:
+        clarification = run_support_guidance_tool(user_text)
     if clarification.resolved:
         response = clarification.to_response()
         routing = _routing_metadata(mode, "clarification", result=clarification)
