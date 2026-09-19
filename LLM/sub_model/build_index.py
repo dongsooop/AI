@@ -145,6 +145,7 @@ for i, r in df.iterrows():
             "breadcrumb": ch.get("breadcrumb", ""),
             "leaf_title": ch.get("leaf_title", ""),
             "section_title": ch.get("section_title", ""),
+            "graduation_scope": ch.get("graduation_scope", ""),
             "has_phone": ch.get("has_phone", False),
             "has_email": ch.get("has_email", False),
             "has_date": ch.get("has_date", False),
@@ -269,7 +270,7 @@ ALL_COLS = [
     "text","text_for_embedding","text_for_bm25","text_for_answer",
     "doc_type","chunk_type","breadcrumb","leaf_title","section_title",
     "has_phone","has_email","has_date","has_credit","has_policy_keyword","is_privacy_old",
-    "unit","phone","email"
+    "unit","phone","email","graduation_scope"
 ]
 
 def _ensure_columns(df_in: pd.DataFrame) -> pd.DataFrame:
@@ -284,7 +285,7 @@ def _ensure_columns(df_in: pd.DataFrame) -> pd.DataFrame:
         "chunk_id","title","url","source",
         "text","text_for_embedding","text_for_bm25","text_for_answer",
         "doc_type","chunk_type","breadcrumb","leaf_title","section_title",
-        "unit","phone","email"
+        "unit","phone","email","graduation_scope"
     ]:
         df[c] = df[c].astype("object")
     for c in ["has_phone","has_email","has_date","has_credit","has_policy_keyword","is_privacy_old"]:
@@ -333,8 +334,8 @@ try:
 except Exception as exc:
     print(f"⚠️ BM25 pickle 저장 실패(토큰 코퍼스는 저장됨): {exc}")
 
-if not contact_docs.empty:
-    contact_docs.to_csv(CONTACTS_CSV, index=False, encoding="utf-8-sig")
+# An empty rebuild must clear any previously generated contact documents too.
+contact_docs.to_csv(CONTACTS_CSV, index=False, encoding="utf-8-sig")
 
 meta = {
     "built_at": datetime.now().isoformat(),

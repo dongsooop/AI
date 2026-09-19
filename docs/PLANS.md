@@ -205,6 +205,7 @@
 - `search_df.parquet`에는 `breadcrumb`, `leaf_title`, `section_title`, `has_phone`, `has_date`, `has_credit`, `has_policy_keyword`, `is_privacy_old` 같은 메타데이터를 함께 저장합니다.
 - `query_index_loader.py`는 환경변수 기반 경로 해석, 검색 아티팩트 로딩, BM25 fallback 생성을 담당합니다.
 - `query_index.py`는 기존 `build_answer()` 인터페이스를 유지하되, 새 컬럼이 있으면 메타데이터 기반 가중치와 답변용 본문을 우선 사용하고 구버전 아티팩트에는 `text` 기반으로 fallback 합니다.
+- `graduation_rules.py`는 지원하는 졸업 표에서 학생 구분, 학제, 입학/졸업대상/편입 연도, 학과, 편입·전과 학년/학기를 학점과 함께 추출합니다. `graduation_rule` 청크의 `graduation_scope` JSON에 조건을 보존하며, 졸업학점 직접 응답과 `build_answer()`는 동일한 조건 검증을 사용합니다. 조건이 부족하거나 충돌하면 되묻고, 지원하지 않는 표나 조건 메타데이터가 없는 구버전 인덱스에서 학점 숫자를 추측하지 않습니다. 이 기능 반영 시 인덱스 재생성이 필요합니다.
 - `model/artifacts/` 아래 파일은 생성 산출물이므로 직접 편집하지 않고 `LLM/sub_model/build_index.py`로 재생성합니다.
 
 ## 목표 구조 방향
