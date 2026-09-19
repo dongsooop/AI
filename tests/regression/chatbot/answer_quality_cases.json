@@ -922,5 +922,49 @@
     "expected_tools": [
       "schedule_search"
     ]
+  },
+  {
+    "id": "professor_topic",
+    "text": "교수",
+    "behavior": "clarification",
+    "engine_in": [
+      "fast"
+    ],
+    "all_of_text_contains": [
+      "어떤 내용",
+      "연락처",
+      "연구실 위치",
+      "교수소개",
+      "교수명이나 학과명"
+    ],
+    "none_of_text_contains": [
+      "네, 무엇을 도와드릴까요?"
+    ],
+    "url_policy": "forbidden",
+    "expected_tools": [
+      "professor_topic_clarification"
+    ]
+  },
+  {
+    "id": "professor_topic_polite",
+    "text": "교수님에 대해 알려주세요",
+    "behavior": "clarification",
+    "engine_in": [
+      "fast"
+    ],
+    "all_of_text_contains": [
+      "어떤 내용",
+      "연락처",
+      "연구실 위치",
+      "교수소개",
+      "교수명이나 학과명"
+    ],
+    "none_of_text_contains": [
+      "네, 무엇을 도와드릴까요?"
+    ],
+    "url_policy": "forbidden",
+    "expected_tools": [
+      "professor_topic_clarification"
+    ]
   }
 ]

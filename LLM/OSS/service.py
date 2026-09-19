@@ -40,6 +40,7 @@ from LLM.OSS.tools import (
     run_academic_clarification_tool,
     run_support_guidance_tool,
     run_calendar_conditions_tool,
+    run_professor_clarification_tool,
     run_mode_tools,
     run_oss_fast_path_tools,
 )
@@ -231,6 +232,8 @@ async def chat_with_oss(req: ChatReq) -> dict:
     # Clarify before cache lookup or short-query greetings so an old search
     # answer (or an explicit engine override) cannot bypass the clarification.
     clarification = run_graduation_clarification_tool(user_text)
+    if not clarification.resolved:
+        clarification = run_professor_clarification_tool(user_text)
     if not clarification.resolved:
         clarification = run_academic_clarification_tool(user_text)
     if not clarification.resolved:

@@ -59,6 +59,7 @@ jobs:
           python tests/regression/chatbot/check_academic_clarification.py
           python tests/regression/chatbot/check_support_guidance.py
           python tests/regression/chatbot/check_query_conditions.py
+          python tests/regression/chatbot/check_professor_clarification.py
 
       - name: Write summary
         if: always()

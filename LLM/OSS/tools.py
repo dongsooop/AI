@@ -9,7 +9,7 @@ from LLM.OSS.formatter import (
     professor_room_clarification_message,
     render_chatty_schedule,
 )
-from LLM.OSS.modes import ambiguous_academic_topic, is_academic_procedure_query, is_ambiguous_graduation_query, looks_like_schedule, looks_like_topic
+from LLM.OSS.modes import ambiguous_academic_topic, is_academic_procedure_query, is_ambiguous_graduation_query, is_ambiguous_professor_query, looks_like_schedule, looks_like_topic
 from LLM.OSS.postprocess import run_postprocess
 from LLM.OSS.support_guidance import support_guidance
 from LLM.OSS.query_conditions import calendar_conditions, UNVERIFIED_CALENDAR_MESSAGE
@@ -191,6 +191,19 @@ def _confident_search_tool(user_text: str) -> ToolResult:
         decision_source="retrieval",
         source_urls=_source_urls(confident.get("url")),
         reason="high confidence search answer matched",
+    )
+
+
+def run_professor_clarification_tool(user_text: str) -> ToolResult:
+    if not is_ambiguous_professor_query(user_text):
+        return EMPTY_TOOL_RESULT
+    return ToolResult(
+        name="professor_topic_clarification", engine="fast", confidence=0.95,
+        text=("교수님 관련해서 어떤 내용이 궁금한가요? 연락처·연구실 위치·교수소개 중 목적과 "
+              "교수명이나 학과명을 함께 입력해 주세요. "
+              "예: '컴퓨터소프트웨어공학과 교수 연락처', "
+              "'컴퓨터소프트웨어공학과 교수연구실 위치', '컴퓨터소프트웨어공학과 교수소개'"),
+        reason="professor query needs a purpose and target",
     )
 
 
