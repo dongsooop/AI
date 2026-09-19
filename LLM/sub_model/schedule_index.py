@@ -157,8 +157,12 @@ def _parse_year_hint(q: str):
 
 
 def schedule_search(query: str, top_k=8, today=None):
+    from LLM.OSS.query_conditions import calendar_conditions, matches_calendar_conditions, UNVERIFIED_CALENDAR_MESSAGE
     if not _looks_like_schedule_query(query):
         return ""
+    conditions = calendar_conditions(query)
+    if conditions and conditions[1]:
+        return f"{conditions[0]} 일정 확인에 필요한 정보: {', '.join(conditions[1])}. 질문에 조건을 함께 적어 주세요."
 
     today = today or dt.date.today()
     ay = _academic_year(today)
@@ -201,6 +205,11 @@ def schedule_search(query: str, top_k=8, today=None):
 
     if tag_need:
         df1 = df1[df1["tags"].apply(lambda s: bool(s & tag_need))]
+
+    if conditions and not conditions[1]:
+        df1 = df1[df1['일정명'].map(lambda title: matches_calendar_conditions(title, conditions[2]))]
+        if df1.empty:
+            return UNVERIFIED_CALENDAR_MESSAGE
 
     df1 = df1.dropna(subset=["start_date"]).copy()
     if df1.empty:

@@ -42,7 +42,7 @@ class SupportGuidanceTests(unittest.TestCase):
             self.assertNotIn('https://', result.text)
 
     def test_concrete_queries_are_not_intercepted(self):
-        for query in ('국가장학금 신청 조건', '교내 장학금 안내', '성적우수 장학금',
+        for query in ('2026년 1학기 국가장학금 신청 조건', '교내 장학금 안내', '성적우수 장학금',
                       '기숙사 위치', '기숙사 시설', '2026년 2학기 기숙사 2인실 비용',
                       '일반휴학 신청 방법', '군휴학 필요서류', '휴학연기 안내',
                       '기숙사 담당자 연락처', '장학금과 휴학', '휴학 말고 복학'):

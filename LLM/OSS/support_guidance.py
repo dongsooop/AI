@@ -32,4 +32,39 @@ def support_guidance(query):
             return topic, mode, page, overview
         if re.fullmatch(f"(?:{aliases})(?:{details}){NEUTRAL}", compact):
             return topic, mode, page, clarification
+    if re.search(r'연락처|전화|담당|규정|말고|아니|제외', compact):
+        return None
+    year = bool(re.search(r'20\d{2}(?:년|학년도)', compact))
+    term = bool(re.search(r'[12]학기|여름방학|겨울방학', compact))
+    missing = []
+    if '장학' in compact and re.search(r'조건|자격|금액|얼마|신청기간', compact):
+        topic, mode, page = '장학금', 'policy', '4794'
+        if not re.search(r'국가장학금|성적우수|근로장학|희망사다리', compact):
+            missing.append('구체적인 장학금 이름')
+        if not year:
+            missing.append('대상 연도')
+        if not term:
+            missing.append('대상 학기')
+    elif re.search(r'기숙사|생활관', compact) and re.search(r'비용|요금|기숙사비|생활관비|얼마|입사.*(?:조건|기간)', compact):
+        topic, mode, page = '기숙사', 'dorm', '4841'
+        if not year:
+            missing.append('이용 연도')
+        if not term:
+            missing.append('이용 학기 또는 여름·겨울방학')
+        if not re.search(r'[1-4]인실|[A-E]형|아파트형', compact):
+            missing.append('기숙사·실 유형')
+    elif '휴학' in compact and re.search(r'기간|등록금', compact):
+        topic, mode, page = '휴학', 'policy', '4784'
+        if not re.search(r'일반휴학|군(?:입대)?휴학|휴학연기', compact):
+            missing.append('휴학 종류')
+        if not year:
+            missing.append('대상 연도')
+        if not term:
+            missing.append('대상 학기')
+        if '등록금' in compact and not re.search(r'완납|미납|분납|납부했|납부안|납부하지않', compact):
+            missing.append('등록금 납부 여부(완납·미납·분납)')
+    else:
+        return None
+    if missing:
+        return topic, mode, page, f"{topic} 기준 확인에 필요한 정보: {', '.join(missing)}. 이미 적은 조건과 함께 질문해 주세요."
     return None

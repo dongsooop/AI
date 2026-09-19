@@ -41,9 +41,9 @@ class AcademicClarificationTests(unittest.TestCase):
         self.assertEqual(self.log.call_args.args[1], 'policy')
 
     def test_explicit_requests_and_followups_reach_existing_routes(self):
-        for text in ('등록금 납부 방법', '등록금 납부 기간', '성적열람 기간',
+        for text in ('등록금 납부 방법', '2026년 1학기 재학생 등록금 납부 기간', '2026년 1학기 성적열람 기간',
                      '성적 이의신청 방법', '성적증명서 발급', '수강신청 방법',
-                     '수강신청 기간', '수강정정 방법', '등록 담당자 연락처'):
+                     '2026년 1학기 2학년 재학생 수강신청 기간', '수강정정 방법', '등록 담당자 연락처'):
             with self.subTest(text=text):
                 self.assertFalse(ambiguous_academic_topic(text))
                 self.route.reset_mock()

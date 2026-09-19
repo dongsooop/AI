@@ -347,25 +347,33 @@
   {
     "id": "course_registration_calendar",
     "text": "수강신청 언제야?",
-    "behavior": "answer",
+    "behavior": "clarification",
     "engine_in": [
       "fast"
     ],
     "all_of_text_contains": [
-      "수강신청",
-      "일정"
+      "필요한 정보",
+      "학기"
+    ],
+    "url_policy": "forbidden",
+    "none_of_text_regex": [
+      "\\d{4}-\\d{2}-\\d{2}"
     ]
   },
   {
     "id": "grade_view_calendar",
     "text": "성적열람 기간",
-    "behavior": "answer",
+    "behavior": "clarification",
     "engine_in": [
       "fast"
     ],
     "all_of_text_contains": [
-      "성적",
-      "일정"
+      "필요한 정보",
+      "학기"
+    ],
+    "url_policy": "forbidden",
+    "none_of_text_regex": [
+      "\\d{4}-\\d{2}-\\d{2}"
     ]
   },
   {
@@ -569,5 +577,124 @@
       "https://www.dongyang.ac.kr/dmu/4841/subview.do"
     ],
     "single_source": true
+  },
+  {
+    "id": "course_partial_scope",
+    "text": "2026년 2학기 수강신청 언제야?",
+    "behavior": "clarification",
+    "engine_in": [
+      "fast"
+    ],
+    "all_of_text_contains": [
+      "학년",
+      "학생 유형"
+    ],
+    "none_of_text_contains": [
+      "대상 연도"
+    ],
+    "none_of_text_regex": [
+      "\\d{4}-\\d{2}-\\d{2}"
+    ],
+    "url_policy": "forbidden"
+  },
+  {
+    "id": "registration_partial_scope",
+    "text": "2026년 2학기 등록금 납부 기간",
+    "behavior": "clarification",
+    "engine_in": [
+      "fast"
+    ],
+    "all_of_text_contains": [
+      "학생 유형"
+    ],
+    "none_of_text_contains": [
+      "대상 연도"
+    ],
+    "none_of_text_regex": [
+      "\\d{4}-\\d{2}-\\d{2}"
+    ],
+    "url_policy": "forbidden"
+  },
+  {
+    "id": "scholarship_partial_scope",
+    "text": "2026년 국가장학금 신청 조건",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "대상 학기"
+    ],
+    "none_of_text_contains": [
+      "대상 연도"
+    ],
+    "none_of_text_regex": [
+      "\\d{4}-\\d{2}-\\d{2}"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4794/subview.do"
+    ]
+  },
+  {
+    "id": "dorm_partial_scope",
+    "text": "2026년 2학기 기숙사 비용",
+    "behavior": "clarification",
+    "engine_in": [
+      "dorm"
+    ],
+    "all_of_text_contains": [
+      "실 유형"
+    ],
+    "none_of_text_contains": [
+      "이용 연도"
+    ],
+    "none_of_text_regex": [
+      "\\d{4}-\\d{2}-\\d{2}"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4841/subview.do"
+    ]
+  },
+  {
+    "id": "leave_partial_scope",
+    "text": "2026년 2학기 일반휴학 등록금 처리",
+    "behavior": "clarification",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "납부 여부"
+    ],
+    "none_of_text_contains": [
+      "휴학 종류"
+    ],
+    "none_of_text_regex": [
+      "\\d{4}-\\d{2}-\\d{2}"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4784/subview.do"
+    ]
+  },
+  {
+    "id": "course_unverified_scope",
+    "text": "2026년 1학기 4학년 편입생 수강신청 기간",
+    "behavior": "clarification",
+    "engine_in": [
+      "fast"
+    ],
+    "all_of_text_contains": [
+      "확인하지 못했어요"
+    ],
+    "none_of_text_contains": [],
+    "none_of_text_regex": [
+      "\\d{4}-\\d{2}-\\d{2}"
+    ],
+    "url_policy": "forbidden"
   }
 ]
