@@ -21,6 +21,8 @@ class QueryConditionsTests(unittest.TestCase):
         self.assertEqual(calendar_conditions('2026년 2학기 성적열람 기간')[1], [])
         self.assertEqual(calendar_conditions('2026년 2학기 재학생 등록금 납부 기간')[1], [])
         self.assertIsNone(calendar_conditions('수강신청 방법'))
+        for suffix in ('조건', '자격', '준비서류', '필요서류', '하는 법'):
+            self.assertIsNone(calendar_conditions('2026년 2학기 수강신청 ' + suffix))
         self.assertIsNone(calendar_conditions('2026년 전체 수강신청 일정'))
 
     def test_support_does_not_repeat_known_fields(self):
@@ -33,6 +35,16 @@ class QueryConditionsTests(unittest.TestCase):
             self.assertNotIn(forbidden, message)
         self.assertIsNone(support_guidance('2026년 2학기 국가장학금 신청 조건'))
         self.assertIsNone(support_guidance('일반휴학 신청 방법'))
+
+    def test_named_scholarships_are_not_limited_to_allowlist(self):
+        for name in ('봉사장학금', '다문화가족 장학금', '튜터링장학금', '성적향상 장학금'):
+            with self.subTest(name=name):
+                self.assertIsNone(support_guidance(f'2026년 2학기 {name} 신청 조건'))
+                missing = support_guidance(f'2026년 {name} 신청 조건')[3]
+                self.assertIn('대상 학기', missing)
+                self.assertNotIn('장학금 이름', missing)
+        for q in ('2026년2학기교내장학금조건', '2026년 2학기 교외 장학금 자격'):
+            self.assertIn('구체적인 장학금 이름', support_guidance(q)[3])
 
     def test_service_clarifies_before_retrieval_and_cache(self):
         service = fixture.service

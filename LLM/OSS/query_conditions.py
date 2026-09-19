@@ -1,11 +1,14 @@
 """Conditions required for personal academic calendar queries."""
 import re
+from LLM.OSS.modes import is_academic_procedure_query
 
 UNVERIFIED_CALENDAR_MESSAGE = "입력한 학기·대상 조건이 명시된 일정을 자료에서 확인하지 못했어요. 해당 학기 공지를 확인해 주세요."
 
 
 def calendar_conditions(query):
     text = re.sub(r"\s+", "", query or "")
+    if is_academic_procedure_query(query):
+        return None
     if re.search(r"방법|절차|어떻게|규정|연락처|전화|담당|증명|전체|모든", text):
         return None
     if not re.search(r"언제|기간|일정|날짜|[12]학기|[1-4]학년|20\d{2}년", text):

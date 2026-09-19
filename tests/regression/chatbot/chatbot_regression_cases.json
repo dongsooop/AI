@@ -734,5 +734,85 @@
       "네, 무엇을 도와드릴까요?"
     ],
     "url_policy": "forbidden"
+  },
+  {
+    "id": "named_volunteer_scholarship",
+    "text": "2026년 2학기 봉사장학금 신청 조건",
+    "behavior": "guidance",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "공식 안내"
+    ],
+    "none_of_text_contains": [
+      "구체적인 장학금 이름",
+      "일정 확인에 필요한 정보"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4794/subview.do"
+    ]
+  },
+  {
+    "id": "named_multicultural_scholarship",
+    "text": "2026년 2학기 다문화가족 장학금 자격",
+    "behavior": "guidance",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "공식 안내"
+    ],
+    "none_of_text_contains": [
+      "구체적인 장학금 이름",
+      "일정 확인에 필요한 정보"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4794/subview.do"
+    ]
+  },
+  {
+    "id": "course_eligibility_not_calendar",
+    "text": "2026년 2학기 수강신청 자격",
+    "behavior": "guidance",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "공식 안내"
+    ],
+    "none_of_text_contains": [
+      "구체적인 장학금 이름",
+      "일정 확인에 필요한 정보"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4752/subview.do"
+    ]
+  },
+  {
+    "id": "course_conditions_not_calendar",
+    "text": "2026년 2학기 수강신청 조건",
+    "behavior": "guidance",
+    "engine_in": [
+      "policy"
+    ],
+    "all_of_text_contains": [
+      "공식 안내"
+    ],
+    "none_of_text_contains": [
+      "구체적인 장학금 이름",
+      "일정 확인에 필요한 정보"
+    ],
+    "url_policy": "required",
+    "single_source": true,
+    "expected_urls": [
+      "https://www.dongyang.ac.kr/dmu/4752/subview.do"
+    ]
   }
 ]

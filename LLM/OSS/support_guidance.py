@@ -25,6 +25,15 @@ RULES = (
 )
 
 
+def has_scholarship_name(query):
+    # Presence of a name is distinct from verifying its eligibility in sources.
+    # Do not restrict users to a small allowlist of scholarship programs.
+    generic = {'교내', '교외', '학교', '대학', '국가', '해당', '어떤', '무슨', '장학'}
+    text = re.sub(r'20\d{2}(?:학년도|년)|[12]학기|이번학기|다음학기', ' ', query or '')
+    names = re.findall(r'([가-힣]+)\s*장학금', text)
+    return any(name not in generic for name in names) or bool(re.search(r'국가\s*장학금', text))
+
+
 def support_guidance(query):
     compact = re.sub(r"\s+", "", query or "").rstrip("?!？！.。~…")
     for topic, mode, page, aliases, overview, details, clarification in RULES:
@@ -39,7 +48,7 @@ def support_guidance(query):
     missing = []
     if '장학' in compact and re.search(r'조건|자격|금액|얼마|신청기간', compact):
         topic, mode, page = '장학금', 'policy', '4794'
-        if not re.search(r'국가장학금|성적우수|근로장학|희망사다리', compact):
+        if not has_scholarship_name(query):
             missing.append('구체적인 장학금 이름')
         if not year:
             missing.append('대상 연도')
