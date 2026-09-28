@@ -80,3 +80,18 @@ async def text_filter_single_api(payload: TextRequest):
         status_code=200,
         content={"text" : text, "results" : results}
     )
+
+@router.post("/text_filter_nickname")
+async def text_filter_nickname_api(payload: TextRequest):
+    text = payload.text.strip()
+    results = analyze_text_labels(text)
+
+    if "비속어" in results:
+        return JSONResponse(status_code=400, 
+                            content= {"text" : text, 
+                            "results" : results}
+        )
+    return JSONResponse(
+        status_code=200,
+        content={"text" : text, "results" : results}
+    )
