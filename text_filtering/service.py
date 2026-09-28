@@ -277,18 +277,26 @@ def analyze_fields(specs: list[tuple[str, str, bool]]) -> dict[str, dict[str, An
     return analyzed
 
 
-def analyze_text_labels(text: str) -> list[str]:
+def analyze_text_labels(text: str, *, store_raw_text: bool = False) -> list[str]:
     start = time.monotonic()
     labels: list[str] = []
     sentences = split_sentences(text)
+    pending_logs: list[str] = []
     english_rule_override_count = 0
     try:
         for sentence in sentences:
-            _, label_text = predict(sentence)
+            label_num, label_text = predict(sentence)
             if label_text == "정상" and contains_english_profanity(sentence):
                 label_text = "비속어"
+                label_num = 1
                 english_rule_override_count += 1
             labels.append(label_text)
+            if store_raw_text:
+                pending_logs.append(f"{sentence}|{label_num}\n")
+
+        if pending_logs:
+            with LOG_PATH.open("a", encoding="utf-8") as file:
+                file.writelines(pending_logs)
     except Exception as exc:
         _log_ml_filter_runtime(
             start,
