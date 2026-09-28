@@ -74,7 +74,7 @@ async def text_filter_market_api(payload: TextRequest, username: str = Depends(v
 @router.post("/text_filter_single")
 async def text_filter_single_api(payload: TextRequest):
     text = payload.text.strip()
-    results = analyze_text_labels(text)
+    results = analyze_text_labels(text, store_raw_text=True)
 
     return JSONResponse(
         status_code=200,
@@ -84,7 +84,7 @@ async def text_filter_single_api(payload: TextRequest):
 @router.post("/text_filter_nickname")
 async def text_filter_nickname_api(payload: TextRequest):
     text = payload.text.strip()
-    results = analyze_text_labels(text)
+    results = analyze_text_labels(text, store_raw_text=True)
 
     if "비속어" in results:
         return JSONResponse(status_code=400, 
