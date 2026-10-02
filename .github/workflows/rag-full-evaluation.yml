@@ -30,7 +30,7 @@ jobs:
           summary_path="tests/reports/chatbot/${report_date}-rag_eval_summary.json"
 
           mkdir -p tests/reports/chatbot
-          rm -f "$report_path" "$summary_path"
+          rm -f "$report_path" "$summary_path" tests/reports/chatbot/answer_quality_report.json
 
           echo "RAG_EVAL_REPORT_DATE=$report_date" >> "$GITHUB_ENV"
           echo "RAG_EVAL_REPORT_PATH=$report_path" >> "$GITHUB_ENV"
@@ -55,6 +55,25 @@ jobs:
         env:
           RAG_EVAL_CONDA_ENV: dl_study
         run: bash scripts/check_rag_eval.sh
+
+      - name: Check final service answers against local golden cases
+        run: conda run -n dl_study python tests/regression/chatbot/evaluate_chatbot_answers.py --strict
+
+      - name: Write final-answer aggregate summary
+        if: always()
+        run: |
+          python - >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("tests/reports/chatbot/answer_quality_report.json")
+          if path.exists():
+              summary = json.loads(path.read_text())["summary"]
+              print(f"Final-answer golden cases: {summary['passed']}/{summary['total']} passed; {summary['failed']} failed.")
+              for behavior, counts in summary["by_behavior"].items():
+                  print(f"- {behavior}: {counts['passed']}/{counts['total']}")
+          else:
+              print("Final-answer report was not generated; no passing result is available.")
+          PY
 
       - name: Write sanitized report summary
         if: always()

@@ -102,7 +102,7 @@ def _run_grad(user_text: str, sub_answer: str) -> tuple[str, Optional[str]]:
     summary, url = formatter.extract_grad_summary(user_text, sub_answer)
     if not sub_answer:
         return _format_message("grad_default"), settings.grad_page_url
-    if "확인할 수 있습니다." in summary:
+    if url in summary and "확인할 수 있습니다." in summary:
         return summary, url
     return _format_message("grad_with_url", summary=summary, url=url), url
 

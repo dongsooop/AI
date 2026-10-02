@@ -754,28 +754,59 @@ def one_sentence_grad(user_text: str, sub_answer: str) -> tuple[str, Optional[st
     if not sub_answer:
         return f"졸업 관련 정보는 {GRAD_PAGE_URL}에서 확인할 수 있습니다.", GRAD_PAGE_URL
     summary, source_url = extract_grad_summary(user_text, sub_answer)
-    if "확인할 수 있습니다." in summary:
+    if source_url in summary and "확인할 수 있습니다." in summary:
         return summary, source_url
     return f"{summary} 자세한 내용은 {source_url}에서 확인할 수 있습니다.", source_url
 
 
 def extract_grad_summary(user_text: str, sub_answer: str) -> tuple[str, str]:
-    if not sub_answer:
-        return "졸업 관련 정보를 찾지 못했습니다.", ensure_layout_unknown(GRAD_PAGE_URL)
+    # build_answer emits either title/URL entries or body lines followed by a
+    # source marker. Keep each body with its own marker; titles are not facts.
+    candidates: list[tuple[list[str], str]] = []
+    pending: list[str] = []
+    link_urls: list[str] = []
+    for raw_line in (sub_answer or "").splitlines():
+        line = re.sub(r"\*\*", "", raw_line.strip().lstrip("- ").strip())
+        if not line:
+            pending = []
+            continue
+        source = SRC_URL_PAT.search(line) or SRC_URL_DOT_PAT.search(line)
+        if source:
+            body = line[:source.start()].strip()
+            if body:
+                pending.append(body)
+            url = ensure_layout_unknown(_clean_url(source.group("url").strip()))
+            if pending:
+                candidates.append((pending, url))
+            pending = []
+        elif URL_PAT.search(line):
+            # A search-result link is a separate record, never the source of
+            # preceding uncited prose or a subsequent result's title.
+            url = _extract_url_from_text(line)
+            if url:
+                link_urls.append(url)
+            pending = []
+        elif line.startswith("※") and candidates and not pending:
+            candidates[-1][0].append(line)
+        else:
+            pending.append(line)
 
-    lines = [re.sub(r"\*\*", "", line.strip().lstrip("- ").strip()) for line in sub_answer.splitlines() if line.strip()]
     ask_two_year = bool(re.search(r"2\s*년제", user_text))
     ask_three_year = bool(re.search(r"3\s*년제", user_text))
 
-    preferred = []
-    for line in lines:
-        if ask_two_year and "2년제" in line:
-            preferred.append(line)
-        elif ask_three_year and "3년제" in line:
-            preferred.append(line)
-        elif any(keyword in line for keyword in ("졸업학점", "졸업이수 학점", "전공최저", "총 졸업학점", "졸업이수학점")):
-            preferred.append(line)
+    def priority(candidate: tuple[list[str], str]) -> int:
+        text = " ".join(candidate[0])
+        if (ask_two_year and re.search(r"2\s*년제", text)) or (
+            ask_three_year and re.search(r"3\s*년제", text)
+        ):
+            return 2
+        return int(any(keyword in text for keyword in (
+            "졸업학점", "졸업이수 학점", "전공최저", "총 졸업학점", "졸업이수학점",
+        )))
 
-    summary = preferred[0] if preferred else (lines[0] if lines else "졸업 관련 정보를 찾지 못했습니다.")
-    source_url = _extract_url_from_text(sub_answer) or ensure_layout_unknown(GRAD_PAGE_URL)
-    return summary, source_url
+    if candidates:
+        body, source_url = max(candidates, key=priority)
+        return "\n".join(body), source_url
+
+    source_url = link_urls[0] if link_urls else ensure_layout_unknown(GRAD_PAGE_URL)
+    return f"졸업 관련 정보는 {source_url}에서 확인할 수 있습니다.", source_url

@@ -1,4 +1,5 @@
 import re
+import json
 import time
 import unicodedata
 from functools import lru_cache
@@ -30,6 +31,7 @@ from LLM.patterns import (
     UNIT_SUFFIX_RE,
 )
 from LLM.sub_model.query_index_loader import load_query_index_resources
+from LLM.sub_model.graduation_rules import answer_graduation_scope, valid_rule
 
 
 logger = get_logger(__name__)
@@ -425,35 +427,21 @@ def _metadata_contact_answer(query: str) -> dict | None:
     return {"answer": "\n".join(lines), "url": rows.iloc[0].get("url", "")}
 
 def _metadata_grad_answer(query: str) -> dict | None:
-    if not _looks_like_grad_query(query):
+    if not _looks_like_grad_query(query) or any(k in query for k in CONTACT_KWS):
         return None
-
-    rows = search_df[
-        search_df["has_credit"].astype(bool)
-        & search_df["doc_type"].isin(["policy", "table_like", "page", "department"])
-    ].copy()
-    if rows.empty:
-        return None
-
-    rows["_direct_score"] = (
-        rows["title"].astype(str).str.contains("졸업|학점|이수", regex=True).astype(int) * 3
-        + rows[ANSWER_TEXT_COL].astype(str).str.contains("졸업|이수|학점", regex=True).astype(int)
-    )
-    rows = rows[rows["_direct_score"] > 0].sort_values("_direct_score", ascending=False)
-
-    for _, row in rows.head(20).iterrows():
-        text = _answer_text_from_row(row)
-        total, parts = _extract_grad_credits_from_text(text)
-        if not total and not parts:
+    records = []
+    # Unscoped legacy chunks remain searchable but cannot supply credit numbers.
+    for _, row in search_df[search_df["graduation_scope"].ne("")].iterrows():
+        try:
+            rule = json.loads(row["graduation_scope"])
+        except (TypeError, ValueError):
             continue
-        lines = []
-        if total:
-            lines.append(f"총 졸업학점은 {total}학점입니다.")
-        if parts:
-            lines.append("세부 기준은 " + " / ".join(f"{k} {v}학점" for k, v in parts.items()) + "입니다.")
-        lines.append(_source_suffix(row).strip())
-        return {"answer": "\n".join(part for part in lines if part), "url": row.get("url", "")}
-    return None
+        if not valid_rule(rule) or not row.get("url", ""):
+            continue
+        rule["url"] = row.get("url", "")
+        records.append(rule)
+    return answer_graduation_scope(query, records)
+
 
 def metadata_direct_answer(query: str) -> dict | None:
     """Answer high-confidence lookup questions without embedding or LLM calls."""
@@ -678,6 +666,8 @@ def hybrid_search(query, top_k=8, alpha=DEFAULT_DENSE_WEIGHT, contact_boost=CONT
         scores = base + bonus + _metadata_retrieval_bonus(query_text)
         out = search_df.copy()
         out["score"] = scores
+        if POLICY_QUERY_RE.search(query_text) and not any(k in query_text for k in CONTACT_KWS):
+            out = out[out["doc_type"].ne("contact")]
         if "url" in out.columns:
             rep_idx = out.groupby(["url","doc_type"], dropna=False)["score"].idxmax()
             out = out.loc[rep_idx]
@@ -789,86 +779,10 @@ def build_answer(query, top_k=6):
             lines = [f"- {rv['title']}: {rv['url']}" for _, rv in picks.iterrows()]
         return {"answer": "\n".join(lines)}
 
-    # 졸업학점 관련 질문 처리
-    if _looks_like_grad_query(query):
-        three_year_like = bool(re.search(r"\b3\s*년제\b", query))
-
-        hits = hybrid_search(query, top_k=max(top_k, GRAD_SEARCH_POOL_SIZE))
-        urls = hits["url"].fillna("")
-        titles = hits["title"].fillna("")
-        leaf_titles = hits.get("leaf_title", pd.Series([""]*len(hits))).fillna("")
-        breadcrumbs = hits.get("breadcrumb", pd.Series([""]*len(hits))).fillna("")
-        home_like = urls.str.contains(HOME_LIKE_URL_PATTERN, case=False, regex=True)
-        bbs_like  = urls.str.contains(BOARD_URL_PATTERN, case=False, regex=True)
-        is_page   = hits["doc_type"].isin(["page", "policy", "table_like", "department"])
-        terms = _query_match_terms(query)
-        title_term_match = titles.map(lambda s: _text_match_score(s, terms))
-        leaf_term_match = leaf_titles.map(lambda s: _text_match_score(s, terms))
-        breadcrumb_term_match = breadcrumbs.map(lambda s: _text_match_score(s, terms))
-        professional_match = pd.Series([0] * len(hits))
-        if "전문학사" in query:
-            professional_match = titles.str.contains("전문학사", regex=False).astype(int) * 3
-        elif "학사" in query and "전문학사" not in query:
-            professional_match = (
-                titles.str.contains("학사", regex=False)
-                & ~titles.str.contains("전문학사", regex=False)
-            ).astype(int) * 2
-        rr = (
-            HOME_PAGE_RERANK_BOOST * home_like.astype(int)
-            + PAGE_DOC_RERANK_BOOST * is_page.astype(int)
-            + TITLE_UNIT_MATCH_BOOST * 2.0 * title_term_match
-            + TITLE_UNIT_MATCH_BOOST * 1.5 * leaf_term_match
-            + TITLE_UNIT_MATCH_BOOST * 0.8 * breadcrumb_term_match
-            + professional_match
-            - BOARD_PAGE_PENALTY * bbs_like.astype(int)
-        )
-        hits = hits.assign(_rr=rr).sort_values(["_rr", "score"], ascending=[False, False])
-
-        if three_year_like:
-            for _, r in hits.iterrows():
-                text = _answer_text_from_row(r)
-                tab = _extract_3yr_from_tables(text)
-                if tab.get("grad_total") or tab.get("major_min"):
-                    lines = []
-                    gt = tab.get("grad_total")
-                    mm = tab.get("major_min")
-                    if gt:
-                        lines.append(f"3년제 졸업이수 학점: 2022년 2·8월 대상자 {gt['old']}학점 / 2023년 2월 이후 {gt['new']}학점")
-                    if mm:
-                        old_txt = mm['old'] if isinstance(mm['old'], str) else (f"{mm['old']}학점" if mm['old'] is not None else "표기 없음")
-                        lines.append(f"3년제 전공최저이수 학점: 2022년 2·8월 대상자 {old_txt} / 2023년 2월 이후 {mm['new']}학점")
-                    lines.append(f"(출처: {r.get('title','').strip()} · {r.get('url','')})")
-                    return {"answer": "\n".join(lines)}
-
-        for _, r in hits.iterrows():
-            text = _answer_text_from_row(r)
-            total, parts = _extract_grad_credits_from_text(text)
-
-            if not (total or parts):
-                if "doc_id" in search_df.columns and pd.notna(r.get("doc_id", np.nan)):
-                    mask = search_df["doc_id"].eq(r["doc_id"])
-                else:
-                    mask = search_df["url"].eq(r.get("url","")) & search_df["doc_type"].eq(r.get("doc_type",""))
-                sibs = _answer_text_series(mask)
-                if not sibs.empty:
-                    blob = "\n".join(sibs.tolist())
-                    total, parts = _extract_grad_credits_from_text(blob)
-
-            if total or parts:
-                lines = []
-                if total:
-                    lines.append(f"총 졸업학점: **{total}학점**")
-                if parts:
-                    seg = " / ".join([f"{k} {v}학점" for k, v in parts.items()])
-                    lines.append(f"세부: {seg}")
-                lines.append(f"(출처: {r.get('title','').strip()} · {r.get('url','')})")
-                lines.append("※ 학과·학번(교육과정 연도)에 따라 상이할 수 있으니, 출처 페이지 기준으로 확인하세요.")
-                return {"answer": "\n".join(lines)}
-
-        hits = hybrid_search(query, top_k=top_k)
-        picks = hits.head(top_k)[["title", "url"]].fillna("")
-        lines = [f"- {r['title']}: {r['url']}" for _, r in picks.iterrows()]
-        return {"answer": "\n".join(lines)}
+    # All credit answers share the same applicability checks as the fast path.
+    grad_answer = _metadata_grad_answer(query)
+    if grad_answer is not None:
+        return grad_answer
 
     # 일반 검색 (연락처가 아닌 경우)
     hits = hybrid_search(query, top_k=max(top_k, GENERAL_SEARCH_POOL_SIZE))

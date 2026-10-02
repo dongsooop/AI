@@ -37,6 +37,33 @@
 
 챗봇 품질 게이트는 `scripts/check_rag_eval.sh` 또는 `tests/regression/chatbot/evaluate_rag_retrieval.py`의 report를 기준으로 봅니다. raw report에는 query, answer, URL, 로컬 경로, error payload가 들어갈 수 있으므로 공개 artifact에는 sanitized summary만 사용합니다.
 
+### 최종 답변 회귀 검증
+
+`python tests/regression/chatbot/evaluate_chatbot_answers.py --strict`는
+`answer_quality_cases.json`의 골든 사례를 실제 서비스 함수와 로컬 검색 인덱스로 실행합니다.
+검색 결과만 평가하는 기존 RAG 회귀와 별도로, 최종 `text`·`url`과 내부 처리 경로를 확인합니다.
+
+- 설명: 적용 대상, 학제, 연도와 정답 학점 문구를 확인하고 예상하지 않은 학점 숫자를 거부합니다.
+- 출처: 기대 URL과 버튼 URL을 비교하고, `single_source` 사례는 본문에 표시된 모든 URL도 같아야 합니다. `layout` 파라미터와 fragment만 URL 비교에서 제외합니다.
+- 되묻기: 필요한 조건을 묻는 문구와 처리 경로를 확인하고, 학점 단정이나 불필요한 링크를 금지합니다.
+- 안내: 휴학·장학금·기숙사처럼 개괄 안내가 가능한 질문은 기대 공식 안내 URL을 확인합니다.
+
+`run_chatbot_regression.py`도 URL 정책, 필수/금지 정규식, 허용 학점 숫자 검사를 지원합니다.
+`expected_tools`는 내부 metadata에 접근 가능한 최종 서비스 평가 전용입니다.
+`behavior`는 골든 사례의 기대 행동 분류이며 자동 의미 판정 모델이 아닙니다.
+골든 조건의 통과율은 표본 회귀 지표이고, 전체 질문에 대한 의미 정확도나 환각률을 보장하지 않습니다.
+
+최종 서비스 평가는 비속어 HTTP 검사, DB 로그 기록, LLM 호출을 테스트 대체물로 바꿉니다.
+검색·인덱스·분류·답변 조립은 실제 코드를 사용하며, 예상하지 않은 LLM 호출은 실패로 기록합니다.
+따라서 JWT/HTTP 인증, 운영 네트워크와 LLM 생성 품질은 별도의 실제 API 검증이 필요합니다.
+인덱스와 모델이 없으면 평가를 성공 처리하지 않고 실행이 실패합니다.
+
+상세 결과는 `tests/reports/chatbot/answer_quality_report.json`에 로컬 저장하고,
+stdout에는 `answer`·`clarification`·`guidance`별 집계만 출력합니다.
+기본 실행은 관측용이며 `--strict`에서는 한 사례라도 실패하면 종료 코드 2를 반환합니다.
+수동 Full Evaluation 워크플로는 이 명시적 골든 검사를 `--strict`로 실행합니다.
+Light Check는 데이터·모델 없이 검사기 테스트와 1~4단계 보호 로직의 회귀 테스트를 실행합니다.
+
 ## 시간표 OCR 품질 게이트
 
 | 지표 | 출처 | 의미 | 게이트 판단 |

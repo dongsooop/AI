@@ -6,7 +6,7 @@ import sys
 import time
 from pathlib import Path
 from urllib import request, error
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "chatbot" / "chatbot_regression_report.json"
@@ -15,9 +15,45 @@ DEFAULT_REPORT_PATH = ROOT_DIR / "tests" / "reports" / "chatbot" / "chatbot_regr
 def load_cases(path: Path):
     with path.open("r", encoding="utf-8") as f:
         data = json.load(f)
-    if not isinstance(data, list):
-        raise ValueError("cases must be a JSON array")
+    if not isinstance(data, list) or not data:
+        raise ValueError("cases must be a non-empty JSON array")
+    ids = set()
+    list_fields = {'engine_in', 'all_of_text_contains', 'any_of_text_contains', 'none_of_text_contains',
+                   'all_of_text_regex', 'any_of_text_regex', 'none_of_text_regex', 'expected_urls', 'expected_tools'}
+    allowed_fields = list_fields | {'id', 'text', 'behavior', 'url_policy', 'single_source', 'allowed_credit_values'}
+    for case in data:
+        if not isinstance(case, dict) or not case.get("id") or not isinstance(case.get("text"), str):
+            raise ValueError("each case needs an id and text")
+        if case['id'] in ids:
+            raise ValueError(f"duplicate case id: {case['id']}")
+        ids.add(case['id'])
+        if set(case) - allowed_fields:
+            raise ValueError(f"unknown case fields: {case['id']}")
+        for key in list_fields & case.keys():
+            if not isinstance(case[key], list) or not all(isinstance(v, str) for v in case[key]):
+                raise ValueError(f"invalid list field {key}: {case['id']}")
+        if 'allowed_credit_values' in case and (not isinstance(case['allowed_credit_values'], list) or
+                any(type(v) is not int or v < 0 for v in case['allowed_credit_values'])):
+            raise ValueError(f"invalid credit values: {case['id']}")
+        if case.get('url_policy', 'optional') not in ('required', 'forbidden', 'optional'):
+            raise ValueError(f"invalid url_policy: {case['id']}")
+        if any(not canonical_url(u) for u in case.get('expected_urls', [])):
+            raise ValueError(f"invalid expected URL: {case['id']}")
+        for key in ('all_of_text_regex', 'any_of_text_regex', 'none_of_text_regex'):
+            for pattern in case.get(key, []):
+                re.compile(pattern)
     return data
+
+
+def canonical_url(value):
+    try:
+        parsed = urlparse(value.rstrip(").,]〉」』>…"))
+    except (AttributeError, ValueError):
+        return ""
+    if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+        return ""
+    query = sorted((k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True) if k != 'layout')
+    return urlunparse((parsed.scheme, parsed.netloc.lower(), parsed.path, parsed.params, urlencode(query), ''))
 
 
 def post_chatbot(url: str, text: str, token: str | None, timeout: float):
@@ -47,6 +83,8 @@ def post_chatbot(url: str, text: str, token: str | None, timeout: float):
 
 
 def check_case(case: dict, status_code: int, response: dict):
+    if not isinstance(response, dict):
+        response = {}
     result = {
         "id": case.get("id"),
         "text": case.get("text", ""),
@@ -55,6 +93,8 @@ def check_case(case: dict, status_code: int, response: dict):
         "response_text": response.get("text", ""),
         "passed": True,
         "reasons": [],
+        "behavior": case.get("behavior", "unspecified"),
+        "response_url": response.get("url"),
     }
 
     if status_code != 200:
@@ -64,6 +104,31 @@ def check_case(case: dict, status_code: int, response: dict):
 
     text = str(response.get("text", ""))
     engine = str(response.get("engine", ""))
+    if not isinstance(response.get('text'), str) or not response['text'].strip():
+        result['reasons'].append('missing_response_text')
+    raw_url = response.get('url')
+    url = canonical_url(raw_url) if isinstance(raw_url, str) else ''
+    body_urls = {canonical_url(u) for u in re.findall(r'https?://[^\s)<>]+', text)} - {''}
+    policy = case.get('url_policy', 'optional')
+    if policy == 'required' and not url:
+        result['reasons'].append('source_url_required')
+    if policy == 'forbidden' and (raw_url or body_urls):
+        result['reasons'].append('unexpected_source_url')
+    expected_urls = {canonical_url(u) for u in case.get('expected_urls', [])}
+    if expected_urls and url not in expected_urls:
+        result['reasons'].append('wrong_source_url')
+    if case.get('single_source') and (not url or body_urls != {url}):
+        result['reasons'].append('body_button_source_mismatch')
+    for pattern in case.get('all_of_text_regex', []):
+        if not re.search(pattern, text):
+            result['reasons'].append(f'missing_regex:{pattern}')
+    for pattern in case.get('none_of_text_regex', []):
+        if re.search(pattern, text):
+            result['reasons'].append(f'forbidden_regex:{pattern}')
+    if 'allowed_credit_values' in case:
+        found_credits = {int(n) for n in re.findall(r'(\d+)\s*학점', text)}
+        if found_credits - set(case['allowed_credit_values']):
+            result['reasons'].append('unexpected_credit_value')
 
     engines = case.get("engine_in")
     if engines and engine not in engines:
@@ -96,6 +161,7 @@ def check_case(case: dict, status_code: int, response: dict):
             if not matched:
                 result["passed"] = False
                 result["reasons"].append(f"missing_any_regex:{any_regex}")
+    result['passed'] = not result['reasons']
     return result
 
 

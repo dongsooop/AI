@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 import logging
+from urllib.parse import urlparse
 
 from core.settings import get_settings
 from LLM.OSS.formatter import (
@@ -8,8 +9,10 @@ from LLM.OSS.formatter import (
     professor_room_clarification_message,
     render_chatty_schedule,
 )
-from LLM.OSS.modes import looks_like_schedule, looks_like_topic
+from LLM.OSS.modes import ambiguous_academic_topic, is_academic_procedure_query, is_ambiguous_graduation_query, is_ambiguous_professor_query, looks_like_schedule, looks_like_topic
 from LLM.OSS.postprocess import run_postprocess
+from LLM.OSS.support_guidance import support_guidance
+from LLM.OSS.query_conditions import calendar_conditions, UNVERIFIED_CALENDAR_MESSAGE
 from LLM.sub_model.query_index import build_answer, confident_search_answer, metadata_direct_answer
 from LLM.sub_model.schedule_index import schedule_search
 
@@ -87,19 +90,22 @@ def _direct_answer_tool(user_text: str, engine: str) -> ToolResult:
         return EMPTY_TOOL_RESULT
     if not direct:
         return EMPTY_TOOL_RESULT
+    needs_clarification = bool(direct.get("needs_clarification"))
     return ToolResult(
-        name="metadata_direct_answer",
+        name="graduation_scope_clarification" if needs_clarification else "metadata_direct_answer",
         text=direct["answer"],
         url=direct.get("url"),
         engine=engine,
         confidence=0.95,
-        decision_source="retrieval",
+        decision_source="rule" if needs_clarification else "retrieval",
         source_urls=_source_urls(direct.get("url")),
-        reason="metadata direct answer matched",
+        reason="graduation applicability needs clarification" if needs_clarification else "metadata direct answer matched",
     )
 
 
 def _schedule_tool(user_text: str, *, ceremonial_first: bool = False) -> ToolResult:
+    if is_academic_procedure_query(user_text):
+        return EMPTY_TOOL_RESULT
     if ceremonial_first and not any(keyword in user_text for keyword in ("종강", "졸업식", "종업식", "학위수여식")):
         return EMPTY_TOOL_RESULT
 
@@ -111,7 +117,7 @@ def _schedule_tool(user_text: str, *, ceremonial_first: bool = False) -> ToolRes
         return EMPTY_TOOL_RESULT
     return ToolResult(
         name="schedule_search",
-        text=render_chatty_schedule(schedule, user_text),
+        text=schedule if schedule == UNVERIFIED_CALENDAR_MESSAGE else render_chatty_schedule(schedule, user_text),
         engine="fast",
         confidence=0.9,
         decision_source="retrieval",
@@ -188,7 +194,89 @@ def _confident_search_tool(user_text: str) -> ToolResult:
     )
 
 
+def run_professor_clarification_tool(user_text: str) -> ToolResult:
+    if not is_ambiguous_professor_query(user_text):
+        return EMPTY_TOOL_RESULT
+    return ToolResult(
+        name="professor_topic_clarification", engine="fast", confidence=0.95,
+        text=("교수님 관련해서 어떤 내용이 궁금한가요? 연락처·연구실 위치·교수소개 중 목적과 "
+              "교수명이나 학과명을 함께 입력해 주세요. "
+              "예: '컴퓨터소프트웨어공학과 교수 연락처', "
+              "'컴퓨터소프트웨어공학과 교수연구실 위치', '컴퓨터소프트웨어공학과 교수소개'"),
+        reason="professor query needs a purpose and target",
+    )
+
+
+def run_calendar_conditions_tool(user_text: str) -> ToolResult:
+    conditions = calendar_conditions(user_text)
+    if not conditions:
+        return EMPTY_TOOL_RESULT
+    topic, missing, _ = conditions
+    if not missing:
+        return EMPTY_TOOL_RESULT
+    return ToolResult(name="calendar_scope_clarification", engine="fast",
+                      text=f"{topic} 일정 확인에 필요한 정보: {', '.join(missing)}. 질문에 조건을 함께 적어 주세요.",
+                      reason="calendar applicability requires explicit conditions")
+
+
+def run_support_guidance_tool(user_text: str) -> ToolResult:
+    guidance = support_guidance(user_text)
+    if guidance is None:
+        return EMPTY_TOOL_RESULT
+    topic, mode, page, message = guidance
+    source = _postprocess_tool(mode, topic)
+    # Only attach the matching source page returned by retrieval. A fallback
+    # homepage or an unrelated result must not become evidence for this guide.
+    parsed = urlparse(source.url or "")
+    url = source.url if (parsed.scheme in ('http', 'https')
+                        and parsed.hostname == 'www.dongyang.ac.kr'
+                        and parsed.path == f'/dmu/{page}/subview.do') else None
+    if url:
+        message += f"\n공식 안내: {url}"
+    else:
+        message += "\n관련 공식 안내 링크를 현재 검색 결과에서 확인하지 못했어요."
+    return ToolResult(name="support_topic_guidance", text=message, url=url,
+                      engine=mode, confidence=0.8, source_urls=_source_urls(url),
+                      reason="support query needs topic or applicability selection")
+
+
+def run_academic_clarification_tool(user_text: str) -> ToolResult:
+    topic = ambiguous_academic_topic(user_text)
+    if not topic:
+        return EMPTY_TOOL_RESULT
+    examples = {
+        "등록": "'등록금 납부 방법', '등록금 분할납부 방법', '등록금 납부 기간'",
+        "등록금": "'등록금 납부 방법', '등록금 분할납부 방법', '등록금 납부 기간'",
+        "성적": "'성적열람 기간', '성적 이의신청 방법', '성적증명서 발급'",
+        "수강신청": "'수강신청 방법', '수강신청 기간', '수강정정 방법'",
+    }
+    return ToolResult(
+        name="academic_topic_clarification",
+        text=f"{topic} 관련해서 어떤 내용이 궁금한가요? {examples[topic]}처럼 구체적으로 입력해 주세요.",
+        engine="policy",
+        confidence=0.95,
+        reason="academic query needs a specific purpose",
+    )
+
+
+def run_graduation_clarification_tool(user_text: str) -> ToolResult:
+    if not is_ambiguous_graduation_query(user_text):
+        return EMPTY_TOOL_RESULT
+    return ToolResult(
+        name="graduation_clarification",
+        text=(
+            "졸업 관련해서 어떤 내용이 궁금한가요? "
+            "'졸업학점', '졸업식 일정', '졸업유예', '졸업보류'처럼 구체적으로 입력해 주세요."
+        ),
+        engine="grad",
+        confidence=0.95,
+        reason="graduation query needs a specific topic",
+    )
+
+
 def run_mode_tools(mode: str, user_text: str) -> ToolResult:
+    if mode == "fast" and is_academic_procedure_query(user_text):
+        mode = "policy"
     professor_room_clarification = _professor_room_clarification_tool(user_text)
     if professor_room_clarification.resolved:
         return professor_room_clarification

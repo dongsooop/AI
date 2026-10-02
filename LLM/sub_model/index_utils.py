@@ -1,5 +1,9 @@
 import re, json, gzip
 from datetime import datetime, timezone, timedelta
+try:
+    from .graduation_rules import parse_graduation_rules, render_rule
+except ImportError:  # build_index.py also supports direct script execution.
+    from graduation_rules import parse_graduation_rules, render_rule
 
 KST = timezone(timedelta(hours=9))
 
@@ -112,11 +116,19 @@ def get_tokenizer():
 
 PHONE_RE = re.compile(r"\b0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}\b")
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-UNIT_RE  = re.compile(r"([가-힣A-Za-z·\s\-/()]{2,40}?(?:팀|센터|처|단|과|부|본부|위원회|연구소|지원실|실|연대|학부|학과))")
-CONTACT_UNIT_SUFFIX_RE = re.compile(r"(팀|센터|처|단|본부|위원회|연구소|지원실|연대|학부|학과)$")
+UNIT_RE = re.compile(
+    r"(?<![가-힣A-Za-z])([가-힣A-Za-z·ㆍ-]{2,40}"
+    r"(?:위원회|연구소|지원실|본부|연대|학부|학과|센터|팀|처|단|과))(?![가-힣A-Za-z])"
+)
+CONTACT_UNIT_SUFFIX_RE = re.compile(r"(팀|센터|처|단|본부|위원회|연구소|지원실|연대|학부|학과|과)$")
 INVALID_CONTACT_UNIT_RE = re.compile(
     r"(담당부|서명과|시그니처|다운로드|파일|조합|타입|구분|항목|내용|"
-    r"연락처|교수소개|공지|앨범)"
+    r"연락처|교수소개|공지|앨범|명단)"
+)
+GENERIC_CONTACT_UNIT_RE = re.compile(r"^(?:학부|학과|학부학과|교과|전과|결과|성과|효과|지원실)$")
+CONTACT_PROSE_RE = re.compile(r"학점|이수|취득|전공\s*배정|편집모드|수정해|학생의|학생은")
+CONTACT_LABEL_GAP_RE = re.compile(
+    r"(?:\s|[:：,()/.-]|전화번호|전화|연락처|이메일|메일|TEL|E-mail|Email)*", re.I
 )
 
 DASH_CHARS_RE = re.compile(r"[\u2010\u2011\u2012\u2013\u2014\u2212\uFE58\uFE63\uFF0D]")
@@ -297,6 +309,20 @@ def chunk_document(row, max_tokens: int | None = None) -> list[dict]:
             "has_policy_keyword": bool(POLICY_KEYWORD_RE.search(chunk)),
             "is_privacy_old": doc_type == "privacy" and bool(re.search(r"이전|구\)|\(\s*구", title)),
         })
+    for rule in parse_graduation_rules(title, content):
+        answer_text = render_rule(rule)
+        out.append({
+            "chunk_index": len(out), "title": title, "url": url,
+            "breadcrumb": breadcrumb, "leaf_title": leaf_title,
+            "doc_type": "policy", "chunk_type": "graduation_rule",
+            "section_title": "졸업학점 적용 기준", "text": answer_text,
+            "text_for_embedding": normalize_text(f"{title} {answer_text}"),
+            "text_for_bm25": normalize_text(f"{title} {answer_text}"),
+            "text_for_answer": answer_text,
+            "graduation_scope": json.dumps(rule, ensure_ascii=False),
+            "has_phone": False, "has_email": False, "has_date": bool(rule['year_basis']),
+            "has_credit": True, "has_policy_keyword": True, "is_privacy_old": False,
+        })
     return out
 
 
@@ -317,6 +343,8 @@ def _is_contact_unit_candidate(unit: str) -> bool:
         return False
     if INVALID_CONTACT_UNIT_RE.search(unit):
         return False
+    if GENERIC_CONTACT_UNIT_RE.fullmatch(compact) or CONTACT_PROSE_RE.search(unit):
+        return False
     return bool(CONTACT_UNIT_SUFFIX_RE.search(compact))
 
 
@@ -325,50 +353,48 @@ def extract_units_and_contacts(row):
     title = row.get("title", ""); url = row.get("url", ""); source = row.get("source", "")
     updated_at = row.get("updated_at", None)
     out = []
-    for m in UNIT_RE.finditer(text):
+    matches = [m for m in UNIT_RE.finditer(text) if _is_contact_unit_candidate(m.group(1))]
+    for idx, m in enumerate(matches):
         unit = m.group(1).strip()
-        if not _is_contact_unit_candidate(unit):
+        # Contact details follow their owner. Never borrow a preceding number
+        # or cross another unit (especially the page's responsible-team footer).
+        end = min(len(text), m.end() + 140)
+        if idx + 1 < len(matches):
+            end = min(end, matches[idx + 1].start())
+        near = text[m.end():end]
+        contact_matches = [match for pattern in (PHONE_RE, EMAIL_RE) if (match := pattern.search(near))]
+        first_contact = min(contact_matches, key=lambda match: match.start()) if contact_matches else None
+        if first_contact is None or CONTACT_PROSE_RE.search(near[:first_contact.start()]):
             continue
-        win = 140
-        start, end = max(0, m.start()-win), min(len(text), m.end()+win)
-        near = text[start:end]
+        # Bare '-과' is also a Korean conjunction (e.g. '지식과'). Accept it
+        # only in an explicit contact label, not in a department introduction.
+        if unit.endswith("과") and not unit.endswith("학과"):
+            if not CONTACT_LABEL_GAP_RE.fullmatch(near[:first_contact.start()]):
+                continue
         phones = PHONE_RE.findall(near)
         emails = EMAIL_RE.findall(near)
         if not phones and not emails:
             continue
         out.append({
-            "unit": unit, "phone": phones[-1] if phones else "없음",
-            "email": emails[-1] if emails else "없음",
+            "unit": unit, "phone": phones[0] if phones else "없음",
+            "email": emails[0] if emails else "없음",
             "title": title, "url": url, "source": source,
             "updated_at": updated_at, "how": "content"
         })
     hint = last_seg(title)
-    mh = UNIT_RE.search(hint)
-    if mh:
-        if not _is_contact_unit_candidate(mh.group(1).strip()):
-            mh = None
-    if mh:
-        phones = PHONE_RE.findall(text)
-        emails = EMAIL_RE.findall(text)
+    mh = UNIT_RE.fullmatch(hint)
+    if mh and _is_contact_unit_candidate(hint) and not any(c["unit"] == hint for c in out):
+        # Department-page fallback must not use the unrelated footer's contact.
+        body = EDITOR_ONLY_RE.split(text, maxsplit=1)[0]
+        phones = PHONE_RE.findall(body)
+        emails = EMAIL_RE.findall(body)
         if phones or emails:
             out.append({
                 "unit": mh.group(1).strip(),
-                "phone": phones[-1] if phones else "없음",
-                "email": emails[-1] if emails else "없음",
+                "phone": phones[0] if phones else "없음",
+                "email": emails[0] if emails else "없음",
                 "title": title, "url": url, "source": source,
                 "updated_at": updated_at, "how": "title"
-            })
-    if not out:
-        phones = PHONE_RE.findall(text)
-        emails = EMAIL_RE.findall(text)
-        if (phones or emails) and _is_contact_unit_candidate(hint):
-            cand = hint
-            out.append({
-                "unit": cand,
-                "phone": phones[-1] if phones else "없음",
-                "email": emails[-1] if emails else "없음",
-                "title": title, "url": url, "source": source,
-                "updated_at": updated_at, "how": "fallback"
             })
     return out
 

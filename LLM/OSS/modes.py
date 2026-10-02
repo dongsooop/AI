@@ -21,6 +21,12 @@ RELATION_RE = re.compile(
 UNIT_SUFFIX_RE = re.compile(r"(학부|학과|과|전공|대학|대학원|본부|센터|팀|처|단|부|원)$")
 CEREMONY_RE = re.compile(r"(졸업식|종업식|학위수여식)")
 GRAD_POLICY_RE = re.compile(r"(졸업학점|이수학점|졸업요건|전공최저|최저이수|학위수여(?!식)|졸업(?!식))")
+AMBIGUOUS_GRAD_RE = re.compile(
+    r"졸업(?:은|이|에대해(?:서)?|에관해(?:서)?|관련(?:해서)?)?"
+    r"(?:정보|안내)?(?:좀)?"
+    r"(?:알려(?:줘|주세요|줄래|줄래요)|궁금(?:해|해요|합니다)|"
+    r"부탁(?:해|해요|드립니다)|해줘|해주세요)?"
+)
 CONTACT_INTENT_RE = re.compile(r"(연락처|전화|전화번호|문의|상담|담당자)")
 GOVERNANCE_REMOVE_RE = re.compile(r"(없애|폐지|해체)\s*(시키|하는\s*법)?")
 GOVERNANCE_TARGET_RE = re.compile(r"(총학생회|대의원회)")
@@ -67,7 +73,20 @@ def looks_like_topic(text: str) -> bool:
     return bool(UNIT_SUFFIX_RE.search(stripped)) and len(stripped) <= 12
 
 
+def is_academic_procedure_query(text: str) -> bool:
+    compact = re.sub(r"\s+", "", text or "")
+    if CONTACT_INTENT_RE.search(compact):
+        return False
+    # A certificate is a document, not the grade-entry event on the calendar.
+    if re.search(r"성적증명서|제증명", compact):
+        return True
+    return bool(re.search(r"등록|납부|성적|수강신청|수강정정", compact)
+                and re.search(r"방법|절차|어떻게|하는법|조건|자격|준비서류|필요서류", compact))
+
+
 def looks_like_schedule(text: str) -> bool:
+    if is_academic_procedure_query(text):
+        return False
     source = text or ""
     if any(keyword in source for keyword in SCHEDULE_HINTS_BASE):
         return True
@@ -75,6 +94,32 @@ def looks_like_schedule(text: str) -> bool:
         keyword in source
         for keyword in ("중간", "기말", "시험", "고사", "수강", "등록", "성적", "개강", "종강", "졸업식", "종업식", "학위수여식")
     )
+
+
+def is_ambiguous_graduation_query(user_text: str) -> bool:
+    compact = re.sub(r"\s+", "", user_text or "").rstrip("?!？！.。~…")
+    return bool(AMBIGUOUS_GRAD_RE.fullmatch(compact))
+
+
+def is_ambiguous_professor_query(user_text: str) -> bool:
+    compact = re.sub(r"\s+", "", user_text or "").rstrip("?!？！.。~…")
+    return bool(re.fullmatch(
+        r"교수(?:님)?(?:은|이|에대해(?:서)?|관련(?:해서)?)?"
+        r"(?:정보|안내)?(?:좀)?"
+        r"(?:알려(?:줘|주세요|줄래요?)|궁금(?:해요?|합니다)|해줘|해주세요)?",
+        compact,
+    ))
+
+
+def ambiguous_academic_topic(user_text: str) -> str:
+    compact = re.sub(r"\s+", "", user_text or "").rstrip("?!？！.。~…")
+    match = re.fullmatch(
+        r"(등록금|등록|성적|수강신청)(?:은|이|에대해(?:서)?|관련(?:해서)?)?"
+        r"(?:정보|안내)?(?:좀)?"
+        r"(?:알려(?:줘|주세요|줄래|줄래요)|궁금(?:해|해요|합니다)|해줘|해주세요)?",
+        compact,
+    )
+    return match[1] if match else ""
 
 
 def decide_mode(user_text: str) -> str:
@@ -90,6 +135,8 @@ def decide_mode(user_text: str) -> str:
         return "relation"
     if any(keyword in text for keyword in RULE_BOOK_KWS):
         return "rule_book"
+    if is_academic_procedure_query(text):
+        return "policy"
     if CEREMONY_RE.search(text):
         return "fast"
     if "학사일정" in text or "학사 일정" in text or "학사일정" in compact or looks_like_schedule(text):

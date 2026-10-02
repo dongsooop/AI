@@ -1,3 +1,8 @@
+# Codex project skills
+.codex/*
+!.codex/skills/
+!.codex/skills/**
+
 # OS / editor
 .DS_Store
 .vscode
@@ -46,8 +51,3 @@ backup_file/
 .local-agent-docs/
 CLAUDE.md
 .claude/
-
-# Codex project skills
-.codex/*
-!.codex/skills/
-!.codex/skills/**
